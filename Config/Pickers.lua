@@ -6,7 +6,7 @@
 local ADDON_NAME, ST = ...
 local CooldownCompanion = ST.Addon
 local CS = ST._configState
-
+local L = LibStub("AceLocale-3.0"):GetLocale("CooldownCompanion", true) or {}
 local issecretvalue = issecretvalue
 local canaccessvalue = canaccessvalue
 local bit_band = bit and bit.band
@@ -389,7 +389,7 @@ local function StartPickFrame(callback, sourceGroupId)
         -- Instruction text at top
         local instructions = overlay:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
         instructions:SetPoint("TOP", overlay, "TOP", 0, -30)
-        instructions:SetText("Click a frame to anchor  |  Right-click or Escape to cancel")
+        instructions:SetText(L["Click a frame to anchor  |  Right-click or Escape to cancel"])
         instructions:SetTextColor(1, 1, 1, 0.9)
         overlay.instructions = instructions
 
@@ -574,7 +574,7 @@ local function StartPickCDM(callback)
         -- Instruction text at top
         local instructions = overlay:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
         instructions:SetPoint("TOP", overlay, "TOP", 0, -30)
-        overlay.defaultInstructionsText = "Click a Tracked Buff/Bar aura  |  Right-click or Escape to cancel"
+        overlay.defaultInstructionsText = L["Click a Tracked Buff/Bar aura  |  Right-click or Escape to cancel"]
         instructions:SetText(overlay.defaultInstructionsText)
         instructions:SetTextColor(1, 1, 1, 0.9)
         overlay.instructions = instructions
@@ -628,7 +628,7 @@ local function StartPickCDM(callback)
         panelTitle:SetPoint("TOPLEFT", panel, "TOPLEFT", 14, -12)
         panelTitle:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -40, -12)
         panelTitle:SetJustifyH("CENTER")
-        panelTitle:SetText("Pick Tracked Buff/Bar Aura")
+        panelTitle:SetText(L["Pick Tracked Buff/Bar Aura"])
         panel.title = panelTitle
 
         local closeBtn = CreateFrame("Button", nil, panel)
@@ -656,7 +656,7 @@ local function StartPickCDM(callback)
         local listTitle = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
         listTitle:SetPoint("TOPLEFT", panel, "TOPLEFT", 16, -52)
         listTitle:SetJustifyH("LEFT")
-        listTitle:SetText("Tracked Buff/Bar Auras")
+        listTitle:SetText(L["Tracked Buff/Bar Auras"])
         overlay.listTitle = listTitle
 
         local listScroll = CreateFrame("ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate")
@@ -742,7 +742,7 @@ local function StartPickCDM(callback)
                 row.spellID = entry.spellID
                 row.cooldownID = entry.cooldownID
 
-                local categoryText = (entry.category == Enum.CooldownViewerCategory.TrackedBar) and "Tracked Bar" or "Tracked Buff"
+                local categoryText = (entry.category == Enum.CooldownViewerCategory.TrackedBar) and L["Tracked Bar"] or L["Tracked Buff"]
                 local duplicateSuffix = ""
                 if entry.duplicateTotal and entry.duplicateTotal > 1 and entry.duplicateIndex then
                     duplicateSuffix = "  #" .. entry.duplicateIndex
@@ -783,8 +783,8 @@ local function StartPickCDM(callback)
 
     local isAvailable, failureReason = C_CooldownViewer.IsCooldownViewerAvailable()
     if not isAvailable then
-        local reasonText = IsAccessibleString(failureReason) and failureReason or "Unknown reason"
-        CooldownCompanion:Print("Cooldown Manager unavailable: " .. reasonText)
+        local reasonText = IsAccessibleString(failureReason) and failureReason or L["Unknown reason"]
+        CooldownCompanion:Print(L["Cooldown Manager unavailable: "] .. reasonText)
         if pickCDMCallback then
             local cb = pickCDMCallback
             pickCDMCallback = nil
@@ -795,7 +795,7 @@ local function StartPickCDM(callback)
 
     pickCDMOverlay.entries = BuildCDMAuraPickerEntries()
     if #pickCDMOverlay.entries == 0 then
-        CooldownCompanion:Print("No Tracked Buff/Bar auras found in the Cooldown Manager.")
+        CooldownCompanion:Print(L["No Tracked Buff/Bar auras found in the Cooldown Manager."])
         if pickCDMCallback then
             local cb = pickCDMCallback
             pickCDMCallback = nil

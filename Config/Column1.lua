@@ -6,7 +6,7 @@
 local ADDON_NAME, ST = ...
 local CooldownCompanion = ST.Addon
 local CS = ST._configState
-
+local L = LibStub("AceLocale-3.0"):GetLocale("CooldownCompanion", true) or {}
 local AceGUI = LibStub("AceGUI-3.0")
 
 -- Imports from earlier Config/ files
@@ -73,7 +73,7 @@ local function RenderBrowseMode()
         -- Phase A: Character list
         local backBtn = AceGUI:Create("InteractiveLabel")
         CleanRecycledEntry(backBtn)
-        backBtn:SetText("|A:common-icon-backarrow:14:14|a  Back to My Groups")
+        backBtn:SetText(L["|A:common-icon-backarrow:14:14|a  Back to My Groups"])
         backBtn:SetImage(134400)
         backBtn:SetImageSize(1, 32)
         backBtn.image:SetAlpha(0)
@@ -90,14 +90,14 @@ local function RenderBrowseMode()
         CS.col1Scroll:AddChild(backBtn)
 
         local heading = AceGUI:Create("Heading")
-        heading:SetText("Other Characters")
+        heading:SetText(L["Other Characters"])
         heading:SetFullWidth(true)
         CS.col1Scroll:AddChild(heading)
 
         local chars = CooldownCompanion:EnumerateBrowseCharacters()
         if #chars == 0 then
             local emptyLabel = AceGUI:Create("Label")
-            emptyLabel:SetText("|cff888888No other characters have groups on this profile.|r")
+            emptyLabel:SetText(L["|cff888888No other characters have groups on this profile.|r"])
             emptyLabel:SetFullWidth(true)
             CS.col1Scroll:AddChild(emptyLabel)
             return
@@ -134,7 +134,7 @@ local function RenderBrowseMode()
         -- Phase B: Selected character's groups
         local backBtn = AceGUI:Create("InteractiveLabel")
         CleanRecycledEntry(backBtn)
-        backBtn:SetText("|A:common-icon-backarrow:14:14|a  Back to Characters")
+        backBtn:SetText(L["|A:common-icon-backarrow:14:14|a  Back to Characters"])
         backBtn:SetImage(134400)
         backBtn:SetImageSize(1, 32)
         backBtn.image:SetAlpha(0)
@@ -153,7 +153,7 @@ local function RenderBrowseMode()
         local charInfo = CooldownCompanion.db.global.characterInfo and CooldownCompanion.db.global.characterInfo[CS.browseCharKey]
         local classFilename = charInfo and charInfo.classFilename
         local charName = CS.browseCharKey:match("^(.-)%s*%-") or CS.browseCharKey
-        local displayHeading = charName .. "'s Groups"
+        local displayHeading = charName .. L["'s Groups"]
 
         local heading = AceGUI:Create("Heading")
         heading:SetText(displayHeading)
@@ -167,7 +167,7 @@ local function RenderBrowseMode()
         local containers = CooldownCompanion:GetCharacterContainers(CS.browseCharKey)
         if #containers == 0 then
             local emptyLabel = AceGUI:Create("Label")
-            emptyLabel:SetText("|cff888888This character has no groups.|r")
+            emptyLabel:SetText(L["|cff888888This character has no groups.|r"])
             emptyLabel:SetFullWidth(true)
             CS.col1Scroll:AddChild(emptyLabel)
             return
@@ -183,7 +183,7 @@ local function RenderBrowseMode()
             local panelCount = CooldownCompanion:GetPanelCount(containerId)
             local displayName = container.name
             if panelCount > 1 then
-                displayName = displayName .. "  |cff888888(" .. panelCount .. " panels)|r"
+                displayName = displayName .. "  |cff888888(" .. panelCount .. L[" panels)|r"]
             end
 
             entry:SetText(displayName)
@@ -224,7 +224,7 @@ local function RenderBrowseMode()
                     end
                     UIDropDownMenu_Initialize(CS.browseContextMenu, function(self, level)
                         local info = UIDropDownMenu_CreateInfo()
-                        info.text = "Copy Entire Group"
+                        info.text = L["Copy Entire Group"]
                         info.notCheckable = true
                         info.func = function()
                             CloseDropDownMenus()
@@ -237,7 +237,7 @@ local function RenderBrowseMode()
                                 CS.selectedContainer = newId
                                 CS.selectedGroup = nil
                                 CooldownCompanion:RefreshConfigPanel()
-                                CooldownCompanion:Print("Group copied successfully.")
+                                CooldownCompanion:Print(L["Group copied successfully."])
                             end
                         end
                         UIDropDownMenu_AddButton(info, level)
@@ -271,9 +271,9 @@ local function RefreshColumn1(preserveDrag)
             if not col1._barsPanelTabGroup then
                 local tabGroup = AceGUI:Create("TabGroup")
                 tabGroup:SetTabs({
-                    { value = "resource_anchoring", text = "Resources" },
-                    { value = "castbar_anchoring",  text = "Cast Bar" },
-                    { value = "frame_anchoring",    text = "Unit Frames" },
+                    { value = "resource_anchoring", text = L["Resources"] },
+                    { value = "castbar_anchoring",  text = L["Cast Bar"] },
+                    { value = "frame_anchoring",    text = L["Unit Frames"] },
                 })
                 tabGroup:SetLayout("Fill")
                 tabGroup:SetCallback("OnGroupSelected", function(widget, event, tab)
@@ -462,7 +462,7 @@ local function RefreshColumn1(preserveDrag)
         local panelCount = CooldownCompanion:GetPanelCount(containerId)
         local displayName = container.name
         if panelCount > 1 then
-            displayName = displayName .. "  |cff888888(" .. panelCount .. " panels)|r"
+            displayName = displayName .. "  |cff888888(" .. panelCount .. L[" panels)|r"]
         end
 
         entry:SetText(displayName)
@@ -551,7 +551,7 @@ local function RefreshColumn1(preserveDrag)
                     if level == 1 then
                         -- Rename
                         local info = UIDropDownMenu_CreateInfo()
-                        info.text = "Rename"
+                        info.text = L["Rename"]
                         info.notCheckable = true
                         info.func = function()
                             CloseDropDownMenus()
@@ -561,7 +561,7 @@ local function RefreshColumn1(preserveDrag)
 
                         -- Toggle Global
                         info = UIDropDownMenu_CreateInfo()
-                        info.text = container.isGlobal and "Make Character-Only" or "Make Global"
+                        info.text = container.isGlobal and L["Make Character-Only"] or L["Make Global"]
                         info.notCheckable = true
                         info.func = function()
                             CloseDropDownMenus()
@@ -590,7 +590,7 @@ local function RefreshColumn1(preserveDrag)
                         end
                         if hasFolders or container.folderId then
                             info = UIDropDownMenu_CreateInfo()
-                            info.text = "Move to Folder"
+                            info.text = L["Move to Folder"]
                             info.notCheckable = true
                             info.hasArrow = true
                             info.menuList = "MOVE_TO_FOLDER"
@@ -599,7 +599,7 @@ local function RefreshColumn1(preserveDrag)
 
                         -- Toggle On/Off
                         info = UIDropDownMenu_CreateInfo()
-                        info.text = (container.enabled ~= false) and "Disable" or "Enable"
+                        info.text = (container.enabled ~= false) and L["Disable"] or L["Enable"]
                         info.notCheckable = true
                         info.func = function()
                             CloseDropDownMenus()
@@ -611,7 +611,7 @@ local function RefreshColumn1(preserveDrag)
 
                         -- Duplicate
                         info = UIDropDownMenu_CreateInfo()
-                        info.text = "Duplicate"
+                        info.text = L["Duplicate"]
                         info.notCheckable = true
                         info.func = function()
                             CloseDropDownMenus()
@@ -627,7 +627,7 @@ local function RefreshColumn1(preserveDrag)
                         -- Export
                         info = UIDropDownMenu_CreateInfo()
                         if next(CS.selectedGroups) then
-                            info.text = "Export Selected"
+                            info.text = L["Export Selected"]
                             info.notCheckable = true
                             info.func = function()
                                 CloseDropDownMenus()
@@ -658,7 +658,7 @@ local function RefreshColumn1(preserveDrag)
                                 ShowPopupAboveConfig("CDC_EXPORT_GROUP", nil, { exportString = exportString })
                             end
                         else
-                            info.text = "Export"
+                            info.text = L["Export"]
                             info.notCheckable = true
                             info.func = function()
                                 CloseDropDownMenus()
@@ -680,7 +680,7 @@ local function RefreshColumn1(preserveDrag)
 
                         -- Lock/Unlock
                         info = UIDropDownMenu_CreateInfo()
-                        info.text = container.locked and "Unlock" or "Lock"
+                        info.text = container.locked and L["Unlock"] or L["Lock"]
                         info.notCheckable = true
                         info.func = function()
                             CloseDropDownMenus()
@@ -701,8 +701,8 @@ local function RefreshColumn1(preserveDrag)
                             end
                             info = UIDropDownMenu_CreateInfo()
                             info.text = isCurrentlyEligible
-                                and "Exclude from Auto-Anchoring"
-                                or "Include in Auto-Anchoring"
+                                and L["Exclude from Auto-Anchoring"]
+                                or L["Include in Auto-Anchoring"]
                             info.notCheckable = true
                             info.func = function()
                                 CloseDropDownMenus()
@@ -728,7 +728,7 @@ local function RefreshColumn1(preserveDrag)
 
                         -- Spec Filter
                         info = UIDropDownMenu_CreateInfo()
-                        info.text = "Spec Filter"
+                        info.text = L["Spec Filter"]
                         info.notCheckable = true
                         info.func = function()
                             CloseDropDownMenus()
@@ -745,7 +745,7 @@ local function RefreshColumn1(preserveDrag)
                         -- Set Group Icon (only for non-foldered containers)
                         if not container.folderId then
                             info = UIDropDownMenu_CreateInfo()
-                            info.text = "Set Group Icon..."
+                            info.text = L["Set Group Icon..."]
                             info.notCheckable = true
                             info.func = function()
                                 CloseDropDownMenus()
@@ -755,7 +755,7 @@ local function RefreshColumn1(preserveDrag)
 
                             if IsValidIconTexture(container.manualIcon) then
                                 info = UIDropDownMenu_CreateInfo()
-                                info.text = "Clear Custom Icon"
+                                info.text = L["Clear Custom Icon"]
                                 info.notCheckable = true
                                 info.func = function()
                                     CloseDropDownMenus()
@@ -771,7 +771,7 @@ local function RefreshColumn1(preserveDrag)
 
                         -- Add Panel submenu
                         info = UIDropDownMenu_CreateInfo()
-                        info.text = "Add Panel"
+                        info.text = L["Add Panel"]
                         info.notCheckable = true
                         info.hasArrow = true
                         info.menuList = "ADD_PANEL"
@@ -779,7 +779,7 @@ local function RefreshColumn1(preserveDrag)
 
                         -- Delete
                         info = UIDropDownMenu_CreateInfo()
-                        info.text = "|cffff4444Delete|r"
+                        info.text = L["|cffff4444Delete|r"]
                         info.notCheckable = true
                         info.func = function()
                             CloseDropDownMenus()
@@ -788,7 +788,7 @@ local function RefreshColumn1(preserveDrag)
                         UIDropDownMenu_AddButton(info, level)
                     elseif menuList == "MOVE_TO_FOLDER" then
                         local info = UIDropDownMenu_CreateInfo()
-                        info.text = "(No Folder)"
+                        info.text = L["(No Folder)"]
                         info.checked = (container.folderId == nil)
                         info.func = function()
                             CloseDropDownMenus()
@@ -822,9 +822,9 @@ local function RefreshColumn1(preserveDrag)
                         end
                     elseif menuList == "ADD_PANEL" then
                         local modes = {
-                            { mode = "icons", label = "Icon Panel" },
-                            { mode = "bars", label = "Bar Panel" },
-                            { mode = "text", label = "Text Panel" },
+                            { mode = "icons", label = L["Icon Panel"] },
+                            { mode = "bars", label = L["Bar Panel"] },
+                            { mode = "text", label = L["Text Panel"] },
                         }
                         for _, m in ipairs(modes) do
                             local info = UIDropDownMenu_CreateInfo()
@@ -999,7 +999,7 @@ local function RefreshColumn1(preserveDrag)
             end
             if hasOwnSpecs then
                 local clearBtn = AceGUI:Create("Button")
-                clearBtn:SetText("Clear All")
+                clearBtn:SetText(L["Clear All"])
                 clearBtn:SetFullWidth(true)
                 clearBtn:SetCallback("OnClick", function()
                     if folderSpecs then
@@ -1155,7 +1155,7 @@ local function RefreshColumn1(preserveDrag)
                 UIDropDownMenu_Initialize(CS.folderContextMenu, function(self, level)
                     -- Rename
                     local info = UIDropDownMenu_CreateInfo()
-                    info.text = "Rename"
+                    info.text = L["Rename"]
                     info.notCheckable = true
                     info.func = function()
                         CloseDropDownMenus()
@@ -1165,7 +1165,7 @@ local function RefreshColumn1(preserveDrag)
 
                     -- Add Group to folder
                     info = UIDropDownMenu_CreateInfo()
-                    info.text = "Add Group"
+                    info.text = L["Add Group"]
                     info.notCheckable = true
                     info.func = function()
                         CloseDropDownMenus()
@@ -1181,7 +1181,7 @@ local function RefreshColumn1(preserveDrag)
 
                     -- Manual icon override
                     info = UIDropDownMenu_CreateInfo()
-                    info.text = "Set Folder Icon..."
+                    info.text = L["Set Folder Icon..."]
                     info.notCheckable = true
                     info.func = function()
                         CloseDropDownMenus()
@@ -1191,7 +1191,7 @@ local function RefreshColumn1(preserveDrag)
 
                     if type(folder.manualIcon) == "number" or type(folder.manualIcon) == "string" then
                         info = UIDropDownMenu_CreateInfo()
-                        info.text = "Clear Custom Icon"
+                        info.text = L["Clear Custom Icon"]
                         info.notCheckable = true
                         info.func = function()
                             CloseDropDownMenus()
@@ -1206,7 +1206,7 @@ local function RefreshColumn1(preserveDrag)
 
                     -- Toggle Global/Character
                     info = UIDropDownMenu_CreateInfo()
-                    info.text = folder.section == "global" and "Make Character Folder" or "Make Global Folder"
+                    info.text = folder.section == "global" and L["Make Character Folder"] or L["Make Global Folder"]
                     info.notCheckable = true
                     info.func = function()
                         CloseDropDownMenus()
@@ -1231,7 +1231,7 @@ local function RefreshColumn1(preserveDrag)
                         end
                     end
                     info = UIDropDownMenu_CreateInfo()
-                    info.text = anyLocked and "Unlock All" or "Lock All"
+                    info.text = anyLocked and L["Unlock All"] or L["Lock All"]
                     info.notCheckable = true
                     info.func = function()
                         CloseDropDownMenus()
@@ -1249,7 +1249,7 @@ local function RefreshColumn1(preserveDrag)
 
                     -- Spec Filter
                     info = UIDropDownMenu_CreateInfo()
-                    info.text = "Spec / Hero Filter"
+                    info.text = L["Spec / Hero Filter"]
                     info.notCheckable = true
                     info.func = function()
                         CloseDropDownMenus()
@@ -1265,7 +1265,7 @@ local function RefreshColumn1(preserveDrag)
 
                     -- Export Folder
                     info = UIDropDownMenu_CreateInfo()
-                    info.text = "Export Folder"
+                    info.text = L["Export Folder"]
                     info.notCheckable = true
                     info.func = function()
                         CloseDropDownMenus()
@@ -1308,7 +1308,7 @@ local function RefreshColumn1(preserveDrag)
 
                     -- Delete
                     info = UIDropDownMenu_CreateInfo()
-                    info.text = "|cffff4444Delete Folder|r"
+                    info.text = L["|cffff4444Delete Folder|r"]
                     info.notCheckable = true
                     info.func = function()
                         CloseDropDownMenus()
@@ -1387,7 +1387,7 @@ local function RefreshColumn1(preserveDrag)
                         local subTreeInfo = C_Traits.GetSubTreeInfo(configID, subTreeID)
                         if subTreeInfo then
                             local htCb = AceGUI:Create("CheckBox")
-                            htCb:SetLabel(subTreeInfo.name or ("Hero " .. subTreeID))
+                            htCb:SetLabel(subTreeInfo.name or (L["Hero "] .. subTreeID))
                             htCb:SetFullWidth(true)
                             htCb:SetValue(folder.heroTalents and folder.heroTalents[subTreeID] or false)
                             htCb:SetCallback("OnValueChanged", function(widget, event, value)
@@ -1441,7 +1441,7 @@ local function RefreshColumn1(preserveDrag)
         end
 
         local clearBtn = AceGUI:Create("Button")
-        clearBtn:SetText("Clear All")
+        clearBtn:SetText(L["Clear All"])
         clearBtn:SetFullWidth(true)
         clearBtn:SetCallback("OnClick", function()
             CooldownCompanion:SetFolderSpecs(folderId, nil)
@@ -1491,8 +1491,8 @@ local function RefreshColumn1(preserveDrag)
                     local badge = CreateFrame("Button", nil, UIParent)
                     badge:SetScript("OnEnter", function(self)
                         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                        GameTooltip:SetText("Browse Other Characters")
-                        GameTooltip:AddLine("View and copy groups from other characters on this profile.", 1, 1, 1, true)
+                        GameTooltip:SetText(L["Browse Other Characters"])
+                        GameTooltip:AddLine(L["View and copy groups from other characters on this profile."], 1, 1, 1, true)
                         GameTooltip:Show()
                     end)
                     badge:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1519,7 +1519,7 @@ local function RefreshColumn1(preserveDrag)
 
         if isEmpty and CS.showPhantomSections then
             local placeholder = AceGUI:Create("Label")
-            placeholder:SetText("|cff888888Drop here to move|r")
+            placeholder:SetText(L["|cff888888Drop here to move|r"])
             placeholder:SetFullWidth(true)
             CS.col1Scroll:AddChild(placeholder)
             local rowIndex = #col1RenderedRows + 1
@@ -1612,7 +1612,7 @@ local function RefreshColumn1(preserveDrag)
             end
         end
         if hasGlobalContent or CS.showPhantomSections then
-            RenderSection("global", globalIds, "|cff66aaff" .. "Global Groups" .. "|r")
+            RenderSection("global", globalIds, L["|cff66aaff" .. "Global Groups" .. "|r"])
         end
     end
 
@@ -1627,7 +1627,7 @@ local function RefreshColumn1(preserveDrag)
         end
     end
     if hasCharContent or CS.showPhantomSections then
-        RenderSection("char", charIds, charName .. "'s Groups")
+        RenderSection("char", charIds, charName .. L["'s Groups"])
     end
 
     CS.lastCol1RenderedRows = col1RenderedRows
@@ -1644,9 +1644,9 @@ local function RefreshColumn1(preserveDrag)
         local thirdW = (barW - 6) / 3
 
         local newGroupBtn = AceGUI:Create("Button")
-        newGroupBtn:SetText("New Group")
+        newGroupBtn:SetText(L["New Group"])
         newGroupBtn:SetCallback("OnClick", function()
-            local containerId, groupId = CooldownCompanion:CreateGroup(GenerateGroupName("New Group"))
+            local containerId, groupId = CooldownCompanion:CreateGroup(GenerateGroupName(L["New Group"]))
             CS.selectedContainer = containerId
             CS.selectedGroup = nil
             CS.selectedButton = nil
@@ -1662,9 +1662,9 @@ local function RefreshColumn1(preserveDrag)
         table.insert(CS.col1BarWidgets, newGroupBtn)
 
         local newFolderBtn = AceGUI:Create("Button")
-        newFolderBtn:SetText("New Folder")
+        newFolderBtn:SetText(L["New Folder"])
         newFolderBtn:SetCallback("OnClick", function()
-            local folderId = CooldownCompanion:CreateFolder(GenerateFolderName("New Folder"), "char")
+            local folderId = CooldownCompanion:CreateFolder(GenerateFolderName(L["New Folder"]), "char")
             CooldownCompanion:RefreshConfigPanel()
         end)
         newFolderBtn.frame:SetParent(CS.col1ButtonBar)
@@ -1676,7 +1676,7 @@ local function RefreshColumn1(preserveDrag)
         table.insert(CS.col1BarWidgets, newFolderBtn)
 
         local importBtn = AceGUI:Create("Button")
-        importBtn:SetText("Import")
+        importBtn:SetText(L["Import"])
         importBtn:SetCallback("OnClick", function()
             ShowPopupAboveConfig("CDC_IMPORT_GROUP")
         end)

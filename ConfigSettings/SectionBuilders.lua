@@ -1,5 +1,6 @@
 local ADDON_NAME, ST = ...
 local CooldownCompanion = ST.Addon
+local L = LibStub("AceLocale-3.0"):GetLocale("CooldownCompanion", true) or {}
 local AceGUI = LibStub("AceGUI-3.0")
 local CS = ST._configState
 
@@ -29,7 +30,7 @@ local appearanceTabElements = CS.appearanceTabElements
 
 local function BuildCooldownTextControls(container, styleTable, refreshCallback)
     local cdTextCb = AceGUI:Create("CheckBox")
-    cdTextCb:SetLabel("Show Cooldown Text")
+    cdTextCb:SetLabel(L["Show Cooldown Text"])
     cdTextCb:SetValue(styleTable.showCooldownText or false)
     cdTextCb:SetFullWidth(true)
     cdTextCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -41,10 +42,10 @@ local function BuildCooldownTextControls(container, styleTable, refreshCallback)
 
     if styleTable.showCooldownText then
         AddFontControls(container, styleTable, "cooldown", {}, refreshCallback)
-        AddColorPicker(container, styleTable, "cooldownFontColor", "Font Color", {1, 1, 1, 1}, false, refreshCallback, refreshCallback)
+        AddColorPicker(container, styleTable, "cooldownFontColor", L["Font Color"], {1, 1, 1, 1}, false, refreshCallback, refreshCallback)
 
         local decimalCheck = AceGUI:Create("CheckBox")
-        decimalCheck:SetLabel("Show Decimal Point")
+        decimalCheck:SetLabel(L["Show Decimal Point"])
         decimalCheck:SetValue(styleTable.decimalTimers or false)
         decimalCheck:SetFullWidth(true)
         decimalCheck:SetCallback("OnValueChanged", function(widget, event, val)
@@ -54,19 +55,19 @@ local function BuildCooldownTextControls(container, styleTable, refreshCallback)
         container:AddChild(decimalCheck)
 
         CreateInfoButton(decimalCheck.frame, decimalCheck.checkbg, "LEFT", "RIGHT", decimalCheck.text:GetStringWidth() + 4, 0, {
-            "Show Decimal Point",
-            {"Shows one decimal place on duration text", 1, 1, 1, true},
-            {"(e.g. \"4.5\" instead of \"5\").", 1, 1, 1, true},
+            L["Show Decimal Point"],
+            {L["Shows one decimal place on duration text"], 1, 1, 1, true},
+            {L["(e.g. \"4.5\" instead of \"5\")."], 1, 1, 1, true},
             " ",
-            {"Bar and text mode only.", 0.7, 0.7, 0.7, true},
+            {L["Bar and text mode only."], 0.7, 0.7, 0.7, true},
         }, decimalCheck)
 
         local cdAnchorDrop = AddAnchorDropdown(container, styleTable, "cooldownTextAnchor", "CENTER", refreshCallback)
 
         -- (?) tooltip for shared positioning
         CreateInfoButton(cdAnchorDrop.frame, cdAnchorDrop.label, "LEFT", "RIGHT", 4, 0, {
-            "Shared Position",
-            {"Position is shared with Aura Duration Text by default. Enable 'Separate Text Positions' in the Aura Duration Text section to use independent positions.", 1, 1, 1, true},
+            L["Shared Position"],
+            {L["Position is shared with Aura Duration Text by default. Enable 'Separate Text Positions' in the Aura Duration Text section to use independent positions."], 1, 1, 1, true},
         }, cdAnchorDrop)
 
         AddOffsetSliders(container, styleTable, "cooldownTextXOffset", "cooldownTextYOffset", {}, refreshCallback)
@@ -76,7 +77,7 @@ end
 
 local function BuildAuraTextControls(container, styleTable, refreshCallback)
     local auraTextCb = AceGUI:Create("CheckBox")
-    auraTextCb:SetLabel("Show Aura Duration Text")
+    auraTextCb:SetLabel(L["Show Aura Duration Text"])
     auraTextCb:SetValue(styleTable.showAuraText ~= false)
     auraTextCb:SetFullWidth(true)
     auraTextCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -88,16 +89,16 @@ local function BuildAuraTextControls(container, styleTable, refreshCallback)
 
     -- (?) tooltip for shared positioning note
     CreateInfoButton(auraTextCb.frame, auraTextCb.checkbg, "LEFT", "RIGHT", auraTextCb.text:GetStringWidth() + 4, 0, {
-        "Shared Position",
-        {"Position is shared with Cooldown Text by default. Enable 'Separate Text Positions' below to use independent positions.", 1, 1, 1, true},
+        L["Shared Position"],
+        {L["Position is shared with Cooldown Text by default. Enable 'Separate Text Positions' below to use independent positions."], 1, 1, 1, true},
     }, auraTextCb)
 
     if styleTable.showAuraText ~= false then
         AddFontControls(container, styleTable, "auraText", {}, refreshCallback)
-        AddColorPicker(container, styleTable, "auraTextFontColor", "Font Color", {0, 0.925, 1, 1}, false, refreshCallback, refreshCallback)
+        AddColorPicker(container, styleTable, "auraTextFontColor", L["Font Color"], {0, 0.925, 1, 1}, false, refreshCallback, refreshCallback)
 
         local sepPosCb = AceGUI:Create("CheckBox")
-        sepPosCb:SetLabel("Separate Text Positions")
+        sepPosCb:SetLabel(L["Separate Text Positions"])
         sepPosCb:SetValue(styleTable.separateTextPositions or false)
         sepPosCb:SetFullWidth(true)
         sepPosCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -108,8 +109,8 @@ local function BuildAuraTextControls(container, styleTable, refreshCallback)
         container:AddChild(sepPosCb)
 
         CreateInfoButton(sepPosCb.frame, sepPosCb.checkbg, "LEFT", "RIGHT", sepPosCb.text:GetStringWidth() + 4, 0, {
-            "Separate Text Positions",
-            {"When enabled, aura duration text and cooldown text use independent positions. Aura text position controls appear below when toggled on; cooldown text position is in the Cooldown Text section.", 1, 1, 1, true},
+            L["Separate Text Positions"],
+            {L["When enabled, aura duration text and cooldown text use independent positions. Aura text position controls appear below when toggled on; cooldown text position is in the Cooldown Text section."], 1, 1, 1, true},
         }, sepPosCb)
 
         if styleTable.separateTextPositions then
@@ -121,7 +122,7 @@ end
 
 local function BuildAuraStackTextControls(container, styleTable, refreshCallback)
     local auraStackCb = AceGUI:Create("CheckBox")
-    auraStackCb:SetLabel("Show Aura Stack Text")
+    auraStackCb:SetLabel(L["Show Aura Stack Text"])
     auraStackCb:SetValue(styleTable.showAuraStackText ~= false)
     auraStackCb:SetFullWidth(true)
     auraStackCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -133,7 +134,7 @@ local function BuildAuraStackTextControls(container, styleTable, refreshCallback
 
     if styleTable.showAuraStackText ~= false then
         AddFontControls(container, styleTable, "auraStack", {}, refreshCallback)
-        AddColorPicker(container, styleTable, "auraStackFontColor", "Font Color", {1, 1, 1, 1}, true, refreshCallback, refreshCallback)
+        AddColorPicker(container, styleTable, "auraStackFontColor", L["Font Color"], {1, 1, 1, 1}, true, refreshCallback, refreshCallback)
         AddAnchorDropdown(container, styleTable, "auraStackAnchor", "BOTTOMLEFT", refreshCallback)
         AddOffsetSliders(container, styleTable, "auraStackXOffset", "auraStackYOffset", {x = 2, y = 2}, refreshCallback)
     end
@@ -141,7 +142,7 @@ end
 
 local function BuildKeybindTextControls(container, styleTable, refreshCallback)
     local kbCb = AceGUI:Create("CheckBox")
-    kbCb:SetLabel("Show Keybind Text")
+    kbCb:SetLabel(L["Show Keybind Text"])
     kbCb:SetValue(styleTable.showKeybindText or false)
     kbCb:SetFullWidth(true)
     kbCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -155,13 +156,13 @@ local function BuildKeybindTextControls(container, styleTable, refreshCallback)
         AddAnchorDropdown(container, styleTable, "keybindAnchor", "TOPRIGHT", refreshCallback)
         AddOffsetSliders(container, styleTable, "keybindXOffset", "keybindYOffset", {x = -2, y = -2}, refreshCallback)
         AddFontControls(container, styleTable, "keybind", {size = 10, sizeMin = 6, sizeMax = 24}, refreshCallback)
-        AddColorPicker(container, styleTable, "keybindFontColor", "Font Color", {1, 1, 1, 1}, true, refreshCallback, refreshCallback)
+        AddColorPicker(container, styleTable, "keybindFontColor", L["Font Color"], {1, 1, 1, 1}, true, refreshCallback, refreshCallback)
     end
 end
 
 local function BuildChargeTextControls(container, styleTable, refreshCallback)
     local chargeTextCb = AceGUI:Create("CheckBox")
-    chargeTextCb:SetLabel("Show Charge Text")
+    chargeTextCb:SetLabel(L["Show Charge Text"])
     chargeTextCb:SetValue(styleTable.showChargeText ~= false)
     chargeTextCb:SetFullWidth(true)
     chargeTextCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -173,9 +174,9 @@ local function BuildChargeTextControls(container, styleTable, refreshCallback)
 
     if styleTable.showChargeText ~= false then
         AddFontControls(container, styleTable, "charge", {}, refreshCallback)
-        AddColorPicker(container, styleTable, "chargeFontColor", "Font Color (Max Charges)", {1, 1, 1, 1}, true, refreshCallback, refreshCallback)
-        AddColorPicker(container, styleTable, "chargeFontColorMissing", "Font Color (Missing Charges)", {1, 1, 1, 1}, true, refreshCallback, refreshCallback)
-        AddColorPicker(container, styleTable, "chargeFontColorZero", "Font Color (Zero Charges)", {1, 1, 1, 1}, true, refreshCallback, refreshCallback)
+        AddColorPicker(container, styleTable, "chargeFontColor", L["Font Color (Max Charges)"], {1, 1, 1, 1}, true, refreshCallback, refreshCallback)
+        AddColorPicker(container, styleTable, "chargeFontColorMissing", L["Font Color (Missing Charges)"], {1, 1, 1, 1}, true, refreshCallback, refreshCallback)
+        AddColorPicker(container, styleTable, "chargeFontColorZero", L["Font Color (Zero Charges)"], {1, 1, 1, 1}, true, refreshCallback, refreshCallback)
         AddAnchorDropdown(container, styleTable, "chargeAnchor", "BOTTOMRIGHT", refreshCallback)
         AddOffsetSliders(container, styleTable, "chargeXOffset", "chargeYOffset", {x = -2, y = 2}, refreshCallback)
     end
@@ -183,7 +184,7 @@ end
 
 local function BuildBorderControls(container, styleTable, refreshCallback)
     local borderSlider = AceGUI:Create("Slider")
-    borderSlider:SetLabel("Border Size")
+    borderSlider:SetLabel(L["Border Size"])
     borderSlider:SetSliderValues(0, 5, 0.1)
     borderSlider:SetValue(styleTable.borderSize or ST.DEFAULT_BORDER_SIZE)
     borderSlider:SetFullWidth(true)
@@ -193,16 +194,16 @@ local function BuildBorderControls(container, styleTable, refreshCallback)
     end)
     container:AddChild(borderSlider)
 
-    AddColorPicker(container, styleTable, "borderColor", "Border Color", {0, 0, 0, 1}, true, refreshCallback, refreshCallback)
+    AddColorPicker(container, styleTable, "borderColor", L["Border Color"], {0, 0, 0, 1}, true, refreshCallback, refreshCallback)
 end
 
 local function BuildBackgroundColorControls(container, styleTable, refreshCallback)
-    AddColorPicker(container, styleTable, "backgroundColor", "Background Color", {0, 0, 0, 0.5}, true, refreshCallback, refreshCallback)
+    AddColorPicker(container, styleTable, "backgroundColor", L["Background Color"], {0, 0, 0, 0.5}, true, refreshCallback, refreshCallback)
 end
 
 local function BuildDesaturationControls(container, styleTable, refreshCallback)
     local desatCb = AceGUI:Create("CheckBox")
-    desatCb:SetLabel("Show Desaturate On Cooldown")
+    desatCb:SetLabel(L["Show Desaturate On Cooldown"])
     desatCb:SetValue(styleTable.desaturateOnCooldown or false)
     desatCb:SetFullWidth(true)
     desatCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -214,7 +215,7 @@ end
 
 local function BuildShowTooltipsControls(container, styleTable, refreshCallback)
     local cb = AceGUI:Create("CheckBox")
-    cb:SetLabel("Show Tooltips")
+    cb:SetLabel(L["Show Tooltips"])
     cb:SetValue(styleTable.showTooltips == true)
     cb:SetFullWidth(true)
     cb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -227,7 +228,7 @@ end
 
 local function BuildShowOutOfRangeControls(container, styleTable, refreshCallback)
     local cb = AceGUI:Create("CheckBox")
-    cb:SetLabel("Show Out of Range")
+    cb:SetLabel(L["Show Out of Range"])
     cb:SetValue(styleTable.showOutOfRange or false)
     cb:SetFullWidth(true)
     cb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -242,7 +243,7 @@ local function BuildIconTintControls(container, styleTable, refreshCallback)
     AddColorPicker(container, styleTable, "iconTintColor", "Base Icon Color", {1, 1, 1, 1}, true, refreshCallback, refreshCallback)
 
     local cdTintCb = AceGUI:Create("CheckBox")
-    cdTintCb:SetLabel("Use Separate Cooldown Tint")
+    cdTintCb:SetLabel(L["Use Separate Cooldown Tint"])
     cdTintCb:SetValue(styleTable.iconCooldownTintEnabled or false)
     cdTintCb:SetFullWidth(true)
     cdTintCb:SetCallback("OnValueChanged", function(w, e, val)
@@ -253,11 +254,11 @@ local function BuildIconTintControls(container, styleTable, refreshCallback)
     container:AddChild(cdTintCb)
 
     if styleTable.iconCooldownTintEnabled then
-        AddColorPicker(container, styleTable, "iconCooldownTintColor", "Cooldown Icon Color", {1, 0, 0.102, 1}, true, refreshCallback, refreshCallback)
+        AddColorPicker(container, styleTable, "iconCooldownTintColor", L["Cooldown Icon Color"], {1, 0, 0.102, 1}, true, refreshCallback, refreshCallback)
     end
 
     local auraTintCb = AceGUI:Create("CheckBox")
-    auraTintCb:SetLabel("Use Separate Aura Tint")
+    auraTintCb:SetLabel(L["Use Separate Aura Tint"])
     auraTintCb:SetValue(styleTable.iconAuraTintEnabled or false)
     auraTintCb:SetFullWidth(true)
     auraTintCb:SetCallback("OnValueChanged", function(w, e, val)
@@ -268,17 +269,17 @@ local function BuildIconTintControls(container, styleTable, refreshCallback)
     container:AddChild(auraTintCb)
 
     if styleTable.iconAuraTintEnabled then
-        AddColorPicker(container, styleTable, "iconAuraTintColor", "Aura Active Icon Color", {0, 0.925, 1, 1}, true, refreshCallback, refreshCallback)
+        AddColorPicker(container, styleTable, "iconAuraTintColor", L["Aura Active Icon Color"], {0, 0.925, 1, 1}, true, refreshCallback, refreshCallback)
     end
 
     if styleTable.showUnusable then
-        AddColorPicker(container, styleTable, "iconUnusableTintColor", "Unusable Dimming Tint", {0.4, 0.4, 0.4, 1}, true, refreshCallback, refreshCallback)
+        AddColorPicker(container, styleTable, "iconUnusableTintColor", L["Unusable Dimming Tint"], {0.4, 0.4, 0.4, 1}, true, refreshCallback, refreshCallback)
     end
 end
 
 local function BuildShowGCDSwipeControls(container, styleTable, refreshCallback)
     local cb = AceGUI:Create("CheckBox")
-    cb:SetLabel("Show GCD Swipe")
+    cb:SetLabel(L["Show GCD Swipe"])
     cb:SetValue(styleTable.showGCDSwipe == true)
     cb:SetFullWidth(true)
     cb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -290,7 +291,7 @@ end
 
 local function BuildCooldownSwipeControls(container, styleTable, refreshCallback)
     local cb = AceGUI:Create("CheckBox")
-    cb:SetLabel("Show Cooldown/Duration Swipe")
+    cb:SetLabel(L["Show Cooldown/Duration Swipe"])
     cb:SetValue(styleTable.showCooldownSwipe ~= false)
     cb:SetFullWidth(true)
     cb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -300,7 +301,7 @@ local function BuildCooldownSwipeControls(container, styleTable, refreshCallback
     container:AddChild(cb)
 
     local reverseCb = AceGUI:Create("CheckBox")
-    reverseCb:SetLabel("Reverse Swipe")
+    reverseCb:SetLabel(L["Reverse Swipe"])
     reverseCb:SetValue(styleTable.cooldownSwipeReverse or false)
     reverseCb:SetFullWidth(true)
     reverseCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -311,7 +312,7 @@ local function BuildCooldownSwipeControls(container, styleTable, refreshCallback
     ApplyCheckboxIndent(reverseCb, 20)
 
     local fillCb = AceGUI:Create("CheckBox")
-    fillCb:SetLabel("Show Swipe Fill")
+    fillCb:SetLabel(L["Show Swipe Fill"])
     fillCb:SetValue(styleTable.showCooldownSwipeFill ~= false)
     fillCb:SetFullWidth(true)
     fillCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -322,7 +323,7 @@ local function BuildCooldownSwipeControls(container, styleTable, refreshCallback
     ApplyCheckboxIndent(fillCb, 20)
 
     local edgeCb = AceGUI:Create("CheckBox")
-    edgeCb:SetLabel("Show Swipe Edge")
+    edgeCb:SetLabel(L["Show Swipe Edge"])
     edgeCb:SetValue(styleTable.showCooldownSwipeEdge ~= false)
     edgeCb:SetFullWidth(true)
     edgeCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -335,7 +336,7 @@ end
 
 local function BuildLossOfControlControls(container, styleTable, refreshCallback)
     local locCb = AceGUI:Create("CheckBox")
-    locCb:SetLabel("Show Loss of Control")
+    locCb:SetLabel(L["Show Loss of Control"])
     locCb:SetValue(styleTable.showLossOfControl or false)
     locCb:SetFullWidth(true)
     locCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -348,7 +349,7 @@ end
 
 local function BuildUnusableDimmingControls(container, styleTable, refreshCallback)
     local unusableCb = AceGUI:Create("CheckBox")
-    unusableCb:SetLabel("Show Unusable Dimming")
+    unusableCb:SetLabel(L["Show Unusable Dimming"])
     unusableCb:SetValue(styleTable.showUnusable or false)
     unusableCb:SetFullWidth(true)
     unusableCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -361,7 +362,7 @@ end
 
 local function BuildAssistedHighlightControls(container, styleTable, refreshCallback, opts)
     local hostileOnlyCb = AceGUI:Create("CheckBox")
-    hostileOnlyCb:SetLabel("Hostile Target Only")
+    hostileOnlyCb:SetLabel(L["Hostile Target Only"])
     hostileOnlyCb:SetValue(styleTable.assistedHighlightHostileTargetOnly ~= false)
     hostileOnlyCb:SetFullWidth(true)
     hostileOnlyCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -379,7 +380,7 @@ local function BuildAssistedHighlightControls(container, styleTable, refreshCall
         solid = "Solid Border",
     }
     local styleDrop = AceGUI:Create("Dropdown")
-    styleDrop:SetLabel("Highlight Style")
+    styleDrop:SetLabel(L["Highlight Style"])
     styleDrop:SetList(highlightStyles)
     styleDrop:SetValue(styleTable.assistedHighlightStyle or "blizzard")
     styleDrop:SetFullWidth(true)
@@ -391,10 +392,10 @@ local function BuildAssistedHighlightControls(container, styleTable, refreshCall
     container:AddChild(styleDrop)
 
     if styleTable.assistedHighlightStyle == "solid" then
-        AddColorPicker(container, styleTable, "assistedHighlightColor", "Highlight Color", {0.3, 1, 0.3, 0.9}, true, refreshCallback, refreshCallback)
+        AddColorPicker(container, styleTable, "assistedHighlightColor", L["Highlight Color"], {0.3, 1, 0.3, 0.9}, true, refreshCallback, refreshCallback)
 
         local hlSizeSlider = AceGUI:Create("Slider")
-        hlSizeSlider:SetLabel("Border Size")
+        hlSizeSlider:SetLabel(L["Border Size"])
         hlSizeSlider:SetSliderValues(1, 6, 0.1)
         hlSizeSlider:SetValue(styleTable.assistedHighlightBorderSize or 2)
         hlSizeSlider:SetFullWidth(true)
@@ -405,7 +406,7 @@ local function BuildAssistedHighlightControls(container, styleTable, refreshCall
         container:AddChild(hlSizeSlider)
     elseif styleTable.assistedHighlightStyle == "blizzard" then
         local blizzSlider = AceGUI:Create("Slider")
-        blizzSlider:SetLabel("Glow Size")
+        blizzSlider:SetLabel(L["Glow Size"])
         blizzSlider:SetSliderValues(0, 60, 0.1)
         blizzSlider:SetValue(styleTable.assistedHighlightBlizzardOverhang or 32)
         blizzSlider:SetFullWidth(true)
@@ -415,10 +416,10 @@ local function BuildAssistedHighlightControls(container, styleTable, refreshCall
         end)
         container:AddChild(blizzSlider)
     elseif styleTable.assistedHighlightStyle == "proc" then
-        AddColorPicker(container, styleTable, "assistedHighlightProcColor", "Glow Color", {1, 1, 1, 1}, true, refreshCallback, refreshCallback)
+        AddColorPicker(container, styleTable, "assistedHighlightProcColor", L["Glow Color"], {1, 1, 1, 1}, true, refreshCallback, refreshCallback)
 
         local procSlider = AceGUI:Create("Slider")
-        procSlider:SetLabel("Glow Size")
+        procSlider:SetLabel(L["Glow Size"])
         procSlider:SetSliderValues(0, 60, 0.1)
         procSlider:SetValue(styleTable.assistedHighlightProcOverhang or 32)
         procSlider:SetFullWidth(true)
@@ -443,7 +444,7 @@ end
 local function BuildGlowSliders(container, styleTable, currentStyle, keys, refreshCallback, pixelSizeMin)
     if currentStyle == "solid" then
         local sizeSlider = AceGUI:Create("Slider")
-        sizeSlider:SetLabel("Border Size")
+        sizeSlider:SetLabel(L["Border Size"])
         sizeSlider:SetSliderValues(1, 8, 0.1)
         sizeSlider:SetValue(styleTable[keys.size] or 5)
         sizeSlider:SetFullWidth(true)
@@ -454,7 +455,7 @@ local function BuildGlowSliders(container, styleTable, currentStyle, keys, refre
         container:AddChild(sizeSlider)
     elseif currentStyle == "pixel" then
         local sizeSlider = AceGUI:Create("Slider")
-        sizeSlider:SetLabel("Line Length")
+        sizeSlider:SetLabel(L["Line Length"])
         sizeSlider:SetSliderValues(pixelSizeMin, 12, 0.1)
         sizeSlider:SetValue(styleTable[keys.size] or 8)
         sizeSlider:SetFullWidth(true)
@@ -465,7 +466,7 @@ local function BuildGlowSliders(container, styleTable, currentStyle, keys, refre
         container:AddChild(sizeSlider)
 
         local thicknessSlider = AceGUI:Create("Slider")
-        thicknessSlider:SetLabel("Line Thickness")
+        thicknessSlider:SetLabel(L["Line Thickness"])
         thicknessSlider:SetSliderValues(1, 6, 0.1)
         thicknessSlider:SetValue(styleTable[keys.thickness] or 4)
         thicknessSlider:SetFullWidth(true)
@@ -476,7 +477,7 @@ local function BuildGlowSliders(container, styleTable, currentStyle, keys, refre
         container:AddChild(thicknessSlider)
 
         local speedSlider = AceGUI:Create("Slider")
-        speedSlider:SetLabel("Speed")
+        speedSlider:SetLabel(L["Speed"])
         speedSlider:SetSliderValues(10, 200, 0.1)
         speedSlider:SetValue(styleTable[keys.speed] or 50)
         speedSlider:SetFullWidth(true)
@@ -488,7 +489,7 @@ local function BuildGlowSliders(container, styleTable, currentStyle, keys, refre
 
         if keys.lines then
             local linesSlider = AceGUI:Create("Slider")
-            linesSlider:SetLabel("Number of Lines")
+            linesSlider:SetLabel(L["Number of Lines"])
             linesSlider:SetSliderValues(1, 16, 1)
             linesSlider:SetValue(styleTable[keys.lines] or 8)
             linesSlider:SetFullWidth(true)
@@ -500,7 +501,7 @@ local function BuildGlowSliders(container, styleTable, currentStyle, keys, refre
         end
     elseif currentStyle == "glow" then
         local sizeSlider = AceGUI:Create("Slider")
-        sizeSlider:SetLabel("Glow Size")
+        sizeSlider:SetLabel(L["Glow Size"])
         sizeSlider:SetSliderValues(0, 60, 0.1)
         sizeSlider:SetValue(styleTable[keys.size] or 30)
         sizeSlider:SetFullWidth(true)
@@ -511,7 +512,7 @@ local function BuildGlowSliders(container, styleTable, currentStyle, keys, refre
         container:AddChild(sizeSlider)
     elseif currentStyle == "lcgButton" then
         local speedSlider = AceGUI:Create("Slider")
-        speedSlider:SetLabel("Frequency")
+        speedSlider:SetLabel(L["Frequency"])
         speedSlider:SetSliderValues(10, 200, 0.1)
         speedSlider:SetValue(styleTable[keys.speed] or 50)
         speedSlider:SetFullWidth(true)
@@ -522,7 +523,7 @@ local function BuildGlowSliders(container, styleTable, currentStyle, keys, refre
         container:AddChild(speedSlider)
     elseif currentStyle == "lcgAutoCast" then
         local sizeSlider = AceGUI:Create("Slider")
-        sizeSlider:SetLabel("Particle Scale")
+        sizeSlider:SetLabel(L["Particle Scale"])
         sizeSlider:SetSliderValues(0.2, 3, 0.05)
         local currentScale = styleTable[keys.size]
         if not currentScale or currentScale < 0.2 or currentScale > 3 then
@@ -537,7 +538,7 @@ local function BuildGlowSliders(container, styleTable, currentStyle, keys, refre
         container:AddChild(sizeSlider)
 
         local speedSlider = AceGUI:Create("Slider")
-        speedSlider:SetLabel("Frequency")
+        speedSlider:SetLabel(L["Frequency"])
         speedSlider:SetSliderValues(10, 200, 0.1)
         speedSlider:SetValue(styleTable[keys.speed] or 50)
         speedSlider:SetFullWidth(true)
@@ -622,7 +623,7 @@ local function BuildGlowStyleControls(container, styleTable, refreshCallback, cf
     end
 
     local styleDrop = AceGUI:Create("Dropdown")
-    styleDrop:SetLabel("Glow Style")
+    styleDrop:SetLabel(L["Glow Style"])
     local styleOptions = cfg.styleOptions or {
         ["solid"] = "Solid Border",
         ["pixel"] = "Pixel Glow",
@@ -725,10 +726,10 @@ end
 ------------------------------------------------------------------------
 local function BuildProcGlowControls(container, styleTable, refreshCallback, opts)
     BuildGlowStyleControls(container, styleTable, refreshCallback, {
-        styleKey = "procGlowStyle", colorKey = "procGlowColor", colorLabel = "Glow Color",
+        styleKey = "procGlowStyle", colorKey = "procGlowColor", colorLabel = L["Glow Color"],
         sizeKey = "procGlowSize", thicknessKey = "procGlowThickness", speedKey = "procGlowSpeed", linesKey = "procGlowLines",
         defaultStyle = "glow", defaultColor = {1, 1, 1, 1},
-        enableLabel = "Show Proc Glow",
+        enableLabel = L["Show Proc Glow"],
         styleOptions = LCG_GLOW_STYLE_OPTIONS,
         styleOrder = LCG_GLOW_STYLE_ORDER,
     }, opts)
@@ -736,10 +737,10 @@ end
 
 local function BuildPandemicGlowControls(container, styleTable, refreshCallback, opts)
     BuildGlowStyleControls(container, styleTable, refreshCallback, {
-        styleKey = "pandemicGlowStyle", colorKey = "pandemicGlowColor", colorLabel = "Glow Color",
+        styleKey = "pandemicGlowStyle", colorKey = "pandemicGlowColor", colorLabel = L["Glow Color"],
         sizeKey = "pandemicGlowSize", thicknessKey = "pandemicGlowThickness", speedKey = "pandemicGlowSpeed", linesKey = "pandemicGlowLines",
         defaultStyle = "solid", defaultColor = {1, 0.5, 0, 1},
-        enableKey = "showPandemicGlow", enableLabel = "Show Pandemic Glow",
+        enableKey = "showPandemicGlow", enableLabel = L["Show Pandemic Glow"],
         styleOptions = LCG_GLOW_STYLE_OPTIONS,
         styleOrder = LCG_GLOW_STYLE_ORDER,
     }, opts)
@@ -747,10 +748,10 @@ end
 
 local function BuildAuraIndicatorControls(container, styleTable, refreshCallback, opts)
     BuildGlowStyleControls(container, styleTable, refreshCallback, {
-        styleKey = "auraGlowStyle", colorKey = "auraGlowColor", colorLabel = "Indicator Color",
+        styleKey = "auraGlowStyle", colorKey = "auraGlowColor", colorLabel = L["Indicator Color"],
         sizeKey = "auraGlowSize", thicknessKey = "auraGlowThickness", speedKey = "auraGlowSpeed", linesKey = "auraGlowLines",
         defaultStyle = "pixel", defaultColor = {1, 0.84, 0, 0.9},
-        enableLabel = "Show Aura Glow",
+        enableLabel = L["Show Aura Glow"],
         styleOptions = LCG_GLOW_STYLE_OPTIONS,
         styleOrder = LCG_GLOW_STYLE_ORDER,
     }, opts)
@@ -758,10 +759,10 @@ end
 
 local function BuildReadyGlowControls(container, styleTable, refreshCallback, opts)
     BuildGlowStyleControls(container, styleTable, refreshCallback, {
-        styleKey = "readyGlowStyle", colorKey = "readyGlowColor", colorLabel = "Glow Color",
+        styleKey = "readyGlowStyle", colorKey = "readyGlowColor", colorLabel = L["Glow Color"],
         sizeKey = "readyGlowSize", thicknessKey = "readyGlowThickness", speedKey = "readyGlowSpeed", linesKey = "readyGlowLines",
         defaultStyle = "solid", defaultColor = {0.2, 1.0, 0.2, 1},
-        enableLabel = "Show Ready Glow",
+        enableLabel = L["Show Ready Glow"],
         styleOptions = LCG_GLOW_STYLE_OPTIONS,
         styleOrder = LCG_GLOW_STYLE_ORDER,
     }, opts)
@@ -772,10 +773,10 @@ local KPH_STYLE_ORDER = {"solid", "overlay"}
 
 local function BuildKeyPressHighlightControls(container, styleTable, refreshCallback, opts)
     BuildGlowStyleControls(container, styleTable, refreshCallback, {
-        styleKey = "keyPressHighlightStyle", colorKey = "keyPressHighlightColor", colorLabel = "Highlight Color",
+        styleKey = "keyPressHighlightStyle", colorKey = "keyPressHighlightColor", colorLabel = L["Highlight Color"],
         sizeKey = "keyPressHighlightSize",
         defaultStyle = "solid", defaultColor = {1, 1, 1, 0.4},
-        enableLabel = "Show Key Press Highlight",
+        enableLabel = L["Show Key Press Highlight"],
         styleOptions = KPH_STYLE_OPTIONS,
         styleOrder = KPH_STYLE_ORDER,
     }, opts)
@@ -783,10 +784,10 @@ end
 
 local function BuildPandemicBarControls(container, styleTable, refreshCallback, opts)
     BuildBarEffectControls(container, styleTable, refreshCallback, {
-        colorKey = "barPandemicColor", colorLabel = "Pandemic Bar Color",
+        colorKey = "barPandemicColor", colorLabel = L["Pandemic Bar Color"],
         defaultColor = {1, 0.5, 0, 1},
-        enableKey = "showPandemicGlow", enableLabel = "Show Pandemic Color/Glow",
-        effectKey = "pandemicBarEffect", effectLabel = "Pandemic Effect",
+        enableKey = "showPandemicGlow", enableLabel = L["Show Pandemic Color/Glow"],
+        effectKey = "pandemicBarEffect", effectLabel = L["Pandemic Effect"],
         effectColorKey = "pandemicBarEffectColor", effectColorLabel = "Pandemic Effect Color",
         defaultEffectColor = {1, 0.5, 0, 1},
         effectSizeKey = "pandemicBarEffectSize", effectThicknessKey = "pandemicBarEffectThickness",
@@ -796,10 +797,10 @@ end
 
 local function BuildBarActiveAuraControls(container, styleTable, refreshCallback, opts)
     BuildBarEffectControls(container, styleTable, refreshCallback, {
-        colorKey = "barAuraColor", colorLabel = "Active Aura Bar Color",
+        colorKey = "barAuraColor", colorLabel = L["Active Aura Bar Color"],
         defaultColor = {0.2, 1.0, 0.2, 1.0},
-        effectKey = "barAuraEffect", effectLabel = "Active Aura Effect",
-        effectColorKey = "barAuraEffectColor", effectColorLabel = "Effect Color",
+        effectKey = "barAuraEffect", effectLabel = L["Active Aura Effect"],
+        effectColorKey = "barAuraEffectColor", effectColorLabel = L["Effect Color"],
         defaultEffectColor = {1, 0.84, 0, 0.9},
         effectSizeKey = "barAuraEffectSize", effectThicknessKey = "barAuraEffectThickness",
         effectSpeedKey = "barAuraEffectSpeed", effectLinesKey = "barAuraEffectLines",
@@ -807,15 +808,15 @@ local function BuildBarActiveAuraControls(container, styleTable, refreshCallback
 end
 
 local function BuildBarColorsControls(container, styleTable, refreshCallback)
-    AddColorPicker(container, styleTable, "barColor", "Bar Color", {0.2, 0.6, 1.0, 1.0}, true, refreshCallback, refreshCallback)
-    AddColorPicker(container, styleTable, "barCooldownColor", "Bar Cooldown Color", {0.6, 0.6, 0.6, 1.0}, true, refreshCallback, refreshCallback)
-    AddColorPicker(container, styleTable, "barChargeColor", "Bar Recharging Color", {1.0, 0.82, 0.0, 1.0}, true, refreshCallback, refreshCallback)
-    AddColorPicker(container, styleTable, "barBgColor", "Bar Background Color", {0.1, 0.1, 0.1, 0.8}, true, refreshCallback, refreshCallback)
+    AddColorPicker(container, styleTable, "barColor", L["Bar Color"], {0.2, 0.6, 1.0, 1.0}, true, refreshCallback, refreshCallback)
+    AddColorPicker(container, styleTable, "barCooldownColor", L["Bar Cooldown Color"], {0.6, 0.6, 0.6, 1.0}, true, refreshCallback, refreshCallback)
+    AddColorPicker(container, styleTable, "barChargeColor", L["Bar Recharging Color"], {1.0, 0.82, 0.0, 1.0}, true, refreshCallback, refreshCallback)
+    AddColorPicker(container, styleTable, "barBgColor", L["Bar Background Color"], {0.1, 0.1, 0.1, 0.8}, true, refreshCallback, refreshCallback)
 end
 
 local function BuildBarNameTextControls(container, styleTable, refreshCallback)
     local showNameCb = AceGUI:Create("CheckBox")
-    showNameCb:SetLabel("Show Name Text")
+    showNameCb:SetLabel(L["Show Name Text"])
     showNameCb:SetValue(styleTable.showBarNameText ~= false)
     showNameCb:SetFullWidth(true)
     showNameCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -827,7 +828,7 @@ local function BuildBarNameTextControls(container, styleTable, refreshCallback)
 
     if styleTable.showBarNameText ~= false then
         local flipNameCheck = AceGUI:Create("CheckBox")
-        flipNameCheck:SetLabel("Flip Name Text")
+        flipNameCheck:SetLabel(L["Flip Name Text"])
         flipNameCheck:SetValue(styleTable.barNameTextReverse or false)
         flipNameCheck:SetFullWidth(true)
         flipNameCheck:SetCallback("OnValueChanged", function(widget, event, val)
@@ -837,13 +838,13 @@ local function BuildBarNameTextControls(container, styleTable, refreshCallback)
         container:AddChild(flipNameCheck)
 
         AddFontControls(container, styleTable, "barName", {size = 10, sizeMin = 6, sizeMax = 24}, refreshCallback)
-        AddColorPicker(container, styleTable, "barNameFontColor", "Font Color", {1, 1, 1, 1}, true, refreshCallback, refreshCallback)
+        AddColorPicker(container, styleTable, "barNameFontColor", L["Font Color"], {1, 1, 1, 1}, true, refreshCallback, refreshCallback)
     end
 end
 
 local function BuildBarReadyTextControls(container, styleTable, refreshCallback)
     local showReadyCb = AceGUI:Create("CheckBox")
-    showReadyCb:SetLabel("Show Ready Text")
+    showReadyCb:SetLabel(L["Show Ready Text"])
     showReadyCb:SetValue(styleTable.showBarReadyText or false)
     showReadyCb:SetFullWidth(true)
     showReadyCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -856,8 +857,8 @@ local function BuildBarReadyTextControls(container, styleTable, refreshCallback)
     if styleTable.showBarReadyText then
         local readyTextBox = AceGUI:Create("EditBox")
         if readyTextBox.editbox.Instructions then readyTextBox.editbox.Instructions:Hide() end
-        readyTextBox:SetLabel("Ready Text")
-        readyTextBox:SetText(styleTable.barReadyText or "Ready")
+        readyTextBox:SetLabel(L["Ready Text"])
+        readyTextBox:SetText(styleTable.barReadyText or L["Ready"])
         readyTextBox:SetFullWidth(true)
         readyTextBox:SetCallback("OnEnterPressed", function(widget, event, val)
             styleTable.barReadyText = val
@@ -865,7 +866,7 @@ local function BuildBarReadyTextControls(container, styleTable, refreshCallback)
         end)
         container:AddChild(readyTextBox)
 
-        AddColorPicker(container, styleTable, "barReadyTextColor", "Ready Text Color", {0.2, 1.0, 0.2, 1.0}, true, refreshCallback, refreshCallback)
+        AddColorPicker(container, styleTable, "barReadyTextColor", L["Ready Text Color"], {0.2, 1.0, 0.2, 1.0}, true, refreshCallback, refreshCallback)
         AddFontControls(container, styleTable, "barReady", {sizeMin = 6, sizeMax = 24}, refreshCallback)
     end
 end
@@ -874,10 +875,10 @@ end
 -- Text Mode — Text Colors
 ------------------------------------------------------------------------
 local function BuildTextBackgroundControls(container, styleTable, refreshCallback)
-    AddColorPicker(container, styleTable, "textBgColor", "Background Color", {0, 0, 0, 0}, true, refreshCallback, refreshCallback)
+    AddColorPicker(container, styleTable, "textBgColor", L["Background Color"], {0, 0, 0, 0}, true, refreshCallback, refreshCallback)
 
     local borderSlider = AceGUI:Create("Slider")
-    borderSlider:SetLabel("Border Size")
+    borderSlider:SetLabel(L["Border Size"])
     borderSlider:SetSliderValues(0, 5, 0.1)
     borderSlider:SetValue(styleTable.textBorderSize or 0)
     borderSlider:SetFullWidth(true)
@@ -887,14 +888,14 @@ local function BuildTextBackgroundControls(container, styleTable, refreshCallbac
     end)
     container:AddChild(borderSlider)
 
-    AddColorPicker(container, styleTable, "textBorderColor", "Border Color", {0, 0, 0, 1}, true, refreshCallback, refreshCallback)
+    AddColorPicker(container, styleTable, "textBorderColor", L["Border Color"], {0, 0, 0, 1}, true, refreshCallback, refreshCallback)
 end
 
 local function BuildTextFontControls(container, styleTable, refreshCallback)
     AddFontControls(container, styleTable, "text", {sizeMin = 6, sizeMax = 72}, refreshCallback)
 
     local alignDrop = AceGUI:Create("Dropdown")
-    alignDrop:SetLabel("Alignment")
+    alignDrop:SetLabel(L["Alignment"])
     alignDrop:SetList({LEFT = "Left", CENTER = "Center", RIGHT = "Right"})
     alignDrop:SetValue(styleTable.textAlignment or "LEFT")
     alignDrop:SetFullWidth(true)
@@ -905,7 +906,7 @@ local function BuildTextFontControls(container, styleTable, refreshCallback)
     container:AddChild(alignDrop)
 
     local shadowCb = AceGUI:Create("CheckBox")
-    shadowCb:SetLabel("Text Shadow")
+    shadowCb:SetLabel(L["Text Shadow"])
     shadowCb:SetValue(styleTable.textShadow == true)
     shadowCb:SetFullWidth(true)
     shadowCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -916,10 +917,10 @@ local function BuildTextFontControls(container, styleTable, refreshCallback)
 end
 
 local function BuildTextColorsControls(container, styleTable, refreshCallback)
-    AddColorPicker(container, styleTable, "textFontColor", "Text Color", {1, 1, 1, 1}, true, refreshCallback, refreshCallback)
-    AddColorPicker(container, styleTable, "textCooldownColor", "Cooldown Color", {1, 0.3, 0.3, 1}, true, refreshCallback, refreshCallback)
+    AddColorPicker(container, styleTable, "textFontColor", L["Text Color"], {1, 1, 1, 1}, true, refreshCallback, refreshCallback)
+    AddColorPicker(container, styleTable, "textCooldownColor", L["Cooldown Color"], {1, 0.3, 0.3, 1}, true, refreshCallback, refreshCallback)
 
-    local readyColorPicker = AddColorPicker(container, styleTable, "textReadyColor", "Ready Color", {0.2, 1.0, 0.2, 1}, true, refreshCallback, refreshCallback)
+    local readyColorPicker = AddColorPicker(container, styleTable, "textReadyColor", L["Ready Color"], {0.2, 1.0, 0.2, 1}, true, refreshCallback, refreshCallback)
 
     local readyAdvExpanded, readyAdvBtn = AddAdvancedToggle(readyColorPicker, "textReadyText", tabInfoButtons)
     readyAdvBtn:SetPoint("LEFT", readyColorPicker.colorSwatch, "RIGHT", readyColorPicker.text:GetStringWidth() + 8, 0)
@@ -927,7 +928,7 @@ local function BuildTextColorsControls(container, styleTable, refreshCallback)
     if readyAdvExpanded then
         local readyTextBox = AceGUI:Create("EditBox")
         if readyTextBox.editbox.Instructions then readyTextBox.editbox.Instructions:Hide() end
-        readyTextBox:SetLabel("Ready Text")
+        readyTextBox:SetLabel(L["Ready Text"])
         readyTextBox:SetText(styleTable.textReadyText or "Ready")
         readyTextBox:SetFullWidth(true)
         readyTextBox:SetCallback("OnEnterPressed", function(widget, event, val)
@@ -937,7 +938,7 @@ local function BuildTextColorsControls(container, styleTable, refreshCallback)
         container:AddChild(readyTextBox)
     end
 
-    AddColorPicker(container, styleTable, "textAuraColor", "Aura Color", {0, 0.925, 1, 1}, true, refreshCallback, refreshCallback)
+    AddColorPicker(container, styleTable, "textAuraColor", L["Aura Color"], {0, 0.925, 1, 1}, true, refreshCallback, refreshCallback)
 end
 
 ------------------------------------------------------------------------

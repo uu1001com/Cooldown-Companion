@@ -4,6 +4,7 @@
 
 local ADDON_NAME, ST = ...
 local CooldownCompanion = ST.Addon
+local L = LibStub("AceLocale-3.0"):GetLocale("CooldownCompanion", true) or {}
 local AceGUI = LibStub("AceGUI-3.0")
 local CS = ST._configState
 
@@ -24,29 +25,29 @@ local tabInfoButtons = CS.tabInfoButtons
 local appearanceTabElements = CS.appearanceTabElements
 
 local TOKEN_HELP_TEXT = table.concat({
-    "|cffffffffAvailable Tokens:|r",
+    L["|cffffffffAvailable Tokens:|r"],
     "",
-    "|cff00ff00{name}|r  Spell/item display name",
-    "|cff00ff00{time}|r  Cooldown time remaining (1:23, 4.5)",
-    "|cff00ff00{charges}|r  Current charges (if spell has charges)",
-    "|cff00ff00{maxcharges}|r  Maximum charges (if spell has charges)",
-    "|cff00ff00{stacks}|r  Aura stacks or item count",
-    "|cff00ff00{aura}|r  Aura duration remaining",
-    "|cff00ff00{keybind}|r  Keybind text",
-    "|cff00ff00{status}|r  Shows ready, cooldown, or aura automatically",
-    "|cff00ff00{icon}|r  Inline spell icon texture",
-    "|cff00ff00{missingcharges}|r  |cff888888(conditional only)|r Recharging with charges left",
-    "|cff00ff00{zerocharges}|r  |cff888888(conditional only)|r All charges spent",
-    "|cff00ff00{pandemic}|r  |cff888888(conditional only)|r Aura in pandemic window",
-    "|cff00ff00{proc}|r  |cff888888(conditional only)|r Spell proc overlay active",
-    "|cff00ff00{available}|r  |cff888888(conditional only)|r Off cooldown / has charges",
-    "|cff00ff00{unusable}|r  |cff888888(conditional only)|r Spell/item not usable",
-    "|cff00ff00{oor}|r  |cff888888(conditional only)|r Target out of range",
+    L["|cff00ff00{name}|r  Spell/item display name"],
+    L["|cff00ff00{time}|r  Cooldown time remaining (1:23, 4.5)"],
+    L["|cff00ff00{charges}|r  Current charges (if spell has charges)"],
+    L["|cff00ff00{maxcharges}|r  Maximum charges (if spell has charges)"],
+    L["|cff00ff00{stacks}|r  Aura stacks or item count"],
+    L["|cff00ff00{aura}|r  Aura duration remaining"],
+    L["|cff00ff00{keybind}|r  Keybind text"],
+    L["|cff00ff00{status}|r  Shows ready, cooldown, or aura automatically"],
+    L["|cff00ff00{icon}|r  Inline spell icon texture"],
+    L["|cff00ff00{missingcharges}|r  |cff888888(conditional only)|r Recharging with charges left"],
+    L["|cff00ff00{zerocharges}|r  |cff888888(conditional only)|r All charges spent"],
+    L["|cff00ff00{pandemic}|r  |cff888888(conditional only)|r Aura in pandemic window"],
+    L["|cff00ff00{proc}|r  |cff888888(conditional only)|r Spell proc overlay active"],
+    L["|cff00ff00{available}|r  |cff888888(conditional only)|r Off cooldown / has charges"],
+    L["|cff00ff00{unusable}|r  |cff888888(conditional only)|r Spell/item not usable"],
+    L["|cff00ff00{oor}|r  |cff888888(conditional only)|r Target out of range"],
     "",
-    "{status} resolves to:",
-    "  Ready (green) when off CD",
-    "  Cooldown time (red) when on CD",
-    "  Aura time (cyan) when aura active",
+    L["{status} resolves to:"],
+    L["  Ready (green) when off CD"],
+    L["  Cooldown time (red) when on CD"],
+    L["  Aura time (cyan) when aura active"],
 }, "\n")
 
 -- Syntax colors for summary (matching FormatEditor.lua)
@@ -85,16 +86,16 @@ local function BuildFormatSummary(formatString)
 
     local parts = {}
     if #tokens > 0 then
-        parts[#parts + 1] = "|c" .. SUM_GRAY .. "Tokens:|r " .. table.concat(tokens, ", ")
+        parts[#parts + 1] = "|c" .. SUM_GRAY .. L["Tokens:|r "] .. table.concat(tokens, ", ")
     end
     if #conds > 0 then
-        parts[#parts + 1] = "|c" .. SUM_GRAY .. "Conditions:|r " .. table.concat(conds, ", ")
+        parts[#parts + 1] = "|c" .. SUM_GRAY .. L["Conditions:|r "] .. table.concat(conds, ", ")
     end
     if #colors > 0 then
-        parts[#parts + 1] = "|c" .. SUM_GRAY .. "Colors:|r " .. table.concat(colors, ", ")
+        parts[#parts + 1] = "|c" .. SUM_GRAY .. L["Colors:|r "] .. table.concat(colors, ", ")
     end
     if #effects > 0 then
-        parts[#parts + 1] = "|c" .. SUM_GRAY .. "Effects:|r " .. table.concat(effects, ", ")
+        parts[#parts + 1] = "|c" .. SUM_GRAY .. L["Effects:|r "] .. table.concat(effects, ", ")
     end
 
     if #parts == 0 then return {} end
@@ -109,7 +110,7 @@ local function BuildTextAppearanceTab(container, group, style)
     -- Text Settings (width, height, spacing)
     -- ================================================================
     local textHeading = AceGUI:Create("Heading")
-    textHeading:SetText("Text Settings")
+    textHeading:SetText(L["Text Settings"])
     ColorHeading(textHeading)
     textHeading:SetFullWidth(true)
     container:AddChild(textHeading)
@@ -122,7 +123,7 @@ local function BuildTextAppearanceTab(container, group, style)
 
     if not textSettingsCollapsed then
     local widthSlider = AceGUI:Create("Slider")
-    widthSlider:SetLabel("Text Width")
+    widthSlider:SetLabel(L["Text Width"])
     widthSlider:SetSliderValues(50, 600, 1)
     widthSlider:SetValue(style.textWidth or 200)
     widthSlider:SetFullWidth(true)
@@ -133,7 +134,7 @@ local function BuildTextAppearanceTab(container, group, style)
     container:AddChild(widthSlider)
 
     local heightSlider = AceGUI:Create("Slider")
-    heightSlider:SetLabel("Text Height")
+    heightSlider:SetLabel(L["Text Height"])
     heightSlider:SetSliderValues(10, 100, 1)
     heightSlider:SetValue(style.textHeight or 20)
     heightSlider:SetFullWidth(true)
@@ -145,7 +146,7 @@ local function BuildTextAppearanceTab(container, group, style)
 
     if group.buttons and #group.buttons > 1 then
         local spacingSlider = AceGUI:Create("Slider")
-        spacingSlider:SetLabel("Entry Spacing")
+        spacingSlider:SetLabel(L["Entry Spacing"])
         spacingSlider:SetSliderValues(-10, 100, 0.1)
         spacingSlider:SetValue(style.buttonSpacing or ST.BUTTON_SPACING)
         spacingSlider:SetFullWidth(true)
@@ -157,7 +158,7 @@ local function BuildTextAppearanceTab(container, group, style)
     end
 
     local decimalCheck = AceGUI:Create("CheckBox")
-    decimalCheck:SetLabel("Show Decimal Point")
+    decimalCheck:SetLabel(L["Show Decimal Point"])
     decimalCheck:SetValue(style.decimalTimers or false)
     decimalCheck:SetFullWidth(true)
     decimalCheck:SetCallback("OnValueChanged", function(widget, event, val)
@@ -167,13 +168,13 @@ local function BuildTextAppearanceTab(container, group, style)
     container:AddChild(decimalCheck)
 
     CreateInfoButton(decimalCheck.frame, decimalCheck.checkbg, "LEFT", "RIGHT", decimalCheck.text:GetStringWidth() + 4, 0, {
-        "Show Decimal Point",
-        {"Shows one decimal place on duration text", 1, 1, 1, true},
-        {"(e.g. \"4.5\" instead of \"5\").", 1, 1, 1, true},
+        L["Show Decimal Point"],
+        {L["Shows one decimal place on duration text"], 1, 1, 1, true},
+        {L["(e.g. \"4.5\" instead of \"5\")."], 1, 1, 1, true},
     }, decimalCheck)
 
     local headerCb = AceGUI:Create("CheckBox")
-    headerCb:SetLabel("Show Group Header")
+    headerCb:SetLabel(L["Show Group Header"])
     headerCb:SetValue(style.showTextGroupHeader == true)
     headerCb:SetFullWidth(true)
     headerCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -185,7 +186,7 @@ local function BuildTextAppearanceTab(container, group, style)
 
     if style.showTextGroupHeader then
         local headerSizeSlider = AceGUI:Create("Slider")
-        headerSizeSlider:SetLabel("Header Font Size")
+        headerSizeSlider:SetLabel(L["Header Font Size"])
         headerSizeSlider:SetSliderValues(6, 72, 1)
         headerSizeSlider:SetValue(style.textHeaderFontSize or 12)
         headerSizeSlider:SetFullWidth(true)
@@ -195,7 +196,7 @@ local function BuildTextAppearanceTab(container, group, style)
         end)
         container:AddChild(headerSizeSlider)
 
-        AddColorPicker(container, style, "textHeaderFontColor", "Header Color", {1, 1, 1, 1}, true, refreshFrame, refreshFrame)
+        AddColorPicker(container, style, "textHeaderFontColor", L["Header Color"], {1, 1, 1, 1}, true, refreshFrame, refreshFrame)
     end
     end -- not textSettingsCollapsed
 
@@ -203,7 +204,7 @@ local function BuildTextAppearanceTab(container, group, style)
     -- Format String
     -- ================================================================
     local fmtHeading = AceGUI:Create("Heading")
-    fmtHeading:SetText("Format String")
+    fmtHeading:SetText(L["Format String"])
     ColorHeading(fmtHeading)
     fmtHeading:SetFullWidth(true)
     container:AddChild(fmtHeading)
@@ -216,21 +217,21 @@ local function BuildTextAppearanceTab(container, group, style)
 
     -- Token reference info button
     local fmtInfo = CreateInfoButton(fmtHeading.frame, fmtCollapseBtn, "LEFT", "RIGHT", 4, 0, {
-        {"Format String", 1, 0.82, 0, true},
+        {L["Format String"], 1, 0.82, 0, true},
         " ",
-        {"Controls what each button displays using", 1, 1, 1, true},
-        {"|cff00ff00{tokens}|r that resolve to live spell/item data.", 1, 1, 1, true},
+        {L["Controls what each button displays using"], 1, 1, 1, true},
+        {L["|cff00ff00{tokens}|r that resolve to live spell/item data."], 1, 1, 1, true},
         " ",
-        {"Use |cffffff00{?token}|r...|cffffff00{/token}|r to show content only", 1, 1, 1, true},
-        {"when a condition is met, or |cffff8844{!token}|r to show", 1, 1, 1, true},
-        {"content when it is not.", 1, 1, 1, true},
+        {L["Use |cffffff00{?token}|r...|cffffff00{/token}|r to show content only"], 1, 1, 1, true},
+        {L["when a condition is met, or |cffff8844{!token}|r to show"], 1, 1, 1, true},
+        {L["content when it is not."], 1, 1, 1, true},
         " ",
-        {"Wrap text in |cff44bbff{color}|r...|cff44bbff{/color}|r tags to", 1, 1, 1, true},
-        {"override its color, or |cffcc44ff{pulse}|r...|cffcc44ff{/pulse}|r", 1, 1, 1, true},
-        {"for a pulsing alpha effect.", 1, 1, 1, true},
+        {L["Wrap text in |cff44bbff{color}|r...|cff44bbff{/color}|r tags to"], 1, 1, 1, true},
+        {L["override its color, or |cffcc44ff{pulse}|r...|cffcc44ff{/pulse}|r"], 1, 1, 1, true},
+        {L["for a pulsing alpha effect."], 1, 1, 1, true},
         " ",
-        {"Click |cffffffffEdit Format|r to open the full editor", 1, 1, 1, true},
-        {"with token lists, insertion buttons, and live preview.", 1, 1, 1, true},
+        {L["Click |cffffffffEdit Format|r to open the full editor"], 1, 1, 1, true},
+        {L["with token lists, insertion buttons, and live preview."], 1, 1, 1, true},
     }, tabInfoButtons)
     fmtHeading.right:ClearAllPoints()
     fmtHeading.right:SetPoint("RIGHT", fmtHeading.frame, "RIGHT", -3, 0)
@@ -271,7 +272,7 @@ local function BuildTextAppearanceTab(container, group, style)
     container:AddChild(btnSpacer)
 
     local editBtn = AceGUI:Create("Button")
-    editBtn:SetText("Edit Format")
+    editBtn:SetText(L["Edit Format"])
     editBtn:SetFullWidth(true)
     editBtn:SetCallback("OnClick", function()
         OpenFormatEditor(style, CS.selectedGroup)
@@ -283,7 +284,7 @@ local function BuildTextAppearanceTab(container, group, style)
     -- Font
     -- ================================================================
     local fontHeading = AceGUI:Create("Heading")
-    fontHeading:SetText("Font")
+    fontHeading:SetText(L["Font"])
     ColorHeading(fontHeading)
     fontHeading:SetFullWidth(true)
     container:AddChild(fontHeading)
@@ -298,7 +299,7 @@ local function BuildTextAppearanceTab(container, group, style)
 
     if not fontCollapsed then
     local fontDrop = AceGUI:Create("Dropdown")
-    fontDrop:SetLabel("Font")
+    fontDrop:SetLabel(L["Font"])
     CS.SetupFontDropdown(fontDrop)
     fontDrop:SetValue(style.textFont or "Friz Quadrata TT")
     fontDrop:SetFullWidth(true)
@@ -309,7 +310,7 @@ local function BuildTextAppearanceTab(container, group, style)
     container:AddChild(fontDrop)
 
     local fontSizeSlider = AceGUI:Create("Slider")
-    fontSizeSlider:SetLabel("Font Size")
+    fontSizeSlider:SetLabel(L["Font Size"])
     fontSizeSlider:SetSliderValues(6, 72, 1)
     fontSizeSlider:SetValue(style.textFontSize or 12)
     fontSizeSlider:SetFullWidth(true)
@@ -320,7 +321,7 @@ local function BuildTextAppearanceTab(container, group, style)
     container:AddChild(fontSizeSlider)
 
     local outlineDrop = AceGUI:Create("Dropdown")
-    outlineDrop:SetLabel("Font Outline")
+    outlineDrop:SetLabel(L["Font Outline"])
     outlineDrop:SetList(CS.outlineOptions)
     outlineDrop:SetValue(style.textFontOutline or "OUTLINE")
     outlineDrop:SetFullWidth(true)
@@ -331,7 +332,7 @@ local function BuildTextAppearanceTab(container, group, style)
     container:AddChild(outlineDrop)
 
     local alignDrop = AceGUI:Create("Dropdown")
-    alignDrop:SetLabel("Alignment")
+    alignDrop:SetLabel(L["Alignment"])
     alignDrop:SetList({LEFT = "Left", CENTER = "Center", RIGHT = "Right"})
     alignDrop:SetValue(style.textAlignment or "LEFT")
     alignDrop:SetFullWidth(true)
@@ -342,7 +343,7 @@ local function BuildTextAppearanceTab(container, group, style)
     container:AddChild(alignDrop)
 
     local shadowCb = AceGUI:Create("CheckBox")
-    shadowCb:SetLabel("Text Shadow")
+    shadowCb:SetLabel(L["Text Shadow"])
     shadowCb:SetValue(style.textShadow == true)
     shadowCb:SetFullWidth(true)
     shadowCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -356,7 +357,7 @@ local function BuildTextAppearanceTab(container, group, style)
     -- Colors
     -- ================================================================
     local colorsHeading = AceGUI:Create("Heading")
-    colorsHeading:SetText("Colors")
+    colorsHeading:SetText(L["Colors"])
     ColorHeading(colorsHeading)
     colorsHeading:SetFullWidth(true)
     container:AddChild(colorsHeading)
@@ -379,7 +380,7 @@ local function BuildTextAppearanceTab(container, group, style)
     -- Background & Border
     -- ================================================================
     local bgHeading = AceGUI:Create("Heading")
-    bgHeading:SetText("Background & Border")
+    bgHeading:SetText(L["Background & Border"])
     ColorHeading(bgHeading)
     bgHeading:SetFullWidth(true)
     container:AddChild(bgHeading)
@@ -393,10 +394,10 @@ local function BuildTextAppearanceTab(container, group, style)
     CreatePromoteButton(bgHeading, "textBackground", CS.selectedButton and group.buttons[CS.selectedButton], style)
 
     if not bgCollapsed then
-    AddColorPicker(container, style, "textBgColor", "Background Color", {0, 0, 0, 0}, true, refreshStyle, refreshStyle)
+    AddColorPicker(container, style, "textBgColor", L["Background Color"], {0, 0, 0, 0}, true, refreshStyle, refreshStyle)
 
     local borderSlider = AceGUI:Create("Slider")
-    borderSlider:SetLabel("Border Size")
+    borderSlider:SetLabel(L["Border Size"])
     borderSlider:SetSliderValues(0, 5, 0.1)
     borderSlider:SetValue(style.textBorderSize or 0)
     borderSlider:SetFullWidth(true)
@@ -406,7 +407,7 @@ local function BuildTextAppearanceTab(container, group, style)
     end)
     container:AddChild(borderSlider)
 
-    AddColorPicker(container, style, "textBorderColor", "Border Color", {0, 0, 0, 1}, true, refreshStyle, refreshStyle)
+    AddColorPicker(container, style, "textBorderColor", L["Border Color"], {0, 0, 0, 1}, true, refreshStyle, refreshStyle)
 
     end -- not bgCollapsed
 

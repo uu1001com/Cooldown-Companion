@@ -6,7 +6,7 @@
 local ADDON_NAME, ST = ...
 local CooldownCompanion = ST.Addon
 local CS = ST._configState
-
+local L = LibStub("AceLocale-3.0"):GetLocale("CooldownCompanion", true) or {}
 local AceGUI = LibStub("AceGUI-3.0")
 local AceConfig = LibStub("AceConfig-3.0")
 local AceConfigDialog = LibStub("AceConfigDialog-3.0")
@@ -39,25 +39,25 @@ local GetClassColoredText = ST._GetClassColoredText
 local function GetLayoutOrderColumnTitle()
     local specIdx = C_SpecializationInfo.GetSpecialization()
     if not specIdx then
-        return "Layout & Order"
+        return L["Layout & Order"]
     end
     local _, specName = C_SpecializationInfo.GetSpecializationInfo(specIdx)
     if not specName or specName == "" then
-        return "Layout & Order"
+        return L["Layout & Order"]
     end
-    return "Layout & Order: " .. GetClassColoredText(specName)
+    return L["Layout & Order: "] .. GetClassColoredText(specName)
 end
 
 local function GetCustomAuraBarsColumnTitle()
     local specIdx = C_SpecializationInfo.GetSpecialization()
     if not specIdx then
-        return "Custom Aura Bars"
+        return L["Custom Aura Bars"]
     end
     local _, specName = C_SpecializationInfo.GetSpecializationInfo(specIdx)
     if not specName or specName == "" then
-        return "Custom Aura Bars"
+        return L["Custom Aura Bars"]
     end
-    return "Custom Aura Bars: " .. GetClassColoredText(specName)
+    return L["Custom Aura Bars: "] .. GetClassColoredText(specName)
 end
 
 -- Shared reset for profile change/copy/reset callbacks
@@ -246,7 +246,7 @@ local function CreateConfigPanel()
     local modeStatusRow
     local modeToggleButton
     local modeValueText
-    local modeToggleTooltipText = "Switch settings mode"
+    local modeToggleTooltipText = L["Switch settings mode"]
 
     local function RGBToHex(r, g, b)
         local function clamp(v)
@@ -296,18 +296,18 @@ local function CreateConfigPanel()
         local isBars = CS.resourceBarPanelActive == true
         local modeLabel, modeR, modeG, modeB
         if isBars then
-            modeLabel = "Bars & Frames"
+            modeLabel = L["Bars & Frames"]
             modeR, modeG, modeB = MODE_VIEW_BARS_COLOR[1], MODE_VIEW_BARS_COLOR[2], MODE_VIEW_BARS_COLOR[3]
-            modeToggleTooltipText = "Switch to Buttons settings"
+            modeToggleTooltipText = L["Switch to Buttons settings"]
         else
-            modeLabel = "Buttons"
+            modeLabel = L["Buttons"]
             modeR, modeG, modeB = MODE_VIEW_BUTTONS_COLOR[1], MODE_VIEW_BUTTONS_COLOR[2], MODE_VIEW_BUTTONS_COLOR[3]
-            modeToggleTooltipText = "Switch to Bars & Frames settings"
+            modeToggleTooltipText = L["Switch to Bars & Frames settings"]
         end
 
         local prefixHex = RGBToHex(prefixR, prefixG, prefixB)
         local modeHex = RGBToHex(modeR, modeG, modeB)
-        modeToggleButton:SetText("|cff" .. prefixHex .. "Currently Viewing:|r |cff" .. modeHex .. modeLabel .. "|r")
+        modeToggleButton:SetText("|cff" .. prefixHex .. L["Currently Viewing:|r |cff"] .. modeHex .. modeLabel .. "|r")
 
         UpdateModeRowLayout()
     end
@@ -346,8 +346,8 @@ local function CreateConfigPanel()
     end)
     cdmBtn:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-        GameTooltip:AddLine("Cooldown Manager")
-        GameTooltip:AddLine("Open the Blizzard Cooldown Manager settings panel", 1, 1, 1, true)
+        GameTooltip:AddLine(L["Cooldown Manager"])
+        GameTooltip:AddLine(L["Open the Blizzard Cooldown Manager settings panel"], 1, 1, 1, true)
         GameTooltip:Show()
     end)
     cdmBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -384,8 +384,8 @@ local function CreateConfigPanel()
     end)
     cdmDisplayBtn:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-        GameTooltip:AddLine("Toggle CDM Display")
-        GameTooltip:AddLine("This only toggles the visibility of the Cooldown Manager on your screen. Aura tracking will continue to work regardless.", 1, 1, 1, true)
+        GameTooltip:AddLine(L["Toggle CDM Display"])
+        GameTooltip:AddLine(L["This only toggles the visibility of the Cooldown Manager on your screen. Aura tracking will continue to work regardless."], 1, 1, 1, true)
         GameTooltip:Show()
     end)
     cdmDisplayBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -409,7 +409,7 @@ local function CreateConfigPanel()
         end
         UIDropDownMenu_Initialize(CS.gearDropdownFrame, function(self, level)
             local info = UIDropDownMenu_CreateInfo()
-            info.text = "  Hide CDC Tooltips"
+            info.text = L["  Hide CDC Tooltips"]
             info.checked = function() return CooldownCompanion.db.profile.hideInfoButtons end
             info.isNotRadio = true
             info.keepShownOnClick = true
@@ -429,7 +429,7 @@ local function CreateConfigPanel()
             UIDropDownMenu_AddButton(info, level)
 
             local info2 = UIDropDownMenu_CreateInfo()
-            info2.text = "  Close on ESC"
+            info2.text = L["  Close on ESC"]
             info2.checked = function() return CooldownCompanion.db.profile.escClosesConfig end
             info2.isNotRadio = true
             info2.keepShownOnClick = true
@@ -439,7 +439,7 @@ local function CreateConfigPanel()
             UIDropDownMenu_AddButton(info2, level)
 
             local info3 = UIDropDownMenu_CreateInfo()
-            info3.text = "  Generate Bug Report"
+            info3.text = L["  Generate Bug Report"]
             info3.notCheckable = true
             info3.func = function()
                 CloseDropDownMenus()
@@ -629,7 +629,7 @@ local function CreateConfigPanel()
     SyncModeToggleWithProfileBar()
 
     modeToggleButton = AceGUI:Create("Button")
-    modeToggleButton:SetText("Currently Viewing: Buttons")
+    modeToggleButton:SetText(L["Currently Viewing: Buttons"])
     modeToggleButton:SetWidth(MODE_MIN_BUTTON_WIDTH)
     modeToggleButton:SetHeight(22)
     modeToggleButton:SetCallback("OnClick", function()
@@ -648,7 +648,7 @@ local function CreateConfigPanel()
 
     modeToggleButton.frame:HookScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_TOP")
-        GameTooltip:AddLine("Switch Settings Mode")
+        GameTooltip:AddLine(L["Switch Settings Mode"])
         GameTooltip:AddLine(modeToggleTooltipText, 1, 1, 1, true)
         GameTooltip:Show()
     end)
@@ -668,7 +668,7 @@ local function CreateConfigPanel()
 
     -- Column 1: Groups (AceGUI InlineGroup)
     local col1 = AceGUI:Create("InlineGroup")
-    col1:SetTitle("Groups")
+    col1:SetTitle(L["Groups"])
     col1:SetLayout("None")
     col1.frame:SetParent(colParent)
     col1.frame:Show()
@@ -684,33 +684,33 @@ local function CreateConfigPanel()
     groupInfoBtn:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         if CS.resourceBarPanelActive then
-            GameTooltip:AddLine("Bars & Frames")
-            GameTooltip:AddLine("Use the tabs to switch between Resources, Cast Bar, and Unit Frames.", 1, 1, 1)
+            GameTooltip:AddLine(L["Bars & Frames"])
+            GameTooltip:AddLine(L["Use the tabs to switch between Resources, Cast Bar, and Unit Frames."], 1, 1, 1)
             GameTooltip:AddLine(" ")
-            GameTooltip:AddLine("Anchoring", 1, 0.82, 0)
-            GameTooltip:AddLine("Bars and frames auto-anchor to the first eligible icon panel in your group list, from top to bottom.", 1, 1, 1, true)
+            GameTooltip:AddLine(L["Anchoring"], 1, 0.82, 0)
+            GameTooltip:AddLine(L["Bars and frames auto-anchor to the first eligible icon panel in your group list, from top to bottom."], 1, 1, 1, true)
             GameTooltip:AddLine(" ")
-            GameTooltip:AddLine("Character groups are eligible by default. Global groups are excluded by default.", 1, 1, 1, true)
+            GameTooltip:AddLine(L["Character groups are eligible by default. Global groups are excluded by default."], 1, 1, 1, true)
             GameTooltip:AddLine(" ")
-            GameTooltip:AddLine("Reorder groups to control which panel is chosen. Right-click a group to include or exclude it from auto-anchoring.", 1, 1, 1, true)
+            GameTooltip:AddLine(L["Reorder groups to control which panel is chosen. Right-click a group to include or exclude it from auto-anchoring."], 1, 1, 1, true)
         else
-            GameTooltip:AddLine("Groups")
-            GameTooltip:AddLine("A group contains one or more panels.", 1, 1, 1)
-            GameTooltip:AddLine("Folders are optional organizers for multiple groups.", 1, 1, 1)
+            GameTooltip:AddLine(L["Groups"])
+            GameTooltip:AddLine(L["A group contains one or more panels."], 1, 1, 1)
+            GameTooltip:AddLine(L["Folders are optional organizers for multiple groups."], 1, 1, 1)
             GameTooltip:AddLine(" ")
-            GameTooltip:AddLine("Right-click for options.", 1, 1, 1)
-            GameTooltip:AddLine("Hold left-click and drag to reorder.", 1, 1, 1)
+            GameTooltip:AddLine(L["Right-click for options."], 1, 1, 1)
+            GameTooltip:AddLine(L["Hold left-click and drag to reorder."], 1, 1, 1)
             GameTooltip:AddLine(" ")
-            GameTooltip:AddLine("Group Rows", 1, 0.82, 0)
-            GameTooltip:AddLine("Left-click to select/deselect.", 1, 1, 1, true)
-            GameTooltip:AddLine("Ctrl+Left-click to multi-select.", 1, 1, 1, true)
-            GameTooltip:AddLine("Middle-click to toggle lock/unlock.", 1, 1, 1, true)
-            GameTooltip:AddLine("Shift+Left-click to set spec filter.", 1, 1, 1, true)
+            GameTooltip:AddLine(L["Group Rows"], 1, 0.82, 0)
+            GameTooltip:AddLine(L["Left-click to select/deselect."], 1, 1, 1, true)
+            GameTooltip:AddLine(L["Ctrl+Left-click to multi-select."], 1, 1, 1, true)
+            GameTooltip:AddLine(L["Middle-click to toggle lock/unlock."], 1, 1, 1, true)
+            GameTooltip:AddLine(L["Shift+Left-click to set spec filter."], 1, 1, 1, true)
             GameTooltip:AddLine(" ")
-            GameTooltip:AddLine("Folders", 1, 0.82, 0)
-            GameTooltip:AddLine("Left-click to expand/collapse.", 1, 1, 1)
-            GameTooltip:AddLine("Middle-click to lock/unlock all children.", 1, 1, 1, true)
-            GameTooltip:AddLine("Shift+Left-click to set folder-wide filters.", 1, 1, 1, true)
+            GameTooltip:AddLine(L["Folders"], 1, 0.82, 0)
+            GameTooltip:AddLine(L["Left-click to expand/collapse."], 1, 1, 1)
+            GameTooltip:AddLine(L["Middle-click to lock/unlock all children."], 1, 1, 1, true)
+            GameTooltip:AddLine(L["Shift+Left-click to set folder-wide filters."], 1, 1, 1, true)
         end
         GameTooltip:Show()
     end)
@@ -720,7 +720,7 @@ local function CreateConfigPanel()
 
     -- Column 2: Panels (AceGUI InlineGroup)
     local col2 = AceGUI:Create("InlineGroup")
-    col2:SetTitle("Panels")
+    col2:SetTitle(L["Panels"])
     col2:SetLayout("None")
     col2.frame:SetParent(colParent)
     col2.frame:Show()
@@ -735,23 +735,23 @@ local function CreateConfigPanel()
     infoIcon:SetAtlas("QuestRepeatableTurnin")
     infoBtn:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("Panels")
-        GameTooltip:AddLine("Panels hold your buttons and added entries.", 1, 1, 1)
+        GameTooltip:AddLine(L["Panels"])
+        GameTooltip:AddLine(L["Panels hold your buttons and added entries."], 1, 1, 1)
         GameTooltip:AddLine(" ")
-        GameTooltip:AddLine("Left-click to select/deselect.", 1, 1, 1)
-        GameTooltip:AddLine("Right-click for options.", 1, 1, 1)
-        GameTooltip:AddLine("Hold left-click and drag to reorder.", 1, 1, 1)
+        GameTooltip:AddLine(L["Left-click to select/deselect."], 1, 1, 1)
+        GameTooltip:AddLine(L["Right-click for options."], 1, 1, 1)
+        GameTooltip:AddLine(L["Hold left-click and drag to reorder."], 1, 1, 1)
         GameTooltip:AddLine(" ")
-        GameTooltip:AddLine("Panel Headers", 1, 0.82, 0)
-        GameTooltip:AddLine("Double-click to collapse/expand.", 1, 1, 1, true)
-        GameTooltip:AddLine("Ctrl+Left-click to multi-select.", 1, 1, 1, true)
-        GameTooltip:AddLine("Middle-click to toggle anchor lock.", 1, 1, 1, true)
+        GameTooltip:AddLine(L["Panel Headers"], 1, 0.82, 0)
+        GameTooltip:AddLine(L["Double-click to collapse/expand."], 1, 1, 1, true)
+        GameTooltip:AddLine(L["Ctrl+Left-click to multi-select."], 1, 1, 1, true)
+        GameTooltip:AddLine(L["Middle-click to toggle anchor lock."], 1, 1, 1, true)
         GameTooltip:AddLine(" ")
-        GameTooltip:AddLine("Buttons", 1, 0.82, 0)
-        GameTooltip:AddLine("Ctrl+Left-click to multi-select.", 1, 1, 1, true)
-        GameTooltip:AddLine("Middle-click to move to another panel.", 1, 1, 1, true)
+        GameTooltip:AddLine(L["Buttons"], 1, 0.82, 0)
+        GameTooltip:AddLine(L["Ctrl+Left-click to multi-select."], 1, 1, 1, true)
+        GameTooltip:AddLine(L["Middle-click to move to another panel."], 1, 1, 1, true)
         GameTooltip:AddLine(" ")
-        GameTooltip:AddLine("Drag spells/items from your spellbook or inventory onto a panel to add.", 1, 1, 1, true)
+        GameTooltip:AddLine(L["Drag spells/items from your spellbook or inventory onto a panel to add."], 1, 1, 1, true)
         GameTooltip:Show()
     end)
     infoBtn:SetScript("OnLeave", function()
@@ -761,7 +761,7 @@ local function CreateConfigPanel()
 
     -- Column 3: Button Settings
     local col3 = AceGUI:Create("InlineGroup")
-    col3:SetTitle("Button Settings")
+    col3:SetTitle(L["Button Settings"])
     col3:SetLayout("None")
     col3.frame:SetParent(colParent)
     col3.frame:Show()
@@ -777,25 +777,25 @@ local function CreateConfigPanel()
     bsInfoBtn:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         if CS.resourceBarPanelActive then
-            GameTooltip:AddLine("Custom Aura Bars")
-            GameTooltip:AddLine("Track any buff or debuff as a resource-style bar.", 1, 1, 1)
+            GameTooltip:AddLine(L["Custom Aura Bars"])
+            GameTooltip:AddLine(L["Track any buff or debuff as a resource-style bar."], 1, 1, 1)
             GameTooltip:AddLine(" ")
-            GameTooltip:AddLine("Each slot is configured per-spec and supports autocomplete by name or spell ID.", 1, 1, 1)
+            GameTooltip:AddLine(L["Each slot is configured per-spec and supports autocomplete by name or spell ID."], 1, 1, 1)
             GameTooltip:AddLine(" ")
-            GameTooltip:AddLine("Tracking Modes", 1, 0.82, 0)
-            GameTooltip:AddLine("Stack Count: fills the bar based on current stacks (e.g. 3/5 = 60%).", 1, 1, 1)
-            GameTooltip:AddLine("Active: shows a full bar that drains as the aura expires.", 1, 1, 1)
+            GameTooltip:AddLine(L["Tracking Modes"], 1, 0.82, 0)
+            GameTooltip:AddLine(L["Stack Count: fills the bar based on current stacks (e.g. 3/5 = 60%)."], 1, 1, 1)
+            GameTooltip:AddLine(L["Active: shows a full bar that drains as the aura expires."], 1, 1, 1)
             GameTooltip:AddLine(" ")
-            GameTooltip:AddLine("Both modes support optional duration and stack text overlays.", 1, 1, 1)
+            GameTooltip:AddLine(L["Both modes support optional duration and stack text overlays."], 1, 1, 1)
         elseif CS.autoAddFlowActive then
-            GameTooltip:AddLine("Auto Add")
-            GameTooltip:AddLine("Guided import flow for Action Bars, Spellbook, and CDM Auras.", 1, 1, 1, true)
+            GameTooltip:AddLine(L["Auto Add"])
+            GameTooltip:AddLine(L["Guided import flow for Action Bars, Spellbook, and CDM Auras."], 1, 1, 1, true)
         else
-            GameTooltip:AddLine("Button / Panel Settings")
-            GameTooltip:AddLine("Select a button to configure that button.", 1, 1, 1)
-            GameTooltip:AddLine("Select a panel header to configure that panel.", 1, 1, 1)
+            GameTooltip:AddLine(L["Button / Panel Settings"])
+            GameTooltip:AddLine(L["Select a button to configure that button."], 1, 1, 1)
+            GameTooltip:AddLine(L["Select a panel header to configure that panel."], 1, 1, 1)
             GameTooltip:AddLine(" ")
-            GameTooltip:AddLine("Panel settings apply to all buttons in that panel.", 1, 1, 1)
+            GameTooltip:AddLine(L["Panel settings apply to all buttons in that panel."], 1, 1, 1)
         end
         GameTooltip:Show()
     end)
@@ -805,7 +805,7 @@ local function CreateConfigPanel()
 
     -- Column 4: Group Settings (AceGUI InlineGroup)
     local col4 = AceGUI:Create("InlineGroup")
-    col4:SetTitle("Group Settings")
+    col4:SetTitle(L["Group Settings"])
     col4:SetLayout("None")
     col4.frame:SetParent(colParent)
     col4.frame:Show()
@@ -821,21 +821,21 @@ local function CreateConfigPanel()
     settingsInfoBtn:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         if CS.resourceBarPanelActive then
-            GameTooltip:AddLine("Layout & Order")
-            GameTooltip:AddLine("Control the stacking position and order of all active bars.", 1, 1, 1)
+            GameTooltip:AddLine(L["Layout & Order"])
+            GameTooltip:AddLine(L["Control the stacking position and order of all active bars."], 1, 1, 1)
             GameTooltip:AddLine(" ")
-            GameTooltip:AddLine("Resource bars, custom aura bars, and cast bars are ordered together.", 1, 1, 1)
+            GameTooltip:AddLine(L["Resource bars, custom aura bars, and cast bars are ordered together."], 1, 1, 1)
             GameTooltip:AddLine(" ")
-            GameTooltip:AddLine("Bars can be placed above or below the icon row, and reordered within each side.", 1, 1, 1)
+            GameTooltip:AddLine(L["Bars can be placed above or below the icon row, and reordered within each side."], 1, 1, 1)
             GameTooltip:AddLine(" ")
-            GameTooltip:AddLine("Layout is saved per specialization and swaps automatically.", 1, 1, 1)
+            GameTooltip:AddLine(L["Layout is saved per specialization and swaps automatically."], 1, 1, 1)
         else
-            GameTooltip:AddLine("Panel / Group Settings")
-            GameTooltip:AddLine("Select a button to configure its panel.", 1, 1, 1)
-            GameTooltip:AddLine("Select a group or panel header to configure the group.", 1, 1, 1)
+            GameTooltip:AddLine(L["Panel / Group Settings"])
+            GameTooltip:AddLine(L["Select a button to configure its panel."], 1, 1, 1)
+            GameTooltip:AddLine(L["Select a group or panel header to configure the group."], 1, 1, 1)
             GameTooltip:AddLine(" ")
-            GameTooltip:AddLine("Panel settings apply to all buttons in that panel.", 1, 1, 1)
-            GameTooltip:AddLine("Group settings apply to all panels in the group.", 1, 1, 1)
+            GameTooltip:AddLine(L["Panel settings apply to all buttons in that panel."], 1, 1, 1)
+            GameTooltip:AddLine(L["Group settings apply to all panels in the group."], 1, 1, 1)
         end
         GameTooltip:Show()
     end)
@@ -892,9 +892,9 @@ local function CreateConfigPanel()
     -- Button Settings TabGroup (Settings + Sound Alerts + Overrides tabs)
     local bsTabGroup = AceGUI:Create("TabGroup")
     bsTabGroup:SetTabs({
-        { value = "settings",  text = "Settings" },
-        { value = "soundalerts", text = "Sound Alerts" },
-        { value = "overrides", text = "Overrides" },
+        { value = "settings",  text = L["Settings"] },
+        { value = "soundalerts", text = L["Sound Alerts"] },
+        { value = "overrides", text = L["Overrides"] },
     })
     bsTabGroup:SetLayout("Fill")
 
@@ -968,7 +968,7 @@ local function CreateConfigPanel()
     -- Placeholder label shown when no button is selected
     local bsPlaceholderLabel = col3.content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     bsPlaceholderLabel:SetPoint("TOPLEFT", col3.content, "TOPLEFT", -1, 0)
-    bsPlaceholderLabel:SetText("Select a spell or item to configure")
+    bsPlaceholderLabel:SetText(L["Select a spell or item to configure"])
     bsPlaceholderLabel:Show()
     col3.bsPlaceholder = bsPlaceholderLabel
 
@@ -1267,41 +1267,41 @@ function CooldownCompanion:RefreshConfigPanel()
     end
 
     if CS.resourceBarPanelActive then
-        CS.configFrame.col1:SetTitle("Bars & Frames")
+        CS.configFrame.col1:SetTitle(L["Bars & Frames"])
         CS.configFrame.col3:SetTitle(GetCustomAuraBarsColumnTitle())
         CS.configFrame.col4:SetTitle(GetLayoutOrderColumnTitle())
     elseif CS.browseMode then
-        CS.configFrame.col1:SetTitle("Browse Characters")
-        CS.configFrame.col2:SetTitle("Preview")
+        CS.configFrame.col1:SetTitle(L["Browse Characters"])
+        CS.configFrame.col2:SetTitle(L["Preview"])
         if CS.selectedContainer and CS.selectedGroup and not anyButtonSelected then
-            CS.configFrame.col3:SetTitle("Panel Settings")
+            CS.configFrame.col3:SetTitle(L["Panel Settings"])
         else
-            CS.configFrame.col3:SetTitle("Button Settings")
+            CS.configFrame.col3:SetTitle(L["Button Settings"])
         end
         if CS.selectedContainer and CS.selectedGroup and anyButtonSelected then
-            CS.configFrame.col4:SetTitle("Panel Settings")
+            CS.configFrame.col4:SetTitle(L["Panel Settings"])
         else
-            CS.configFrame.col4:SetTitle("Group Settings")
+            CS.configFrame.col4:SetTitle(L["Group Settings"])
         end
     else
-        CS.configFrame.col1:SetTitle("Groups")
-        CS.configFrame.col2:SetTitle("Panels")
+        CS.configFrame.col1:SetTitle(L["Groups"])
+        CS.configFrame.col2:SetTitle(L["Panels"])
         local panelMultiCount = 0
         for _ in pairs(CS.selectedPanels) do panelMultiCount = panelMultiCount + 1 end
         if panelMultiCount >= 2 then
-            CS.configFrame.col3:SetTitle("Panel Settings")
+            CS.configFrame.col3:SetTitle(L["Panel Settings"])
         elseif CS.autoAddFlowActive then
-            CS.configFrame.col3:SetTitle("Auto Add")
+            CS.configFrame.col3:SetTitle(L["Auto Add"])
         elseif CS.selectedContainer and CS.selectedGroup and not anyButtonSelected then
-            CS.configFrame.col3:SetTitle("Panel Settings")
+            CS.configFrame.col3:SetTitle(L["Panel Settings"])
         else
-            CS.configFrame.col3:SetTitle("Button Settings")
+            CS.configFrame.col3:SetTitle(L["Button Settings"])
         end
         -- Col 4: "Panel Settings" when panel + button selected in container, "Group Settings" otherwise
         if CS.selectedContainer and CS.selectedGroup and anyButtonSelected then
-            CS.configFrame.col4:SetTitle("Panel Settings")
+            CS.configFrame.col4:SetTitle(L["Panel Settings"])
         else
-            CS.configFrame.col4:SetTitle("Group Settings")
+            CS.configFrame.col4:SetTitle(L["Group Settings"])
         end
     end
     RefreshColumn1()
@@ -1317,18 +1317,18 @@ function CooldownCompanion:RefreshConfigPanel()
             CS.configFrame.col3:SetTitle(GetCustomAuraBarsColumnTitle())
         elseif CS.browseMode then
             if CS.selectedContainer and CS.selectedGroup and not anyButtonSelected then
-                CS.configFrame.col3:SetTitle("Panel Settings")
+                CS.configFrame.col3:SetTitle(L["Panel Settings"])
             else
-                CS.configFrame.col3:SetTitle("Button Settings")
+                CS.configFrame.col3:SetTitle(L["Button Settings"])
             end
         elseif pmcPost >= 2 then
-            CS.configFrame.col3:SetTitle("Panel Settings")
+            CS.configFrame.col3:SetTitle(L["Panel Settings"])
         elseif CS.autoAddFlowActive then
-            CS.configFrame.col3:SetTitle("Auto Add")
+            CS.configFrame.col3:SetTitle(L["Auto Add"])
         elseif CS.selectedContainer and CS.selectedGroup and not anyButtonSelected then
-            CS.configFrame.col3:SetTitle("Panel Settings")
+            CS.configFrame.col3:SetTitle(L["Panel Settings"])
         else
-            CS.configFrame.col3:SetTitle("Button Settings")
+            CS.configFrame.col3:SetTitle(L["Button Settings"])
         end
     end
 
@@ -1373,7 +1373,7 @@ end
 function CooldownCompanion:ToggleConfig()
     if InCombatLockdown() then
         self._configWasOpen = true
-        self:Print("Config will open after combat ends.")
+        self:Print(L["Config will open after combat ends."])
         return
     end
 
@@ -1416,8 +1416,8 @@ function CooldownCompanion:SetupConfig()
         type = "group",
         args = {
             openConfig = {
-                name = "Open Cooldown Companion",
-                desc = "Click to open the configuration panel",
+                name = L["Open Cooldown Companion"],
+                desc = L["Click to open the configuration panel"],
                 type = "execute",
                 order = 1,
                 func = function()

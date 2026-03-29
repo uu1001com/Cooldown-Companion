@@ -9,6 +9,7 @@
 
 local ADDON_NAME, ST = ...
 local CooldownCompanion = ST.Addon
+local L = LibStub("AceLocale-3.0"):GetLocale("CooldownCompanion", true) or {}
 local AceGUI = LibStub("AceGUI-3.0")
 local CS = ST._configState
 
@@ -82,7 +83,7 @@ local function BuildAuraBarAutocompleteCache()
         Enum.CooldownViewerCategory.TrackedBar,
     }) do
         local catLabel = (cat == Enum.CooldownViewerCategory.TrackedBuff)
-            and "Tracked Buff" or "Tracked Bar"
+            and L["Tracked Buff"] or L["Tracked Bar"]
         local ids = C_CooldownViewer.GetCooldownViewerCategorySet(cat, true)
         if ids then
             for _, cdID in ipairs(ids) do
@@ -121,21 +122,21 @@ local function AddCdmAuraReadinessWarning(container, spellID)
         if viewerFrame then
             local parent = viewerFrame:GetParent()
             local parentName = parent and parent:GetName()
-            hasViewerFrame = parentName == "BuffIconCooldownViewer" or parentName == "BuffBarCooldownViewer"
+            hasViewerFrame = parentName == L["BuffIconCooldownViewer"] or parentName == L["BuffBarCooldownViewer"]
         end
     end
 
     if hasViewerFrame then return end
 
     local statusLabel = AceGUI:Create("Label")
-    statusLabel:SetText("|cffff0000Aura tracking is not ready.|r")
+    statusLabel:SetText(L["|cffff0000Aura tracking is not ready.|r"])
     statusLabel:SetFullWidth(true)
     statusLabel:SetJustifyH("CENTER")
     container:AddChild(statusLabel)
 
     local explainLabel = AceGUI:Create("Label")
     if not cdmEnabled then
-        explainLabel:SetText("|cff888888The Cooldown Manager (CDM) is currently disabled. Enable it in Options > Gameplay > Combat > Cooldown Manager to allow reliable aura tracking in combat.|r")
+        explainLabel:SetText(L["|cff888888The Cooldown Manager (CDM) is currently disabled. Enable it in Options > Gameplay > Combat > Cooldown Manager to allow reliable aura tracking in combat.|r"])
     else
         local canTrack = false
         for _, cat in ipairs({Enum.CooldownViewerCategory.TrackedBuff, Enum.CooldownViewerCategory.TrackedBar}) do
@@ -153,9 +154,9 @@ local function AddCdmAuraReadinessWarning(container, spellID)
         end
 
         if canTrack then
-            explainLabel:SetText("|cff888888This spell has a trackable aura in the Cooldown Manager, but it has not been added as a tracked buff or debuff yet. Add it in the CDM to enable aura tracking.|r")
+            explainLabel:SetText(L["|cff888888This spell has a trackable aura in the Cooldown Manager, but it has not been added as a tracked buff or debuff yet. Add it in the CDM to enable aura tracking.|r"])
         else
-            explainLabel:SetText("|cff888888This spell was not found in the Cooldown Manager's tracked buff or tracked bar categories. Without CDM tracking, aura data may be unreliable during combat.|r")
+            explainLabel:SetText(L["|cff888888This spell was not found in the Cooldown Manager's tracked buff or tracked bar categories. Without CDM tracking, aura data may be unreliable during combat.|r"])
         end
     end
     explainLabel:SetFullWidth(true)
@@ -248,7 +249,7 @@ end
 -- prunes empty tables to keep SavedVariables clean.
 local function WriteSpecOverrideKey(settings, powerType, specID, key, value)
     if not specID then
-        geterrorhandler()("WriteSpecOverrideKey: nil specID for key " .. tostring(key))
+        geterrorhandler()(L["WriteSpecOverrideKey: nil specID for key "] .. tostring(key))
         return
     end
     if value == nil then
@@ -475,7 +476,7 @@ local function AddResourceAuraEntryFields(container, powerType, resourceName, en
 
     if options.specList and options.specOrder and options.onSpecChanged then
         local specDrop = AceGUI:Create("Dropdown")
-        specDrop:SetLabel("Specialization")
+        specDrop:SetLabel(L["Specialization"])
         specDrop:SetList(options.specList, options.specOrder)
         specDrop:SetValue(options.specID)
         specDrop:SetFullWidth(true)
@@ -488,7 +489,7 @@ local function AddResourceAuraEntryFields(container, powerType, resourceName, en
     local spellID = tonumber(entry and entry.auraColorSpellID) or nil
     local spellEdit = AceGUI:Create("EditBox")
     if spellEdit.editbox.Instructions then spellEdit.editbox.Instructions:Hide() end
-    spellEdit:SetLabel(resourceName .. " Aura (Spell ID or Name)")
+    spellEdit:SetLabel(resourceName .. L[" Aura (Spell ID or Name)"])
     spellEdit:SetText(spellID and tostring(spellID) or "")
     spellEdit:SetFullWidth(true)
     spellEdit:DisableButton(true)
@@ -531,7 +532,7 @@ local function AddResourceAuraEntryFields(container, powerType, resourceName, en
     AddCdmAuraReadinessWarning(container, spellID)
 
     local _auraProxy = { auraActiveColor = GetSafeRGBConfig(entry and entry.auraActiveColor, DEFAULT_RESOURCE_AURA_ACTIVE_COLOR) }
-    AddColorPicker(container, _auraProxy, "auraActiveColor", resourceName .. " Aura Active Color", DEFAULT_RESOURCE_AURA_ACTIVE_COLOR, false,
+    AddColorPicker(container, _auraProxy, "auraActiveColor", resourceName .. L[" Aura Active Color"], DEFAULT_RESOURCE_AURA_ACTIVE_COLOR, false,
         function()
             if options.onColorConfirmed then
                 local c = _auraProxy.auraActiveColor
@@ -550,8 +551,8 @@ local function AddResourceAuraEntryFields(container, powerType, resourceName, en
         local trackDrop = AceGUI:Create("Dropdown")
         trackDrop:SetLabel("Tracking Mode")
         trackDrop:SetList({
-            stacks = "Stack Count",
-            active = "Active (On/Off)",
+            stacks = L["Stack Count"],
+            active = L["Active (On/Off)"],
         }, { "stacks", "active" })
         trackDrop:SetValue(trackingMode)
         trackDrop:SetFullWidth(true)
@@ -565,7 +566,7 @@ local function AddResourceAuraEntryFields(container, powerType, resourceName, en
         if trackingMode ~= "active" then
             local auraStackEdit = AceGUI:Create("EditBox")
             if auraStackEdit.editbox.Instructions then auraStackEdit.editbox.Instructions:Hide() end
-            auraStackEdit:SetLabel(resourceName .. " Aura Max Stacks")
+            auraStackEdit:SetLabel(resourceName .. L[" Aura Max Stacks"])
             auraStackEdit:SetText(entry and entry.auraColorMaxStacks and tostring(entry.auraColorMaxStacks) or "")
             auraStackEdit:SetFullWidth(true)
             auraStackEdit:DisableButton(true)
@@ -596,7 +597,7 @@ local function AddResourceAuraEntryFields(container, powerType, resourceName, en
             container:AddChild(auraStackEdit)
 
             local auraStackHint = AceGUI:Create("Label")
-            auraStackHint:SetText("|cff888888Stack mode maps aura stacks to a bar proportion (e.g. 1/2 = half bar). Applies only to segmented/overlay resources.|r")
+            auraStackHint:SetText(L["|cff888888Stack mode maps aura stacks to a bar proportion (e.g. 1/2 = half bar). Applies only to segmented/overlay resources.|r"])
             auraStackHint:SetFullWidth(true)
             container:AddChild(auraStackHint)
         end
@@ -637,7 +638,7 @@ local function AddResourceAuraOverrideControls(container, settings, powerType, r
     local auraAdvKey = "rbAuraOverlay_" .. powerType
 
     local enableAuraOverlayCb = AceGUI:Create("CheckBox")
-    enableAuraOverlayCb:SetLabel("Enable " .. resourceName .. " Aura Overlay")
+    enableAuraOverlayCb:SetLabel(L["Enable "] .. resourceName .. L[" Aura Overlay"])
     enableAuraOverlayCb:SetValue(IsResourceAuraOverlayEnabledConfig(res))
     enableAuraOverlayCb:SetFullWidth(true)
     enableAuraOverlayCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -670,7 +671,7 @@ local function AddResourceAuraOverrideControls(container, settings, powerType, r
     local currentSpecID = GetCurrentConfigSpecID()
     if not currentSpecID then
         local specUnavailLabel = AceGUI:Create("Label")
-        specUnavailLabel:SetText("Specialization data not yet available.")
+        specUnavailLabel:SetText(L["Specialization data not yet available."])
         specUnavailLabel:SetFullWidth(true)
         container:AddChild(specUnavailLabel)
         return
@@ -741,7 +742,7 @@ local function AddResourceAuraOverrideControls(container, settings, powerType, r
         container:AddChild(clearSpacer)
 
         local clearBtn = AceGUI:Create("Button")
-        clearBtn:SetText("Clear Overlay")
+        clearBtn:SetText(L["Clear Overlay"])
         clearBtn:SetFullWidth(true)
         clearBtn:SetCallback("OnClick", function()
             ClearResourceAuraEntryConfig(powerType, res, currentSpecID)
@@ -752,7 +753,7 @@ end
 
 local function BuildResourceAuraOverlaySection(container, settings)
     local auraHeading = AceGUI:Create("Heading")
-    auraHeading:SetText("Resource Aura Overlays")
+    auraHeading:SetText(L["Resource Aura Overlays"])
     ColorHeading(auraHeading)
     auraHeading:SetFullWidth(true)
     container:AddChild(auraHeading)
@@ -766,10 +767,10 @@ local function BuildResourceAuraOverlaySection(container, settings)
     end)
 
     local auraInfoBtn = CreateInfoButton(auraHeading.frame, auraCollapseBtn, "LEFT", "RIGHT", 4, 0, {
-        "Resource Aura Overlays",
-        {"When enabled, a selected aura (by Spell ID) recolors the resource bar while that aura is active.", 1, 1, 1, true},
+        L["Resource Aura Overlays"],
+        {L["When enabled, a selected aura (by Spell ID) recolors the resource bar while that aura is active."], 1, 1, 1, true},
         " ",
-        {"These settings are per-specialization. Switch specs to configure different aura overlays.", 1, 1, 1, true},
+        {L["These settings are per-specialization. Switch specs to configure different aura overlays."], 1, 1, 1, true},
     }, auraHeading)
 
     auraHeading.right:ClearAllPoints()
@@ -784,7 +785,7 @@ local function BuildResourceAuraOverlaySection(container, settings)
                 settings.resources[pt] = {}
             end
             if settings.resources[pt].enabled ~= false then
-                local resourceName = POWER_NAMES[pt] or ("Power " .. pt)
+                local resourceName = POWER_NAMES[pt] or (L["Power "] .. pt)
                 AddResourceAuraOverrideControls(container, settings, pt, resourceName, rbAuraOverlayAdvBtns)
             end
         end
@@ -801,16 +802,16 @@ end
 
 local function GetResourceThicknessFieldConfig(settings)
     if IsResourceBarVerticalConfig(settings) then
-        return "barWidth", "Bar Width", "Custom Resource Bar Widths"
+        return "barWidth", L["Bar Width"], L["Custom Resource Bar Widths"]
     end
-    return "barHeight", "Bar Height", "Custom Resource Bar Heights"
+    return "barHeight", L["Bar Height"], L["Custom Resource Bar Heights"]
 end
 
 local function GetResourceGapFieldConfig(settings)
     if IsResourceBarVerticalConfig(settings) then
-        return "verticalXOffset", "X Offset"
+        return "verticalXOffset", L["X Offset"]
     end
-    return "yOffset", "Y Offset"
+    return "yOffset", L["Y Offset"]
 end
 
 ------------------------------------------------------------------------

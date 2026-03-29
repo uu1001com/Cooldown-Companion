@@ -4,6 +4,7 @@
 
 local ADDON_NAME, ST = ...
 local CooldownCompanion = ST.Addon
+local L = LibStub("AceLocale-3.0"):GetLocale("CooldownCompanion", true) or {}
 local AceGUI = LibStub("AceGUI-3.0")
 local CS = ST._configState
 
@@ -40,7 +41,7 @@ local function BuildBarAppearanceTab(container, group, style)
     -- Bar Settings (length, height, spacing, bar color)
     -- ================================================================
     local barHeading = AceGUI:Create("Heading")
-    barHeading:SetText("Bar Settings")
+    barHeading:SetText(L["Bar Settings"])
     ColorHeading(barHeading)
     barHeading:SetFullWidth(true)
     container:AddChild(barHeading)
@@ -59,7 +60,7 @@ local function BuildBarAppearanceTab(container, group, style)
 
     if not barSettingsCollapsed then
     local lengthSlider = AceGUI:Create("Slider")
-    lengthSlider:SetLabel("Bar Length")
+    lengthSlider:SetLabel(L["Bar Length"])
     lengthSlider:SetSliderValues(10, 500, 0.1)
     lengthSlider:SetValue(style.barLength or 180)
     lengthSlider:SetFullWidth(true)
@@ -70,7 +71,7 @@ local function BuildBarAppearanceTab(container, group, style)
     container:AddChild(lengthSlider)
 
     local heightSlider = AceGUI:Create("Slider")
-    heightSlider:SetLabel("Bar Height")
+    heightSlider:SetLabel(L["Bar Height"])
     heightSlider:SetSliderValues(5, 100, 0.1)
     heightSlider:SetValue(style.barHeight or 20)
     heightSlider:SetFullWidth(true)
@@ -81,7 +82,7 @@ local function BuildBarAppearanceTab(container, group, style)
     container:AddChild(heightSlider)
 
     local borderSlider = AceGUI:Create("Slider")
-    borderSlider:SetLabel("Border Size")
+    borderSlider:SetLabel(L["Border Size"])
     borderSlider:SetSliderValues(0, 5, 0.1)
     borderSlider:SetValue(style.borderSize or ST.DEFAULT_BORDER_SIZE)
     borderSlider:SetFullWidth(true)
@@ -93,7 +94,7 @@ local function BuildBarAppearanceTab(container, group, style)
 
     if group.buttons and #group.buttons > 1 then
         local spacingSlider = AceGUI:Create("Slider")
-        spacingSlider:SetLabel("Bar Spacing")
+        spacingSlider:SetLabel(L["Bar Spacing"])
         spacingSlider:SetSliderValues(-10, 100, 0.1)
         spacingSlider:SetValue(style.buttonSpacing or ST.BUTTON_SPACING)
         spacingSlider:SetFullWidth(true)
@@ -106,7 +107,7 @@ local function BuildBarAppearanceTab(container, group, style)
 
     -- Bar Texture
     local barTexDrop = AceGUI:Create("Dropdown")
-    barTexDrop:SetLabel("Bar Texture")
+    barTexDrop:SetLabel(L["Bar Texture"])
     barTexDrop:SetList(GetBarTextureOptions())
     barTexDrop:SetValue(style.barTexture or "Solid")
     barTexDrop:SetFullWidth(true)
@@ -117,11 +118,11 @@ local function BuildBarAppearanceTab(container, group, style)
     container:AddChild(barTexDrop)
 
     -- Bar Color (basic)
-    AddColorPicker(container, style, "barColor", "Bar Color", {0.2, 0.6, 1.0, 1.0}, true, refreshStyle, refreshStyle)
+    AddColorPicker(container, style, "barColor", L["Bar Color"], {0.2, 0.6, 1.0, 1.0}, true, refreshStyle, refreshStyle)
 
     if barAdvExpanded then
     local updateFreqSlider = AceGUI:Create("Slider")
-    updateFreqSlider:SetLabel("Update Frequency (Hz)")
+    updateFreqSlider:SetLabel(L["Update Frequency (Hz)"])
     updateFreqSlider:SetSliderValues(10, 60, 0.1)
     local curInterval = style.barUpdateInterval or 0.025
     updateFreqSlider:SetValue(math.floor(1 / curInterval + 0.5))
@@ -135,19 +136,19 @@ local function BuildBarAppearanceTab(container, group, style)
     end -- not barSettingsCollapsed
 
     -- Contextual color pickers (no heading/collapse/promote)
-    AddColorPicker(container, style, "barCooldownColor", "Bar Cooldown Color", {0.6, 0.6, 0.6, 1.0}, true, refreshStyle, refreshStyle)
+    AddColorPicker(container, style, "barCooldownColor", L["Bar Cooldown Color"], {0.6, 0.6, 0.6, 1.0}, true, refreshStyle, refreshStyle)
 
-    AddColorPicker(container, style, "barChargeColor", "Bar Recharging Color", {1.0, 0.82, 0.0, 1.0}, true, refreshStyle, refreshStyle)
+    AddColorPicker(container, style, "barChargeColor", L["Bar Recharging Color"], {1.0, 0.82, 0.0, 1.0}, true, refreshStyle, refreshStyle)
 
-    AddColorPicker(container, style, "barBgColor", "Bar Background Color", {0.1, 0.1, 0.1, 0.8}, true, refreshStyle, refreshStyle)
+    AddColorPicker(container, style, "barBgColor", L["Bar Background Color"], {0.1, 0.1, 0.1, 0.8}, true, refreshStyle, refreshStyle)
 
-    AddColorPicker(container, style, "borderColor", "Border Color", {0, 0, 0, 1}, true, refreshStyle, refreshStyle)
+    AddColorPicker(container, style, "borderColor", L["Border Color"], {0, 0, 0, 1}, true, refreshStyle, refreshStyle)
 
     -- ================================================================
     -- Show Icon (standalone checkbox with advanced toggle + promote)
     -- ================================================================
     local showIconCb = AceGUI:Create("CheckBox")
-    showIconCb:SetLabel("Show Icon")
+    showIconCb:SetLabel(L["Show Icon"])
     showIconCb:SetValue(style.showBarIcon ~= false)
     showIconCb:SetFullWidth(true)
     showIconCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -162,7 +163,7 @@ local function BuildBarAppearanceTab(container, group, style)
 
     if iconAdvExpanded and style.showBarIcon ~= false then
         local flipIconCheck = AceGUI:Create("CheckBox")
-        flipIconCheck:SetLabel("Flip Icon Side")
+        flipIconCheck:SetLabel(L["Flip Icon Side"])
         flipIconCheck:SetValue(style.barIconReverse or false)
         flipIconCheck:SetFullWidth(true)
         flipIconCheck:SetCallback("OnValueChanged", function(widget, event, val)
@@ -173,7 +174,7 @@ local function BuildBarAppearanceTab(container, group, style)
         container:AddChild(flipIconCheck)
 
         local iconOffsetSlider = AceGUI:Create("Slider")
-        iconOffsetSlider:SetLabel("Icon Offset")
+        iconOffsetSlider:SetLabel(L["Icon Offset"])
         iconOffsetSlider:SetSliderValues(-5, 50, 0.1)
         iconOffsetSlider:SetValue(style.barIconOffset or 0)
         iconOffsetSlider:SetFullWidth(true)
@@ -184,7 +185,7 @@ local function BuildBarAppearanceTab(container, group, style)
         container:AddChild(iconOffsetSlider)
 
         local customIconSizeCb = AceGUI:Create("CheckBox")
-        customIconSizeCb:SetLabel("Custom Icon Size")
+        customIconSizeCb:SetLabel(L["Custom Icon Size"])
         customIconSizeCb:SetValue(style.barIconSizeOverride or false)
         customIconSizeCb:SetFullWidth(true)
         customIconSizeCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -196,7 +197,7 @@ local function BuildBarAppearanceTab(container, group, style)
 
         if style.barIconSizeOverride then
             local iconSizeSlider = AceGUI:Create("Slider")
-            iconSizeSlider:SetLabel("Icon Size")
+            iconSizeSlider:SetLabel(L["Icon Size"])
             iconSizeSlider:SetSliderValues(5, 100, 0.1)
             iconSizeSlider:SetValue(style.barIconSize or 20)
             iconSizeSlider:SetFullWidth(true)
@@ -210,7 +211,7 @@ local function BuildBarAppearanceTab(container, group, style)
 
     -- Show Name Text toggle
     local showNameCbBasic = AceGUI:Create("CheckBox")
-    showNameCbBasic:SetLabel("Show Name Text")
+    showNameCbBasic:SetLabel(L["Show Name Text"])
     showNameCbBasic:SetValue(style.showBarNameText ~= false)
     showNameCbBasic:SetFullWidth(true)
     showNameCbBasic:SetCallback("OnValueChanged", function(widget, event, val)
@@ -225,7 +226,7 @@ local function BuildBarAppearanceTab(container, group, style)
 
     if nameAdvExpanded and style.showBarNameText ~= false then
         local flipNameCheck = AceGUI:Create("CheckBox")
-        flipNameCheck:SetLabel("Flip Name Text")
+        flipNameCheck:SetLabel(L["Flip Name Text"])
         flipNameCheck:SetValue(style.barNameTextReverse or false)
         flipNameCheck:SetFullWidth(true)
         flipNameCheck:SetCallback("OnValueChanged", function(widget, event, val)
@@ -235,13 +236,13 @@ local function BuildBarAppearanceTab(container, group, style)
         container:AddChild(flipNameCheck)
 
         AddFontControls(container, style, "barName", {sizeMin = 6, sizeMax = 24, size = 10}, refreshStyle)
-        AddColorPicker(container, style, "barNameFontColor", "Font Color", {1, 1, 1, 1}, true, refreshStyle, refreshStyle)
+        AddColorPicker(container, style, "barNameFontColor", L["Font Color"], {1, 1, 1, 1}, true, refreshStyle, refreshStyle)
         AddOffsetSliders(container, style, "barNameTextOffsetX", "barNameTextOffsetY", {range = 50}, refreshStyle)
     end
 
     -- Show Cooldown Text toggle
     local showTimeCbBasic = AceGUI:Create("CheckBox")
-    showTimeCbBasic:SetLabel("Show Cooldown Text")
+    showTimeCbBasic:SetLabel(L["Show Cooldown Text"])
     showTimeCbBasic:SetValue(style.showCooldownText or false)
     showTimeCbBasic:SetFullWidth(true)
     showTimeCbBasic:SetCallback("OnValueChanged", function(widget, event, val)
@@ -256,7 +257,7 @@ local function BuildBarAppearanceTab(container, group, style)
 
     if timeAdvExpanded and style.showCooldownText then
         local flipTimeCheck = AceGUI:Create("CheckBox")
-        flipTimeCheck:SetLabel("Flip Time Text")
+        flipTimeCheck:SetLabel(L["Flip Time Text"])
         flipTimeCheck:SetValue(style.barTimeTextReverse or false)
         flipTimeCheck:SetFullWidth(true)
         flipTimeCheck:SetCallback("OnValueChanged", function(widget, event, val)
@@ -267,18 +268,18 @@ local function BuildBarAppearanceTab(container, group, style)
 
         -- (?) tooltip for Flip Time Text
         CreateInfoButton(flipTimeCheck.frame, flipTimeCheck.checkbg, "LEFT", "RIGHT", flipTimeCheck.text:GetStringWidth() + 4, 0, {
-            "Flip Time Text",
-            {"Applies to all time-based text, including cooldown time, aura time, and ready text.", 1, 1, 1, true},
+            L["Flip Time Text"],
+            {L["Applies to all time-based text, including cooldown time, aura time, and ready text."], 1, 1, 1, true},
         }, flipTimeCheck)
 
         AddFontControls(container, style, "cooldown", {sizeMin = 6, sizeMax = 24}, refreshStyle)
-        AddColorPicker(container, style, "cooldownFontColor", "Font Color", {1, 1, 1, 1}, false, refreshStyle, refreshStyle)
+        AddColorPicker(container, style, "cooldownFontColor", L["Font Color"], {1, 1, 1, 1}, false, refreshStyle, refreshStyle)
         AddOffsetSliders(container, style, "barCdTextOffsetX", "barCdTextOffsetY", {range = 50}, refreshStyle)
     end
 
     -- Show Charge Text toggle
     local chargeTextCb = AceGUI:Create("CheckBox")
-    chargeTextCb:SetLabel("Show Charge Text")
+    chargeTextCb:SetLabel(L["Show Charge Text"])
     chargeTextCb:SetValue(style.showChargeText ~= false)
     chargeTextCb:SetFullWidth(true)
     chargeTextCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -293,9 +294,9 @@ local function BuildBarAppearanceTab(container, group, style)
 
     if chargeAdvExpanded and style.showChargeText ~= false then
         AddFontControls(container, style, "charge", {}, refreshStyle)
-        AddColorPicker(container, style, "chargeFontColor", "Font Color (Max Charges)", {1, 1, 1, 1}, true, refreshStyle, refreshStyle)
-        AddColorPicker(container, style, "chargeFontColorMissing", "Font Color (Missing Charges)", {1, 1, 1, 1}, true, refreshStyle, refreshStyle)
-        AddColorPicker(container, style, "chargeFontColorZero", "Font Color (Zero Charges)", {1, 1, 1, 1}, true, refreshStyle, refreshStyle)
+        AddColorPicker(container, style, "chargeFontColor", L["Font Color (Max Charges)"], {1, 1, 1, 1}, true, refreshStyle, refreshStyle)
+        AddColorPicker(container, style, "chargeFontColorMissing", L["Font Color (Missing Charges)"], {1, 1, 1, 1}, true, refreshStyle, refreshStyle)
+        AddColorPicker(container, style, "chargeFontColorZero", L["Font Color (Zero Charges)"], {1, 1, 1, 1}, true, refreshStyle, refreshStyle)
         AddAnchorDropdown(container, style, "chargeAnchor", "BOTTOMRIGHT", refreshStyle)
         AddOffsetSliders(container, style, "chargeXOffset", "chargeYOffset", {x = -2, y = 2}, refreshStyle)
     end
@@ -304,7 +305,7 @@ local function BuildBarAppearanceTab(container, group, style)
     -- Aura Duration Text
     -- ================================================================
     local auraTextCb = AceGUI:Create("CheckBox")
-    auraTextCb:SetLabel("Show Aura Duration Text")
+    auraTextCb:SetLabel(L["Show Aura Duration Text"])
     auraTextCb:SetValue(style.showAuraText ~= false)
     auraTextCb:SetFullWidth(true)
     auraTextCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -319,14 +320,14 @@ local function BuildBarAppearanceTab(container, group, style)
 
     if barAuraTextAdvExpanded and style.showAuraText ~= false then
         AddFontControls(container, style, "auraText", {sizeMin = 6, sizeMax = 24}, refreshStyle)
-        AddColorPicker(container, style, "auraTextFontColor", "Font Color", {0, 0.925, 1, 1}, false, refreshStyle, refreshStyle)
+        AddColorPicker(container, style, "auraTextFontColor", L["Font Color"], {0, 0.925, 1, 1}, false, refreshStyle, refreshStyle)
     end -- barAuraTextAdvExpanded
 
     -- ================================================================
     -- Aura Stack Text
     -- ================================================================
     local barAuraStackCb = AceGUI:Create("CheckBox")
-    barAuraStackCb:SetLabel("Show Aura Stack Text")
+    barAuraStackCb:SetLabel(L["Show Aura Stack Text"])
     barAuraStackCb:SetValue(style.showAuraStackText ~= false)
     barAuraStackCb:SetFullWidth(true)
     barAuraStackCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -341,14 +342,14 @@ local function BuildBarAppearanceTab(container, group, style)
 
     if barAuraStackAdvExpanded and style.showAuraStackText ~= false then
         AddFontControls(container, style, "auraStack", {}, refreshStyle)
-        AddColorPicker(container, style, "auraStackFontColor", "Font Color", {1, 1, 1, 1}, true, refreshStyle, refreshStyle)
+        AddColorPicker(container, style, "auraStackFontColor", L["Font Color"], {1, 1, 1, 1}, true, refreshStyle, refreshStyle)
         AddAnchorDropdown(container, style, "auraStackAnchor", "BOTTOMLEFT", refreshStyle)
         AddOffsetSliders(container, style, "auraStackXOffset", "auraStackYOffset", {x = 2, y = 2}, refreshStyle)
     end -- barAuraStackAdvExpanded
 
     -- Show Ready Text toggle
     local showReadyCb = AceGUI:Create("CheckBox")
-    showReadyCb:SetLabel("Show Ready Text")
+    showReadyCb:SetLabel(L["Show Ready Text"])
     showReadyCb:SetValue(style.showBarReadyText or false)
     showReadyCb:SetFullWidth(true)
     showReadyCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -364,8 +365,8 @@ local function BuildBarAppearanceTab(container, group, style)
     if readyAdvExpanded and style.showBarReadyText then
         local readyTextBox = AceGUI:Create("EditBox")
         if readyTextBox.editbox.Instructions then readyTextBox.editbox.Instructions:Hide() end
-        readyTextBox:SetLabel("Ready Text")
-        readyTextBox:SetText(style.barReadyText or "Ready")
+        readyTextBox:SetLabel(L["Ready Text"])
+        readyTextBox:SetText(style.barReadyText or L["Ready"])
         readyTextBox:SetFullWidth(true)
         readyTextBox:SetCallback("OnEnterPressed", function(widget, event, val)
             style.barReadyText = val
@@ -373,13 +374,13 @@ local function BuildBarAppearanceTab(container, group, style)
         end)
         container:AddChild(readyTextBox)
 
-        AddColorPicker(container, style, "barReadyTextColor", "Ready Text Color", {0.2, 1.0, 0.2, 1.0}, true, refreshStyle, refreshStyle)
+        AddColorPicker(container, style, "barReadyTextColor", L["Ready Text Color"], {0.2, 1.0, 0.2, 1.0}, true, refreshStyle, refreshStyle)
         AddFontControls(container, style, "barReady", {sizeMin = 6, sizeMax = 24}, refreshStyle)
     end
 
     -- Show Decimal Point toggle (affects both cooldown and aura duration text)
     local decimalCheck = AceGUI:Create("CheckBox")
-    decimalCheck:SetLabel("Show Decimal Point")
+    decimalCheck:SetLabel(L["Show Decimal Point"])
     decimalCheck:SetValue(style.decimalTimers or false)
     decimalCheck:SetFullWidth(true)
     decimalCheck:SetCallback("OnValueChanged", function(widget, event, val)
@@ -389,9 +390,9 @@ local function BuildBarAppearanceTab(container, group, style)
     container:AddChild(decimalCheck)
 
     CreateInfoButton(decimalCheck.frame, decimalCheck.checkbg, "LEFT", "RIGHT", decimalCheck.text:GetStringWidth() + 4, 0, {
-        "Show Decimal Point",
-        {"Shows one decimal place on duration text", 1, 1, 1, true},
-        {"(e.g. \"4.5\" instead of \"5\").", 1, 1, 1, true},
+        L["Show Decimal Point"],
+        {L["Shows one decimal place on duration text"], 1, 1, 1, true},
+        {L["(e.g. \"4.5\" instead of \"5\")."], 1, 1, 1, true},
     }, decimalCheck)
 
     -- Compact Mode toggle + Max Visible Buttons slider
@@ -414,7 +415,7 @@ local function BuildBarEffectsTab(container, group, style)
     -- Show Active Aura Color/Glow
     -- ================================================================
     local barAuraEnableCb = AceGUI:Create("CheckBox")
-    barAuraEnableCb:SetLabel("Show Active Aura Color/Glow")
+    barAuraEnableCb:SetLabel(L["Show Active Aura Color/Glow"])
     barAuraEnableCb:SetValue(style.barAuraEffect ~= "none")
     barAuraEnableCb:SetFullWidth(true)
     barAuraEnableCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -429,7 +430,7 @@ local function BuildBarEffectsTab(container, group, style)
 
     if barAuraAdvExpanded and style.barAuraEffect ~= "none" then
     local barAuraCombatCb = AceGUI:Create("CheckBox")
-    barAuraCombatCb:SetLabel("Show Only In Combat")
+    barAuraCombatCb:SetLabel(L["Show Only In Combat"])
     barAuraCombatCb:SetValue(style.auraGlowCombatOnly or false)
     barAuraCombatCb:SetFullWidth(true)
     barAuraCombatCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -448,7 +449,7 @@ local function BuildBarEffectsTab(container, group, style)
     -- Show Pandemic Color/Glow
     -- ================================================================
     local pandemicIndicatorCb = AceGUI:Create("CheckBox")
-    pandemicIndicatorCb:SetLabel("Show Pandemic Color/Glow")
+    pandemicIndicatorCb:SetLabel(L["Show Pandemic Color/Glow"])
     pandemicIndicatorCb:SetValue(style.showPandemicGlow ~= false)
     pandemicIndicatorCb:SetFullWidth(true)
     pandemicIndicatorCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -463,7 +464,7 @@ local function BuildBarEffectsTab(container, group, style)
 
     if barPandemicAdvExpanded and style.showPandemicGlow ~= false then
     local barPandemicCombatCb = AceGUI:Create("CheckBox")
-    barPandemicCombatCb:SetLabel("Show Only In Combat")
+    barPandemicCombatCb:SetLabel(L["Show Only In Combat"])
     barPandemicCombatCb:SetValue(style.pandemicGlowCombatOnly or false)
     barPandemicCombatCb:SetFullWidth(true)
     barPandemicCombatCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -483,7 +484,7 @@ local function BuildBarEffectsTab(container, group, style)
     -- ================================================================
     if style.showBarIcon ~= false then
         local gcdCb = AceGUI:Create("CheckBox")
-        gcdCb:SetLabel("Show GCD Swipe")
+        gcdCb:SetLabel(L["Show GCD Swipe"])
         gcdCb:SetValue(style.showGCDSwipe == true)
         gcdCb:SetFullWidth(true)
         gcdCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -494,7 +495,7 @@ local function BuildBarEffectsTab(container, group, style)
         CreateCheckboxPromoteButton(gcdCb, nil, "showGCDSwipe", group, style)
 
         local desatCb = AceGUI:Create("CheckBox")
-        desatCb:SetLabel("Show Desaturate On Cooldown")
+        desatCb:SetLabel(L["Show Desaturate On Cooldown"])
         desatCb:SetValue(style.desaturateOnCooldown or false)
         desatCb:SetFullWidth(true)
         desatCb:SetCallback("OnValueChanged", function(widget, event, val)

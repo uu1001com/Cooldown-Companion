@@ -1,5 +1,6 @@
 local ADDON_NAME, ST = ...
 local CooldownCompanion = ST.Addon
+local L = LibStub("AceLocale-3.0"):GetLocale("CooldownCompanion", true) or {}
 local AceGUI = LibStub("AceGUI-3.0")
 local CS = ST._configState
 
@@ -77,7 +78,7 @@ end
 
 local function BuildSpellSoundAlertsSection(scroll, buttonData, infoButtons)
     local soundHeading = AceGUI:Create("Heading")
-    soundHeading:SetText("Sound Alerts")
+    soundHeading:SetText(L["Sound Alerts"])
     ColorHeading(soundHeading)
     soundHeading:SetHeight(22)
     soundHeading:SetFullWidth(true)
@@ -92,8 +93,8 @@ local function BuildSpellSoundAlertsSection(scroll, buttonData, infoButtons)
     scroll:AddChild(soundHeading)
 
     local soundInfoBtn = CreateInfoButton(soundHeading.frame, soundHeading.label, "LEFT", "RIGHT", 4, 0, {
-        "Sound Alerts",
-        {"Sound alerts are played through the Master channel and follow your game's Master volume setting.", 1, 1, 1, true},
+        L["Sound Alerts"],
+        {L["Sound alerts are played through the Master channel and follow your game's Master volume setting."], 1, 1, 1, true},
     }, infoButtons)
     soundHeading.right:ClearAllPoints()
     soundHeading.right:SetPoint("RIGHT", soundHeading.frame, "RIGHT", -3, 0)
@@ -102,7 +103,7 @@ local function BuildSpellSoundAlertsSection(scroll, buttonData, infoButtons)
     local validEvents = CooldownCompanion:GetScopedValidSoundAlertEventsForButton(buttonData)
     if not validEvents then
         local noEvents = AceGUI:Create("Label")
-        noEvents:SetText("|cff888888No alertable sound events are available for this button under its current entry type, tracking mode, and Blizzard Cooldown Manager mapping.|r")
+        noEvents:SetText(L["|cff888888No alertable sound events are available for this button under its current entry type, tracking mode, and Blizzard Cooldown Manager mapping.|r"])
         noEvents:SetFullWidth(true)
         scroll:AddChild(noEvents)
         return
@@ -161,7 +162,7 @@ end
 local function BuildSpellSoundAlertsTab(scroll, buttonData, infoButtons)
     if buttonData.type ~= "spell" then
         local notSpellLabel = AceGUI:Create("Label")
-        notSpellLabel:SetText("|cff888888Sound alerts are available for spell buttons only.|r")
+        notSpellLabel:SetText(L["|cff888888Sound alerts are available for spell buttons only.|r"])
         notSpellLabel:SetFullWidth(true)
         scroll:AddChild(notSpellLabel)
         return
@@ -272,14 +273,14 @@ local function BuildSpellSettings(scroll, buttonData, infoButtons)
 
     if buttonData.type == "spell" then
     local auraHeading = AceGUI:Create("Heading")
-    auraHeading:SetText("Aura Tracking")
+    auraHeading:SetText(L["Aura Tracking"])
     ColorHeading(auraHeading)
     auraHeading:SetFullWidth(true)
     scroll:AddChild(auraHeading)
 
     local auraHeadingInfoBtn = CreateInfoButton(auraHeading.frame, auraHeading.label, "LEFT", "RIGHT", 4, 0, {
-        "Aura Tracking",
-        {"Using other CDM addons in conjunction with CDC may break aura tracking.", 1, 1, 1, true},
+        L["Aura Tracking"],
+        {L["Using other CDM addons in conjunction with CDC may break aura tracking."], 1, 1, 1, true},
     }, infoButtons)
 
     local auraKey = CS.selectedGroup .. "_" .. CS.selectedButton .. "_aura"
@@ -304,7 +305,7 @@ local function BuildSpellSettings(scroll, buttonData, infoButtons)
         local allChildren = CooldownCompanion.viewerAuraAllChildren[buttonData.id]
         local slotChild = allChildren and allChildren[buttonData.cdmChildSlot]
         local oid = slotChild and slotChild.cooldownInfo and slotChild.cooldownInfo.overrideSpellID
-        local slotText = "|cff88bbddCDM Slot: " .. buttonData.cdmChildSlot .. "|r"
+        local slotText = L["|cff88bbddCDM Slot: "] .. buttonData.cdmChildSlot .. "|r"
         if oid and oid ~= buttonData.id then
             local info = C_Spell.GetSpellInfo(oid)
             if info and info.name then
@@ -319,9 +320,9 @@ local function BuildSpellSettings(scroll, buttonData, infoButtons)
     -- Track buff/debuff duration toggle (hidden for passives — forced on)
     if not buttonData.isPassive then
     local auraCb = AceGUI:Create("CheckBox")
-    local auraLabel = "Track Aura Duration"
+    local auraLabel = L["Track Aura Duration"]
     local auraActive = hasViewerFrame and buttonData.auraTracking == true
-    auraLabel = auraLabel .. (auraActive and ": |cff00ff00Active|r" or ": |cffff0000Inactive|r")
+    auraLabel = auraLabel .. (auraActive and L[": |cff00ff00Active|r"] or L[": |cffff0000Inactive|r"])
     auraCb:SetLabel(auraLabel)
     auraCb:SetValue(buttonData.auraTracking == true)
     auraCb:SetFullWidth(true)
@@ -348,13 +349,13 @@ local function BuildSpellSettings(scroll, buttonData, infoButtons)
     local auraWarnLines
     if isHarmful then
         auraWarnLines = {
-            "Debuff Tracking",
-            {"When enabled, the cooldown swipe shows the remaining debuff or DoT duration on your target instead of the spell's cooldown. When the debuff expires, the normal cooldown display resumes.\n\nThis spell must be tracked as a Buff or Debuff in the Blizzard Cooldown Manager (not just as a Cooldown). The CDM must be active but does not need to be visible.\n\nOnly player buffs and target debuffs are supported.", 1, 1, 1, true},
+            L["Debuff Tracking"],
+            {L["When enabled, the cooldown swipe shows the remaining debuff or DoT duration on your target instead of the spell's cooldown. When the debuff expires, the normal cooldown display resumes.\n\nThis spell must be tracked as a Buff or Debuff in the Blizzard Cooldown Manager (not just as a Cooldown). The CDM must be active but does not need to be visible.\n\nOnly player buffs and target debuffs are supported."], 1, 1, 1, true},
         }
     else
         auraWarnLines = {
-            "Buff Tracking",
-            {"When enabled, the cooldown swipe shows the remaining buff duration on yourself instead of the spell's cooldown. When the buff expires, the normal cooldown display resumes.\n\nThis spell must be tracked as a Buff or Debuff in the Blizzard Cooldown Manager (not just as a Cooldown). The CDM must be active but does not need to be visible.\n\nOnly player buffs and target debuffs are supported.", 1, 1, 1, true},
+            L["Buff Tracking"],
+            {L["When enabled, the cooldown swipe shows the remaining buff duration on yourself instead of the spell's cooldown. When the buff expires, the normal cooldown display resumes.\n\nThis spell must be tracked as a Buff or Debuff in the Blizzard Cooldown Manager (not just as a Cooldown). The CDM must be active but does not need to be visible.\n\nOnly player buffs and target debuffs are supported."], 1, 1, 1, true},
         }
     end
     CreateInfoButton(auraCb.frame, auraCb.checkbg, "LEFT", "RIGHT", auraCb.text:GetStringWidth() + 4, 0, auraWarnLines, infoButtons)
@@ -368,7 +369,7 @@ local function BuildSpellSettings(scroll, buttonData, infoButtons)
 
     local auraEditBox = AceGUI:Create("EditBox")
     if auraEditBox.editbox.Instructions then auraEditBox.editbox.Instructions:Hide() end
-    auraEditBox:SetLabel("Spell ID Override")
+    auraEditBox:SetLabel(L["Spell ID Override"])
     auraEditBox:SetText(buttonData.auraSpellID and tostring(buttonData.auraSpellID) or "")
     auraEditBox:SetRelativeWidth(0.70)
     auraEditBox:SetCallback("OnEnterPressed", function(widget, event, text)
@@ -376,7 +377,7 @@ local function BuildSpellSettings(scroll, buttonData, infoButtons)
         if text ~= "" then
             for token in text:gmatch("[^,]+") do
                 if not tonumber(token) then
-                    CooldownCompanion:Print("Invalid spell ID: " .. token)
+                    CooldownCompanion:Print(L["Invalid spell ID: "] .. token)
                     widget:SetText(buttonData.auraSpellID and tostring(buttonData.auraSpellID) or "")
                     return
                 end
@@ -389,7 +390,7 @@ local function BuildSpellSettings(scroll, buttonData, infoButtons)
     overrideRow:AddChild(auraEditBox)
 
     local pickCDMBtn = AceGUI:Create("Button")
-    pickCDMBtn:SetText("Pick CDM")
+    pickCDMBtn:SetText(L["Pick CDM"])
     pickCDMBtn:SetRelativeWidth(0.30)
     pickCDMBtn:SetCallback("OnClick", function()
         local grp = CS.selectedGroup
@@ -412,8 +413,8 @@ local function BuildSpellSettings(scroll, buttonData, infoButtons)
     end)
     pickCDMBtn:SetCallback("OnEnter", function(widget)
         GameTooltip:SetOwner(widget.frame, "ANCHOR_TOP")
-        GameTooltip:AddLine("Pick from Cooldown Manager")
-        GameTooltip:AddLine("Shows a list of Tracked Buff/Tracked Bar auras currently tracked in the Cooldown Manager. Click one to populate the Spell ID Override.", 1, 1, 1, true)
+        GameTooltip:AddLine(L["Pick from Cooldown Manager"])
+        GameTooltip:AddLine(L["Shows a list of Tracked Buff/Tracked Bar auras currently tracked in the Cooldown Manager. Click one to populate the Spell ID Override."], 1, 1, 1, true)
         GameTooltip:Show()
     end)
     pickCDMBtn:SetCallback("OnLeave", function()
@@ -425,8 +426,8 @@ local function BuildSpellSettings(scroll, buttonData, infoButtons)
 
     -- (?) tooltip for override
     CreateInfoButton(auraEditBox.frame, auraEditBox.frame, "TOPLEFT", "TOPLEFT", auraEditBox.label:GetStringWidth() + 4, -2, {
-        "Spell ID Override",
-        {"Most spells are tracked automatically, but some abilities apply a buff or debuff with a different spell ID than the ability itself. If tracking isn't working, enter the buff/debuff spell ID here. Use commas for multiple IDs (e.g. 48517,48518 for both Eclipse forms).\n\nYou can also click \"Pick CDM\" to visually select a spell from the Cooldown Manager.", 1, 1, 1, true},
+        L["Spell ID Override"],
+        {L["Most spells are tracked automatically, but some abilities apply a buff or debuff with a different spell ID than the ability itself. If tracking isn't working, enter the buff/debuff spell ID here. Use commas for multiple IDs (e.g. 48517,48518 for both Eclipse forms).\n\nYou can also click \"Pick CDM\" to visually select a spell from the Cooldown Manager."], 1, 1, 1, true},
     }, infoButtons)
 
     -- Nudge Pick CDM button down to align with editbox
@@ -447,7 +448,7 @@ local function BuildSpellSettings(scroll, buttonData, infoButtons)
     -- Cooldown Manager controls (always visible for spells)
     local cdmEnabled = GetCVarBool("cooldownViewerEnabled")
     local cdmToggleBtn = AceGUI:Create("Button")
-    cdmToggleBtn:SetText(cdmEnabled and "Blizzard CDM: |cff00ff00Active|r" or "Blizzard CDM: |cffff0000Inactive|r")
+    cdmToggleBtn:SetText(cdmEnabled and L["Blizzard CDM: |cff00ff00Active|r"] or L["Blizzard CDM: |cffff0000Inactive|r"])
     cdmToggleBtn:SetFullWidth(true)
     cdmToggleBtn:SetCallback("OnClick", function()
         local current = GetCVarBool("cooldownViewerEnabled")
@@ -467,7 +468,7 @@ local function BuildSpellSettings(scroll, buttonData, infoButtons)
     cdmRow:SetLayout("Flow")
 
     local openCdmBtn = AceGUI:Create("Button")
-    openCdmBtn:SetText("CDM Settings")
+    openCdmBtn:SetText(L["CDM Settings"])
     openCdmBtn:SetRelativeWidth(0.5)
     openCdmBtn:SetCallback("OnClick", function()
         CooldownViewerSettings:TogglePanel()
@@ -476,7 +477,7 @@ local function BuildSpellSettings(scroll, buttonData, infoButtons)
 
     local db = CooldownCompanion.db
     local hideCdmBtn = AceGUI:Create("Button")
-    hideCdmBtn:SetText("CDM Display")
+    hideCdmBtn:SetText(L["CDM Display"])
     hideCdmBtn:SetRelativeWidth(0.5)
     hideCdmBtn:SetCallback("OnClick", function()
         db.profile.cdmHidden = not db.profile.cdmHidden
@@ -485,8 +486,8 @@ local function BuildSpellSettings(scroll, buttonData, infoButtons)
     end)
     hideCdmBtn:SetCallback("OnEnter", function(widget)
         GameTooltip:SetOwner(widget.frame, "ANCHOR_TOP")
-        GameTooltip:AddLine("Toggle CDM Display")
-        GameTooltip:AddLine("This only toggles the visibility of the Cooldown Manager on your screen. Aura tracking will continue to work regardless.", 1, 1, 1, true)
+        GameTooltip:AddLine(L["Toggle CDM Display"])
+        GameTooltip:AddLine(L["This only toggles the visibility of the Cooldown Manager on your screen. Aura tracking will continue to work regardless."], 1, 1, 1, true)
         GameTooltip:Show()
     end)
     hideCdmBtn:SetCallback("OnLeave", function()
@@ -504,9 +505,9 @@ local function BuildSpellSettings(scroll, buttonData, infoButtons)
 
     local auraStatusLabel = AceGUI:Create("Label")
     if buttonData.auraTracking and cdmEnabled and hasViewerFrame then
-        auraStatusLabel:SetText("|cff00ff00Aura tracking is active and ready.|r")
+        auraStatusLabel:SetText(L["|cff00ff00Aura tracking is active and ready.|r"])
     else
-        auraStatusLabel:SetText("|cffff0000Aura tracking is not ready.|r")
+        auraStatusLabel:SetText(L["|cffff0000Aura tracking is not ready.|r"])
     end
     auraStatusLabel:SetFullWidth(true)
     auraStatusLabel:SetJustifyH("CENTER")
@@ -519,7 +520,7 @@ local function BuildSpellSettings(scroll, buttonData, infoButtons)
 
     if not canTrackAura then
         local noAuraLabel = AceGUI:Create("Label")
-        noAuraLabel:SetText("|cff888888No associated buff or debuff was found in the Cooldown Manager for this spell. Use the Spell ID Override above to link this spell to a CDM-trackable aura.|r")
+        noAuraLabel:SetText(L["|cff888888No associated buff or debuff was found in the Cooldown Manager for this spell. Use the Spell ID Override above to link this spell to a CDM-trackable aura.|r"])
         noAuraLabel:SetFullWidth(true)
         scroll:AddChild(noAuraLabel)
         local noAuraSpacer = AceGUI:Create("Label")
@@ -532,7 +533,7 @@ local function BuildSpellSettings(scroll, buttonData, infoButtons)
 
     if not hasViewerFrame then
         local auraDisabledLabel = AceGUI:Create("Label")
-        auraDisabledLabel:SetText("|cff888888This spell has a trackable aura in the Cooldown Manager, but it has not been added as a tracked buff or debuff yet. Add it in the CDM to enable aura tracking.|r")
+        auraDisabledLabel:SetText(L["|cff888888This spell has a trackable aura in the Cooldown Manager, but it has not been added as a tracked buff or debuff yet. Add it in the CDM to enable aura tracking.|r"])
         auraDisabledLabel:SetFullWidth(true)
         scroll:AddChild(auraDisabledLabel)
         local auraDisabledSpacer = AceGUI:Create("Label")
@@ -560,7 +561,7 @@ local function BuildSpellSettings(scroll, buttonData, infoButtons)
     -- Show Aura Icon toggle (spells with aura tracking only — passive auras already show their own icon)
     if buttonData.auraTracking and not buttonData.isPassive then
         local auraIconCb = AceGUI:Create("CheckBox")
-        auraIconCb:SetLabel("Show Aura Icon")
+        auraIconCb:SetLabel(L["Show Aura Icon"])
         auraIconCb:SetValue(buttonData.auraShowAuraIcon == true)
         auraIconCb:SetFullWidth(true)
         auraIconCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -570,8 +571,8 @@ local function BuildSpellSettings(scroll, buttonData, infoButtons)
         scroll:AddChild(auraIconCb)
         CreateInfoButton(auraIconCb.frame, auraIconCb.checkbg, "LEFT", "RIGHT",
             auraIconCb.text:GetStringWidth() + 4, 0, {
-            "Show Aura Icon",
-            {"When enabled, the button icon changes to show the tracked aura's icon while the aura is active. When the aura expires, the normal spell icon is restored.\n\nUseful when the tracked aura has a different icon than the ability itself.", 1, 1, 1, true},
+            L["Show Aura Icon"],
+            {L["When enabled, the button icon changes to show the tracked aura's icon while the aura is active. When the aura expires, the normal spell icon is restored.\n\nUseful when the tracked aura has a different icon than the ability itself."], 1, 1, 1, true},
         }, infoButtons)
     end
 
@@ -590,7 +591,7 @@ local function BuildItemSettings(scroll, buttonData, infoButtons)
     if buttonData.hasCharges then return end
 
     local itemHeading = AceGUI:Create("Heading")
-    itemHeading:SetText("Item Settings")
+    itemHeading:SetText(L["Item Settings"])
     ColorHeading(itemHeading)
     itemHeading:SetFullWidth(true)
     scroll:AddChild(itemHeading)
@@ -606,7 +607,7 @@ local function BuildItemSettings(scroll, buttonData, infoButtons)
     if not itemCollapsed then
     -- Item count font size
     local itemFontSizeSlider = AceGUI:Create("Slider")
-    itemFontSizeSlider:SetLabel("Item Stack Font Size")
+    itemFontSizeSlider:SetLabel(L["Item Stack Font Size"])
     itemFontSizeSlider:SetSliderValues(8, 32, 1)
     itemFontSizeSlider:SetValue(buttonData.itemCountFontSize or 12)
     itemFontSizeSlider:SetFullWidth(true)
@@ -618,7 +619,7 @@ local function BuildItemSettings(scroll, buttonData, infoButtons)
 
     -- Item count font
     local itemFontDrop = AceGUI:Create("Dropdown")
-    itemFontDrop:SetLabel("Font")
+    itemFontDrop:SetLabel(L["Font"])
     CS.SetupFontDropdown(itemFontDrop)
     itemFontDrop:SetValue(buttonData.itemCountFont or "Friz Quadrata TT")
     itemFontDrop:SetFullWidth(true)
@@ -630,7 +631,7 @@ local function BuildItemSettings(scroll, buttonData, infoButtons)
 
     -- Item count font outline
     local itemOutlineDrop = AceGUI:Create("Dropdown")
-    itemOutlineDrop:SetLabel("Font Outline")
+    itemOutlineDrop:SetLabel(L["Font Outline"])
     itemOutlineDrop:SetList(CS.outlineOptions)
     itemOutlineDrop:SetValue(buttonData.itemCountFontOutline or "OUTLINE")
     itemOutlineDrop:SetFullWidth(true)
@@ -642,7 +643,7 @@ local function BuildItemSettings(scroll, buttonData, infoButtons)
 
     -- Item count font color
     local refreshGroup = function() CooldownCompanion:RefreshGroupFrame(CS.selectedGroup) end
-    AddColorPicker(scroll, buttonData, "itemCountFontColor", "Font Color", {1, 1, 1, 1}, true, refreshGroup)
+    AddColorPicker(scroll, buttonData, "itemCountFontColor", L["Font Color"], {1, 1, 1, 1}, true, refreshGroup)
 
     -- Item count anchor point
     local barNoIcon = group.displayMode == "bars" and not (group.style.showBarIcon ~= false)
@@ -650,11 +651,11 @@ local function BuildItemSettings(scroll, buttonData, infoButtons)
     local defItemX = barNoIcon and 0 or -2
     local defItemY = 2
 
-    AddAnchorDropdown(scroll, buttonData, "itemCountAnchor", defItemAnchor, refreshGroup, "Anchor Point")
+    AddAnchorDropdown(scroll, buttonData, "itemCountAnchor", defItemAnchor, refreshGroup, L["Anchor Point"])
 
     -- Item count X offset
     local itemXSlider = AceGUI:Create("Slider")
-    itemXSlider:SetLabel("X Offset")
+    itemXSlider:SetLabel(L["X Offset"])
     itemXSlider:SetSliderValues(-20, 20, 0.1)
     itemXSlider:SetValue(buttonData.itemCountXOffset or defItemX)
     itemXSlider:SetFullWidth(true)
@@ -666,7 +667,7 @@ local function BuildItemSettings(scroll, buttonData, infoButtons)
 
     -- Item count Y offset
     local itemYSlider = AceGUI:Create("Slider")
-    itemYSlider:SetLabel("Y Offset")
+    itemYSlider:SetLabel(L["Y Offset"])
     itemYSlider:SetSliderValues(-20, 20, 0.1)
     itemYSlider:SetValue(buttonData.itemCountYOffset or defItemY)
     itemYSlider:SetFullWidth(true)
@@ -729,7 +730,7 @@ local function RefreshButtonSettingsMultiSelect(scroll, multiCount, multiIndices
     scroll:AddChild(heading)
 
     local dupBtn = AceGUI:Create("Button")
-    dupBtn:SetText("Duplicate Selected")
+    dupBtn:SetText(L["Duplicate Selected"])
     dupBtn:SetFullWidth(true)
     dupBtn:SetCallback("OnClick", function()
         local sourceGroupId = CS.selectedGroup
@@ -757,12 +758,12 @@ local function RefreshButtonSettingsMultiSelect(scroll, multiCount, multiIndices
     scroll:AddChild(spacer1)
 
     local moveBtn = AceGUI:Create("Button")
-    moveBtn:SetText("Move Selected")
+    moveBtn:SetText(L["Move Selected"])
     moveBtn:SetFullWidth(true)
     moveBtn:SetCallback("OnClick", function()
         local moveMenuFrame = _G["CDCMoveMenu"]
         if not moveMenuFrame then
-            moveMenuFrame = CreateFrame("Frame", "CDCMoveMenu", UIParent, "UIDropDownMenuTemplate")
+            moveMenuFrame = CreateFrame("Frame", L["CDCMoveMenu"], UIParent, "UIDropDownMenuTemplate")
         end
         local sourceGroupId = CS.selectedGroup
         local indices = multiIndices
@@ -772,7 +773,7 @@ local function RefreshButtonSettingsMultiSelect(scroll, multiCount, multiIndices
             local folderGroups, looseGroups = {}, {}
             for id, group in pairs(db.groups) do
                 if id ~= sourceGroupId and CooldownCompanion:IsGroupVisibleToCurrentChar(id) then
-                    local gName = group.name or ("Group " .. id)
+                    local gName = group.name or (L["Group "] .. id)
                     local cid = group.parentContainerId
                     local container = cid and containers[cid]
                     local fid = container and container.folderId
@@ -787,7 +788,7 @@ local function RefreshButtonSettingsMultiSelect(scroll, multiCount, multiIndices
             local sortedFolders = {}
             for fid, folder in pairs(db.folders) do
                 if folderGroups[fid] then
-                    table.insert(sortedFolders, { id = fid, name = folder.name or ("Folder " .. fid), order = folder.order or fid })
+                    table.insert(sortedFolders, { id = fid, name = folder.name or (L["Folder "] .. fid), order = folder.order or fid })
                 end
             end
             table.sort(sortedFolders, function(a, b) return a.order < b.order end)
@@ -823,7 +824,7 @@ local function RefreshButtonSettingsMultiSelect(scroll, multiCount, multiIndices
             if #looseGroups > 0 then
                 if hasFolders then
                     local hdr = UIDropDownMenu_CreateInfo()
-                    hdr.text = "No Folder"
+                    hdr.text = L["No Folder"]
                     hdr.isTitle = true
                     hdr.notCheckable = true
                     UIDropDownMenu_AddButton(hdr, level)
@@ -864,7 +865,7 @@ local function RefreshButtonSettingsMultiSelect(scroll, multiCount, multiIndices
     scroll:AddChild(spacer2)
 
     local delBtn = AceGUI:Create("Button")
-    delBtn:SetText("Delete Selected")
+    delBtn:SetText(L["Delete Selected"])
     delBtn:SetFullWidth(true)
     delBtn:SetCallback("OnClick", function()
         CS.ShowPopupAboveConfig("CDC_DELETE_SELECTED_BUTTONS", multiCount,
@@ -904,7 +905,7 @@ local function RefreshPanelMultiSelect(scroll, multiCount, multiPanelIds)
     local containerId = CS.selectedContainer
 
     local heading = AceGUI:Create("Heading")
-    heading:SetText(multiCount .. " Panels Selected")
+    heading:SetText(multiCount .. L[" Panels Selected"])
     ColorHeading(heading)
     heading:SetFullWidth(true)
     scroll:AddChild(heading)
@@ -926,7 +927,7 @@ local function RefreshPanelMultiSelect(scroll, multiCount, multiPanelIds)
         if p and p.enabled == false then anyDisabled = true; break end
     end
     local enableBtn = AceGUI:Create("Button")
-    enableBtn:SetText(anyDisabled and "Enable All" or "Disable All")
+    enableBtn:SetText(anyDisabled and L["Enable All"] or L["Disable All"])
     enableBtn:SetFullWidth(true)
     enableBtn:SetCallback("OnClick", function()
         for _, pid in ipairs(multiPanelIds) do
@@ -953,7 +954,7 @@ local function RefreshPanelMultiSelect(scroll, multiCount, multiPanelIds)
         if p and p.locked == false then anyUnlocked = true; break end
     end
     local lockBtn = AceGUI:Create("Button")
-    lockBtn:SetText(anyUnlocked and "Lock All" or "Unlock All")
+    lockBtn:SetText(anyUnlocked and L["Lock All"] or L["Unlock All"])
     lockBtn:SetFullWidth(true)
     lockBtn:SetCallback("OnClick", function()
         if anyUnlocked then
@@ -983,7 +984,7 @@ local function RefreshPanelMultiSelect(scroll, multiCount, multiPanelIds)
 
     -- Duplicate Selected
     local dupBtn = AceGUI:Create("Button")
-    dupBtn:SetText("Duplicate Selected")
+    dupBtn:SetText(L["Duplicate Selected"])
     dupBtn:SetFullWidth(true)
     dupBtn:SetCallback("OnClick", function()
         for _, pid in ipairs(multiPanelIds) do
@@ -1006,19 +1007,19 @@ local function RefreshPanelMultiSelect(scroll, multiCount, multiPanelIds)
     end
     if hasOtherContainer then
         local moveBtn = AceGUI:Create("Button")
-        moveBtn:SetText("Move to Group")
+        moveBtn:SetText(L["Move to Group"])
         moveBtn:SetFullWidth(true)
         moveBtn:SetCallback("OnClick", function()
             local moveMenuFrame = _G["CDCPanelMultiMoveMenu"]
             if not moveMenuFrame then
-                moveMenuFrame = CreateFrame("Frame", "CDCPanelMultiMoveMenu", UIParent, "UIDropDownMenuTemplate")
+                moveMenuFrame = CreateFrame("Frame", L["CDCPanelMultiMoveMenu"], UIParent, "UIDropDownMenuTemplate")
             end
             UIDropDownMenu_Initialize(moveMenuFrame, function(self, level)
                 local containers = db.groupContainers or {}
                 local folderContainers, looseContainers = {}, {}
                 for cid, ctr in pairs(containers) do
                     if cid ~= containerId and CooldownCompanion:IsContainerVisibleToCurrentChar(cid) then
-                        local cName = ctr.name or ("Group " .. cid)
+                        local cName = ctr.name or (L["Group "] .. cid)
                         local fid = ctr.folderId
                         if fid and db.folders[fid] then
                             folderContainers[fid] = folderContainers[fid] or {}
@@ -1031,7 +1032,7 @@ local function RefreshPanelMultiSelect(scroll, multiCount, multiPanelIds)
                 local sortedFolders = {}
                 for fid, folder in pairs(db.folders) do
                     if folderContainers[fid] then
-                        table.insert(sortedFolders, { id = fid, name = folder.name or ("Folder " .. fid), order = folder.order or fid })
+                        table.insert(sortedFolders, { id = fid, name = folder.name or (L["Folder "] .. fid), order = folder.order or fid })
                     end
                 end
                 table.sort(sortedFolders, function(a, b) return a.order < b.order end)
@@ -1062,7 +1063,7 @@ local function RefreshPanelMultiSelect(scroll, multiCount, multiPanelIds)
                 if #looseContainers > 0 then
                     if hasFolders then
                         local hdr = UIDropDownMenu_CreateInfo()
-                        hdr.text = "No Folder"
+                        hdr.text = L["No Folder"]
                         hdr.isTitle = true
                         hdr.notCheckable = true
                         UIDropDownMenu_AddButton(hdr, level)
@@ -1095,7 +1096,7 @@ local function RefreshPanelMultiSelect(scroll, multiCount, multiPanelIds)
 
     -- Export Selected
     local exportBtn = AceGUI:Create("Button")
-    exportBtn:SetText("Export Selected")
+    exportBtn:SetText(L["Export Selected"])
     exportBtn:SetFullWidth(true)
     exportBtn:SetCallback("OnClick", function()
         local containerData = BuildContainerExportData(db.groupContainers[containerId])
@@ -1118,7 +1119,7 @@ local function RefreshPanelMultiSelect(scroll, multiCount, multiPanelIds)
 
     -- Delete Selected
     local delBtn = AceGUI:Create("Button")
-    delBtn:SetText("Delete Selected")
+    delBtn:SetText(L["Delete Selected"])
     delBtn:SetFullWidth(true)
     delBtn:SetCallback("OnClick", function()
         local ids = {}
@@ -1203,16 +1204,16 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
     -- Per-button text format override (text mode only)
     if displayMode == "text" then
         local fmtHeading = AceGUI:Create("Heading")
-        fmtHeading:SetText("Format Override")
+        fmtHeading:SetText(L["Format Override"])
         ColorHeading(fmtHeading)
         fmtHeading:SetFullWidth(true)
         scroll:AddChild(fmtHeading)
 
         local fmtInfo = CreateInfoButton(fmtHeading.frame, fmtHeading.label, "LEFT", "RIGHT", 4, 0, {
-            {"Per-Button Format Override", 1, 0.82, 0, true},
+            {L["Per-Button Format Override"], 1, 0.82, 0, true},
             " ",
-            {"Overrides the group format string for this button only.", 1, 1, 1},
-            {"Clear the override to revert to the group default.", 1, 1, 1},
+            {L["Overrides the group format string for this button only."], 1, 1, 1},
+            {L["Clear the override to revert to the group default."], 1, 1, 1},
         }, infoButtons)
         fmtHeading.right:ClearAllPoints()
         fmtHeading.right:SetPoint("RIGHT", fmtHeading.frame, "RIGHT", -3, 0)
@@ -1241,7 +1242,7 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
         -- "Using group default" note or tag summary
         if not buttonData.textFormat then
             local defaultNote = AceGUI:Create("Label")
-            defaultNote:SetText("|cff888888Using group default|r")
+            defaultNote:SetText(L["|cff888888Using group default|r"])
             defaultNote:SetFullWidth(true)
             defaultNote:SetFontObject(GameFontHighlightSmall)
             scroll:AddChild(defaultNote)
@@ -1263,11 +1264,11 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
 
         -- Edit button
         local editBtn = AceGUI:Create("Button")
-        editBtn:SetText("Edit Format Override")
+        editBtn:SetText(L["Edit Format Override"])
         editBtn:SetFullWidth(true)
         editBtn:SetCallback("OnClick", function()
             ST._OpenFormatEditor(group.style, CS.selectedGroup, {
-                title = "Button Format Override",
+                title = L["Button Format Override"],
                 saveTarget = buttonData,
                 defaultFormat = group.style.textFormat or "{name}  {status}",
             })
@@ -1277,7 +1278,7 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
         -- Clear button (only when override exists)
         if buttonData.textFormat then
             local clearBtn = AceGUI:Create("Button")
-            clearBtn:SetText("Clear Override")
+            clearBtn:SetText(L["Clear Override"])
             clearBtn:SetFullWidth(true)
             clearBtn:SetCallback("OnClick", function()
                 buttonData.textFormat = nil
@@ -1292,7 +1293,7 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
     if not buttonData.overrideSections or not next(buttonData.overrideSections) then
         if displayMode ~= "text" then
             local noOverridesLabel = AceGUI:Create("Label")
-            noOverridesLabel:SetText("|cff888888No appearance overrides.\n\nTo customize this button's appearance, select it and click the |A:Crosshair_VehichleCursor_32:0:0|a icon next to a group settings section heading.|r")
+            noOverridesLabel:SetText(L["|cff888888No appearance overrides.\n\nTo customize this button's appearance, select it and click the |A:Crosshair_VehichleCursor_32:0:0|a icon next to a group settings section heading.|r"])
             noOverridesLabel:SetFullWidth(true)
             scroll:AddChild(noOverridesLabel)
         end
@@ -1413,7 +1414,7 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
                     -- Assisted highlight: combat-only stays inline (no parent enable toggle)
                     if sectionId == "assistedHighlight" and combatOnlyKey then
                         local combatCb = AceGUI:Create("CheckBox")
-                        combatCb:SetLabel("Show Only In Combat")
+                        combatCb:SetLabel(L["Show Only In Combat"])
                         combatCb:SetValue(overrides[combatOnlyKey] or false)
                         combatCb:SetFullWidth(true)
                         combatCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -1429,7 +1430,7 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
                     if combatOnlyKey and sectionId ~= "assistedHighlight" then
                         afterEnableCallback = function(cont)
                             local combatCb = AceGUI:Create("CheckBox")
-                            combatCb:SetLabel("Show Only In Combat")
+                            combatCb:SetLabel(L["Show Only In Combat"])
                             combatCb:SetValue(overrides[combatOnlyKey] or false)
                             combatCb:SetFullWidth(true)
                             combatCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -1441,7 +1442,7 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
 
                             if sectionId == "auraIndicator" then
                                 local auraInvertCb = AceGUI:Create("CheckBox")
-                                auraInvertCb:SetLabel("Show When Missing")
+                                auraInvertCb:SetLabel(L["Show When Missing"])
                                 auraInvertCb:SetValue(overrides.auraGlowInvert or false)
                                 auraInvertCb:SetFullWidth(true)
                                 auraInvertCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -1454,7 +1455,7 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
 
                             if sectionId == "readyGlow" then
                                 local durCb = AceGUI:Create("CheckBox")
-                                durCb:SetLabel("Auto-Hide After Duration")
+                                durCb:SetLabel(L["Auto-Hide After Duration"])
                                 durCb:SetValue((overrides.readyGlowDuration or 0) > 0)
                                 durCb:SetFullWidth(true)
                                 durCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -1467,7 +1468,7 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
 
                                 if (overrides.readyGlowDuration or 0) > 0 then
                                     local durSlider = AceGUI:Create("Slider")
-                                    durSlider:SetLabel("Duration (seconds)")
+                                    durSlider:SetLabel(L["Duration (seconds)"])
                                     durSlider:SetSliderValues(0.5, 5, 0.5)
                                     durSlider:SetValue(overrides.readyGlowDuration or 3)
                                     durSlider:SetFullWidth(true)
@@ -1488,7 +1489,7 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
                     })
                     if sectionId == "procGlow" and overrides.procGlowStyle ~= "none" then
                         local procPreviewBtn = AceGUI:Create("Button")
-                        procPreviewBtn:SetText("Preview Proc Glow (3s)")
+                        procPreviewBtn:SetText(L["Preview Proc Glow (3s)"])
                         procPreviewBtn:SetFullWidth(true)
                         procPreviewBtn:SetCallback("OnClick", function()
                             if CS.selectedGroup and CS.selectedButton then
@@ -1498,7 +1499,7 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
                         scroll:AddChild(procPreviewBtn)
                     elseif sectionId == "auraIndicator" and overrides.auraGlowStyle ~= "none" then
                         local auraPreviewBtn = AceGUI:Create("Button")
-                        auraPreviewBtn:SetText("Preview Aura Glow (3s)")
+                        auraPreviewBtn:SetText(L["Preview Aura Glow (3s)"])
                         auraPreviewBtn:SetFullWidth(true)
                         auraPreviewBtn:SetCallback("OnClick", function()
                             if CS.selectedGroup and CS.selectedButton then
@@ -1508,7 +1509,7 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
                         scroll:AddChild(auraPreviewBtn)
                     elseif sectionId == "pandemicGlow" and GetEffectiveOverrideValue("showPandemicGlow") ~= false then
                         local pandemicPreviewBtn = AceGUI:Create("Button")
-                        pandemicPreviewBtn:SetText("Preview Pandemic Glow (3s)")
+                        pandemicPreviewBtn:SetText(L["Preview Pandemic Glow (3s)"])
                         pandemicPreviewBtn:SetFullWidth(true)
                         pandemicPreviewBtn:SetCallback("OnClick", function()
                             if CS.selectedGroup and CS.selectedButton then
@@ -1518,7 +1519,7 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
                         scroll:AddChild(pandemicPreviewBtn)
                     elseif sectionId == "readyGlow" and overrides.readyGlowStyle and overrides.readyGlowStyle ~= "none" then
                         local readyPreviewBtn = AceGUI:Create("Button")
-                        readyPreviewBtn:SetText("Preview Ready Glow (3s)")
+                        readyPreviewBtn:SetText(L["Preview Ready Glow (3s)"])
                         readyPreviewBtn:SetFullWidth(true)
                         readyPreviewBtn:SetCallback("OnClick", function()
                             if CS.selectedGroup and CS.selectedButton then
@@ -1542,7 +1543,7 @@ local function BuildCustomNameSection(scroll, buttonData)
     if not group or group.displayMode ~= "bars" then return end
 
     local customNameHeading = AceGUI:Create("Heading")
-    customNameHeading:SetText("Custom Name")
+    customNameHeading:SetText(L["Custom Name"])
     ColorHeading(customNameHeading)
     customNameHeading:SetFullWidth(true)
     scroll:AddChild(customNameHeading)
@@ -1572,7 +1573,7 @@ local function BuildCustomNameSection(scroll, buttonData)
     editFrame.Instructions = editFrame.Instructions or editFrame:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
     editFrame.Instructions:SetPoint("LEFT", editFrame, "LEFT", 0, 0)
     editFrame.Instructions:SetPoint("RIGHT", editFrame, "RIGHT", 0, 0)
-    editFrame.Instructions:SetText("add custom name here, leave blank for default")
+    editFrame.Instructions:SetText(L["add custom name here, leave blank for default"])
     editFrame.Instructions:SetTextColor(0.5, 0.5, 0.5)
     if (buttonData.customName or "") ~= "" then
         editFrame.Instructions:Hide()

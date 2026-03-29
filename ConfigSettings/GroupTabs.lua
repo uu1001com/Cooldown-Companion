@@ -1,5 +1,6 @@
 local ADDON_NAME, ST = ...
 local CooldownCompanion = ST.Addon
+local L = LibStub("AceLocale-3.0"):GetLocale("CooldownCompanion", true) or {}
 local AceGUI = LibStub("AceGUI-3.0")
 local CS = ST._configState
 
@@ -82,7 +83,7 @@ local function BuildLayoutTab(container)
     if anchorBox.editbox.Instructions then anchorBox.editbox.Instructions:Hide() end
     local isPanel = group.parentContainerId ~= nil
     local panelContainerFrame = isPanel and ("CooldownCompanionContainer" .. group.parentContainerId) or nil
-    anchorBox:SetLabel("Anchor to Frame")
+    anchorBox:SetLabel(L["Anchor to Frame"])
     local currentAnchor = group.anchor.relativeTo
     if currentAnchor == "UIParent" then currentAnchor = "" end
     if isPanel and currentAnchor == panelContainerFrame then currentAnchor = "" end
@@ -107,7 +108,7 @@ local function BuildLayoutTab(container)
     anchorRow:AddChild(anchorBox)
 
     local pickBtn = AceGUI:Create("Button")
-    pickBtn:SetText("Pick")
+    pickBtn:SetText(L["Pick"])
     pickBtn:SetRelativeWidth(0.24)
     pickBtn:SetCallback("OnClick", function()
         local grp = CS.selectedGroup
@@ -125,12 +126,12 @@ local function BuildLayoutTab(container)
 
     -- (?) tooltip for anchor picking
     CreateInfoButton(pickBtn.frame, pickBtn.frame, "LEFT", "RIGHT", 2, 0, {
-        "Pick Frame",
-        {"Hides the config panel and highlights frames under your cursor. Left-click a frame to anchor this group to it, or right-click to cancel.", 1, 1, 1, true},
+        L["Pick Frame"],
+        {L["Hides the config panel and highlights frames under your cursor. Left-click a frame to anchor this group to it, or right-click to cancel."], 1, 1, 1, true},
         " ",
-        {"You can also type a frame name directly into the editbox.", 1, 1, 1, true},
+        {L["You can also type a frame name directly into the editbox."], 1, 1, 1, true},
         " ",
-        {"Middle-click the draggable header to toggle lock/unlock.", 1, 1, 1, true},
+        {L["Middle-click the draggable header to toggle lock/unlock."], 1, 1, 1, true},
     }, tabInfoButtons)
 
     container:AddChild(anchorRow)
@@ -150,12 +151,12 @@ local function BuildLayoutTab(container)
         end
     end
 
-    AddAnchorDropdown(container, group.anchor, "point", "CENTER", refreshGroupAnchor, "Anchor Point")
-    AddAnchorDropdown(container, group.anchor, "relativePoint", "CENTER", refreshGroupAnchor, "Relative Point")
+    AddAnchorDropdown(container, group.anchor, "point", "CENTER", refreshGroupAnchor, L["Anchor Point"])
+    AddAnchorDropdown(container, group.anchor, "relativePoint", "CENTER", refreshGroupAnchor, L["Relative Point"])
 
     -- X Offset
     local xSlider = AceGUI:Create("Slider")
-    xSlider:SetLabel("X Offset")
+    xSlider:SetLabel(L["X Offset"])
     xSlider:SetSliderValues(-2000, 2000, 0.1)
     xSlider:SetValue(group.anchor.x or 0)
     xSlider:SetFullWidth(true)
@@ -171,7 +172,7 @@ local function BuildLayoutTab(container)
 
     -- Y Offset
     local ySlider = AceGUI:Create("Slider")
-    ySlider:SetLabel("Y Offset")
+    ySlider:SetLabel(L["Y Offset"])
     ySlider:SetSliderValues(-2000, 2000, 0.1)
     ySlider:SetValue(group.anchor.y or 0)
     ySlider:SetFullWidth(true)
@@ -190,8 +191,8 @@ local function BuildLayoutTab(container)
     -- ================================================================
     if group.displayMode == "text" then
         local orientDrop = AceGUI:Create("Dropdown")
-        orientDrop:SetLabel("Orientation")
-        orientDrop:SetList({ horizontal = "Horizontal", vertical = "Vertical" })
+        orientDrop:SetLabel(L["Orientation"])
+        orientDrop:SetList({ horizontal = L["Horizontal"], vertical = L["Vertical"] })
         orientDrop:SetValue(style.orientation or "vertical")
         orientDrop:SetFullWidth(true)
         orientDrop:SetCallback("OnValueChanged", function(widget, event, val)
@@ -203,7 +204,7 @@ local function BuildLayoutTab(container)
 
         if #group.buttons > 1 then
             local bprSlider = AceGUI:Create("Slider")
-            bprSlider:SetLabel("Entries per Row/Column")
+            bprSlider:SetLabel(L["Entries per Row/Column"])
             local numEntries = math.max(1, #group.buttons)
             bprSlider:SetSliderValues(1, numEntries, 1)
             bprSlider:SetValue(math.min(style.buttonsPerRow or 12, numEntries))
@@ -216,7 +217,7 @@ local function BuildLayoutTab(container)
         end
     elseif group.displayMode == "bars" then
         local vertFillCheck = AceGUI:Create("CheckBox")
-        vertFillCheck:SetLabel("Vertical Bar Fill")
+        vertFillCheck:SetLabel(L["Vertical Bar Fill"])
         vertFillCheck:SetValue(style.barFillVertical or false)
         vertFillCheck:SetFullWidth(true)
         vertFillCheck:SetCallback("OnValueChanged", function(widget, event, val)
@@ -227,7 +228,7 @@ local function BuildLayoutTab(container)
         container:AddChild(vertFillCheck)
 
         local reverseFillCheck = AceGUI:Create("CheckBox")
-        reverseFillCheck:SetLabel("Flip Fill/Drain Direction")
+        reverseFillCheck:SetLabel(L["Flip Fill/Drain Direction"])
         reverseFillCheck:SetValue(style.barReverseFill or false)
         reverseFillCheck:SetFullWidth(true)
         reverseFillCheck:SetCallback("OnValueChanged", function(widget, event, val)
@@ -238,7 +239,7 @@ local function BuildLayoutTab(container)
 
         if #group.buttons > 1 then
             local horzLayoutCheck = AceGUI:Create("CheckBox")
-            horzLayoutCheck:SetLabel("Horizontal Bar Layout")
+            horzLayoutCheck:SetLabel(L["Horizontal Bar Layout"])
             horzLayoutCheck:SetValue((style.orientation or "vertical") == "horizontal")
             horzLayoutCheck:SetFullWidth(true)
             horzLayoutCheck:SetCallback("OnValueChanged", function(widget, event, val)
@@ -250,8 +251,8 @@ local function BuildLayoutTab(container)
         end
     else
         local orientDrop = AceGUI:Create("Dropdown")
-        orientDrop:SetLabel("Orientation")
-        orientDrop:SetList({ horizontal = "Horizontal", vertical = "Vertical" })
+        orientDrop:SetLabel(L["Orientation"])
+        orientDrop:SetList({ horizontal = L["Horizontal"], vertical = L["Vertical"] })
         orientDrop:SetValue(style.orientation or "horizontal")
         orientDrop:SetFullWidth(true)
         orientDrop:SetCallback("OnValueChanged", function(widget, event, val)
@@ -274,7 +275,7 @@ local function BuildLayoutTab(container)
         end
         order = {"TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT"}
         local growthDrop = AceGUI:Create("Dropdown")
-        growthDrop:SetLabel("Growth Direction")
+        growthDrop:SetLabel(L["Growth Direction"])
         growthDrop:SetList(labels, order)
         growthDrop:SetValue(style.growthOrigin or "TOPLEFT")
         growthDrop:SetFullWidth(true)
@@ -290,7 +291,7 @@ local function BuildLayoutTab(container)
     if group.displayMode ~= "text" then
         local numButtons = math.max(1, #group.buttons)
         local bprSlider = AceGUI:Create("Slider")
-        bprSlider:SetLabel("Buttons Per Row/Column")
+        bprSlider:SetLabel(L["Buttons Per Row/Column"])
         bprSlider:SetSliderValues(1, numButtons, 1)
         bprSlider:SetValue(math.min(style.buttonsPerRow or 12, numButtons))
         bprSlider:SetFullWidth(true)
@@ -327,7 +328,7 @@ local function BuildLayoutTab(container)
     -- ADVANCED: Strata — Frame Strata (all modes) + Custom Strata (icon mode only)
     -- ================================================================
     local strataHeading = AceGUI:Create("Heading")
-    strataHeading:SetText("Strata")
+    strataHeading:SetText(L["Strata"])
     ColorHeading(strataHeading)
     strataHeading:SetFullWidth(true)
     container:AddChild(strataHeading)
@@ -352,7 +353,7 @@ local function BuildLayoutTab(container)
         }
 
         local frameStrataDrop = AceGUI:Create("Dropdown")
-        frameStrataDrop:SetLabel("Frame Strata")
+        frameStrataDrop:SetLabel(L["Frame Strata"])
         frameStrataDrop:SetList(frameStrataLabels, frameStrataOrder)
         frameStrataDrop:SetValue(group.frameStrata or "MEDIUM")
         frameStrataDrop:SetFullWidth(true)
@@ -363,12 +364,12 @@ local function BuildLayoutTab(container)
         container:AddChild(frameStrataDrop)
 
         CreateInfoButton(frameStrataDrop.frame, frameStrataDrop.label, "LEFT", "RIGHT", 4, 0, {
-            "Frame Strata",
-            {"Sets the rendering layer for this group.", 1, 1, 1, true},
+            L["Frame Strata"],
+            {L["Sets the rendering layer for this group."], 1, 1, 1, true},
             " ",
-            {"Higher strata groups fully overlap lower ones.", 1, 1, 1, true},
+            {L["Higher strata groups fully overlap lower ones."], 1, 1, 1, true},
             " ",
-            {"Only change this if you need one group to overlap another.", 1, 1, 1, true},
+            {L["Only change this if you need one group to overlap another."], 1, 1, 1, true},
         }, tabInfoButtons)
     end
 
@@ -377,7 +378,7 @@ local function BuildLayoutTab(container)
     local customStrataEnabled = type(style.strataOrder) == "table"
 
     local strataToggle = AceGUI:Create("CheckBox")
-    strataToggle:SetLabel("Custom Icon Strata")
+    strataToggle:SetLabel(L["Custom Icon Strata"])
     strataToggle:SetValue(customStrataEnabled)
     strataToggle:SetFullWidth(true)
     strataToggle:SetCallback("OnValueChanged", function(widget, event, val)
@@ -398,9 +399,9 @@ local function BuildLayoutTab(container)
     container:AddChild(strataToggle)
 
     CreateInfoButton(strataToggle.frame, strataToggle.checkbg, "LEFT", "RIGHT", strataToggle.text:GetStringWidth() + 4, 0, {
-        "Custom Icon Strata",
-        {"Controls the draw order of visual layers on each icon: Cooldown Swipe, Aura/Pandemic Glow, Ready Glow, Text Overlay, Assisted Highlight, and Proc Glow.", 1, 1, 1, true},
-        {"Layer 6 draws on top, Layer 1 on the bottom. When disabled, the default order is used.", 1, 1, 1, true},
+        L["Custom Icon Strata"],
+        {L["Controls the draw order of visual layers on each icon: Cooldown Swipe, Aura/Pandemic Glow, Ready Glow, Text Overlay, Assisted Highlight, and Proc Glow."], 1, 1, 1, true},
+        {L["Layer 6 draws on top, Layer 1 on the bottom. When disabled, the default order is used."], 1, 1, 1, true},
     }, tabInfoButtons)
 
     if customStrataEnabled then
@@ -527,7 +528,7 @@ local function BuildEffectsTab(container)
     -- Proc Glow enable toggle
     -- ================================================================
     local procEnableCb = AceGUI:Create("CheckBox")
-    procEnableCb:SetLabel("Show Proc Glow")
+    procEnableCb:SetLabel(L["Show Proc Glow"])
     procEnableCb:SetValue(style.procGlowStyle ~= "none")
     procEnableCb:SetFullWidth(true)
     procEnableCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -546,7 +547,7 @@ local function BuildEffectsTab(container)
 
     if procAdvExpanded and style.procGlowStyle ~= "none" then
     local procCombatCb = AceGUI:Create("CheckBox")
-    procCombatCb:SetLabel("Show Only In Combat")
+    procCombatCb:SetLabel(L["Show Only In Combat"])
     procCombatCb:SetValue(style.procGlowCombatOnly or false)
     procCombatCb:SetFullWidth(true)
     procCombatCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -561,7 +562,7 @@ local function BuildEffectsTab(container)
     end)
 
     local procPreviewBtn = AceGUI:Create("Button")
-    procPreviewBtn:SetText("Preview Proc Glow (3s)")
+    procPreviewBtn:SetText(L["Preview Proc Glow (3s)"])
     procPreviewBtn:SetFullWidth(true)
     procPreviewBtn:SetCallback("OnClick", function()
         CooldownCompanion:PlayGroupProcGlowPreview(CS.selectedGroup, 3)
@@ -575,7 +576,7 @@ local function BuildEffectsTab(container)
     -- Show Aura Glow enable toggle
     -- ================================================================
     local auraEnableCb = AceGUI:Create("CheckBox")
-    auraEnableCb:SetLabel("Show Aura Glow")
+    auraEnableCb:SetLabel(L["Show Aura Glow"])
     auraEnableCb:SetValue(style.auraGlowStyle ~= "none")
     auraEnableCb:SetFullWidth(true)
     auraEnableCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -590,7 +591,7 @@ local function BuildEffectsTab(container)
 
     if auraAdvExpanded and style.auraGlowStyle ~= "none" then
     local auraCombatCb = AceGUI:Create("CheckBox")
-    auraCombatCb:SetLabel("Show Only In Combat")
+    auraCombatCb:SetLabel(L["Show Only In Combat"])
     auraCombatCb:SetValue(style.auraGlowCombatOnly or false)
     auraCombatCb:SetFullWidth(true)
     auraCombatCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -601,7 +602,7 @@ local function BuildEffectsTab(container)
     ApplyCheckboxIndent(auraCombatCb, 20)
 
     local auraInvertCb = AceGUI:Create("CheckBox")
-    auraInvertCb:SetLabel("Show When Missing")
+    auraInvertCb:SetLabel(L["Show When Missing"])
     auraInvertCb:SetValue(style.auraGlowInvert or false)
     auraInvertCb:SetFullWidth(true)
     auraInvertCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -616,7 +617,7 @@ local function BuildEffectsTab(container)
     end)
 
     local auraPreviewBtn = AceGUI:Create("Button")
-    auraPreviewBtn:SetText("Preview Aura Glow (3s)")
+    auraPreviewBtn:SetText(L["Preview Aura Glow (3s)"])
     auraPreviewBtn:SetFullWidth(true)
     auraPreviewBtn:SetCallback("OnClick", function()
         CooldownCompanion:PlayGroupAuraGlowPreview(CS.selectedGroup, 3)
@@ -630,7 +631,7 @@ local function BuildEffectsTab(container)
     -- Pandemic Glow
     -- ================================================================
     local pandemicGlowCb = AceGUI:Create("CheckBox")
-    pandemicGlowCb:SetLabel("Show Pandemic Glow")
+    pandemicGlowCb:SetLabel(L["Show Pandemic Glow"])
     pandemicGlowCb:SetValue(style.showPandemicGlow ~= false)
     pandemicGlowCb:SetFullWidth(true)
     pandemicGlowCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -645,7 +646,7 @@ local function BuildEffectsTab(container)
 
     if pandemicAdvExpanded and style.showPandemicGlow ~= false then
     local pandemicCombatCb = AceGUI:Create("CheckBox")
-    pandemicCombatCb:SetLabel("Show Only In Combat")
+    pandemicCombatCb:SetLabel(L["Show Only In Combat"])
     pandemicCombatCb:SetValue(style.pandemicGlowCombatOnly or false)
     pandemicCombatCb:SetFullWidth(true)
     pandemicCombatCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -660,7 +661,7 @@ local function BuildEffectsTab(container)
     end)
 
     local pandemicPreviewBtn = AceGUI:Create("Button")
-    pandemicPreviewBtn:SetText("Preview Pandemic Glow (3s)")
+    pandemicPreviewBtn:SetText(L["Preview Pandemic Glow (3s)"])
     pandemicPreviewBtn:SetFullWidth(true)
     pandemicPreviewBtn:SetCallback("OnClick", function()
         CooldownCompanion:PlayGroupPandemicPreview(CS.selectedGroup, 3)
@@ -674,7 +675,7 @@ local function BuildEffectsTab(container)
     -- Ready Glow (glow while off cooldown)
     -- ================================================================
     local readyEnableCb = AceGUI:Create("CheckBox")
-    readyEnableCb:SetLabel("Show Ready Glow")
+    readyEnableCb:SetLabel(L["Show Ready Glow"])
     readyEnableCb:SetValue(style.readyGlowStyle and style.readyGlowStyle ~= "none")
     readyEnableCb:SetFullWidth(true)
     readyEnableCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -687,13 +688,13 @@ local function BuildEffectsTab(container)
     local readyAdvExpanded, readyAdvBtn = AddAdvancedToggle(readyEnableCb, "readyGlow", tabInfoButtons, style.readyGlowStyle and style.readyGlowStyle ~= "none")
     local readyPromoteBtn = CreateCheckboxPromoteButton(readyEnableCb, readyAdvBtn, "readyGlow", group, style)
     CreateInfoButton(readyEnableCb.frame, readyPromoteBtn, "LEFT", "RIGHT", 4, 0, {
-        "Ready Glow",
-        {"Adds a glow effect around buttons whose spells or items are off cooldown and ready to use.", 1, 1, 1, true},
+        L["Ready Glow"],
+        {L["Adds a glow effect around buttons whose spells or items are off cooldown and ready to use."], 1, 1, 1, true},
     }, tabInfoButtons)
 
     if readyAdvExpanded and style.readyGlowStyle and style.readyGlowStyle ~= "none" then
     local readyCombatCb = AceGUI:Create("CheckBox")
-    readyCombatCb:SetLabel("Show Only In Combat")
+    readyCombatCb:SetLabel(L["Show Only In Combat"])
     readyCombatCb:SetValue(style.readyGlowCombatOnly or false)
     readyCombatCb:SetFullWidth(true)
     readyCombatCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -704,7 +705,7 @@ local function BuildEffectsTab(container)
     ApplyCheckboxIndent(readyCombatCb, 20)
 
     local readyDurCb = AceGUI:Create("CheckBox")
-    readyDurCb:SetLabel("Auto-Hide After Duration")
+    readyDurCb:SetLabel(L["Auto-Hide After Duration"])
     readyDurCb:SetValue((style.readyGlowDuration or 0) > 0)
     readyDurCb:SetFullWidth(true)
     readyDurCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -717,7 +718,7 @@ local function BuildEffectsTab(container)
 
     if (style.readyGlowDuration or 0) > 0 then
         local readyDurSlider = AceGUI:Create("Slider")
-        readyDurSlider:SetLabel("Duration (seconds)")
+        readyDurSlider:SetLabel(L["Duration (seconds)"])
         readyDurSlider:SetSliderValues(0.5, 5, 0.5)
         readyDurSlider:SetValue(style.readyGlowDuration or 3)
         readyDurSlider:SetFullWidth(true)
@@ -733,7 +734,7 @@ local function BuildEffectsTab(container)
     end)
 
     local readyPreviewBtn = AceGUI:Create("Button")
-    readyPreviewBtn:SetText("Preview Ready Glow (3s)")
+    readyPreviewBtn:SetText(L["Preview Ready Glow (3s)"])
     readyPreviewBtn:SetFullWidth(true)
     readyPreviewBtn:SetCallback("OnClick", function()
         CooldownCompanion:PlayGroupReadyGlowPreview(CS.selectedGroup, 3)
@@ -747,7 +748,7 @@ local function BuildEffectsTab(container)
     -- Key Press Highlight (glow while keybind is held)
     -- ================================================================
     local kphEnableCb = AceGUI:Create("CheckBox")
-    kphEnableCb:SetLabel("Show Key Press Highlight")
+    kphEnableCb:SetLabel(L["Show Key Press Highlight"])
     kphEnableCb:SetValue(style.keyPressHighlightStyle and style.keyPressHighlightStyle ~= "none")
     kphEnableCb:SetFullWidth(true)
     kphEnableCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -760,13 +761,13 @@ local function BuildEffectsTab(container)
     local kphAdvExpanded, kphAdvBtn = AddAdvancedToggle(kphEnableCb, "keyPressHighlight", tabInfoButtons, style.keyPressHighlightStyle and style.keyPressHighlightStyle ~= "none")
     local kphPromoteBtn = CreateCheckboxPromoteButton(kphEnableCb, kphAdvBtn, "keyPressHighlight", group, style)
     CreateInfoButton(kphEnableCb.frame, kphPromoteBtn, "LEFT", "RIGHT", 4, 0, {
-        "Key Press Highlight",
-        {"Shows a glow overlay on buttons while their action bar keybind is physically held down.", 1, 1, 1, true},
+        L["Key Press Highlight"],
+        {L["Shows a glow overlay on buttons while their action bar keybind is physically held down."], 1, 1, 1, true},
     }, tabInfoButtons)
 
     if kphAdvExpanded and style.keyPressHighlightStyle and style.keyPressHighlightStyle ~= "none" then
     local kphCombatCb = AceGUI:Create("CheckBox")
-    kphCombatCb:SetLabel("Show Only In Combat")
+    kphCombatCb:SetLabel(L["Show Only In Combat"])
     kphCombatCb:SetValue(style.keyPressHighlightCombatOnly or false)
     kphCombatCb:SetFullWidth(true)
     kphCombatCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -781,7 +782,7 @@ local function BuildEffectsTab(container)
     end)
 
     local kphPreviewBtn = AceGUI:Create("Button")
-    kphPreviewBtn:SetText("Preview Key Press Highlight (3s)")
+    kphPreviewBtn:SetText(L["Preview Key Press Highlight (3s)"])
     kphPreviewBtn:SetFullWidth(true)
     kphPreviewBtn:SetCallback("OnClick", function()
         CooldownCompanion:PlayGroupKeyPressHighlightPreview(CS.selectedGroup, 3)
@@ -795,7 +796,7 @@ local function BuildEffectsTab(container)
     -- Desaturate on Cooldown
     -- ================================================================
     local desatCb = AceGUI:Create("CheckBox")
-    desatCb:SetLabel("Show Desaturate On Cooldown")
+    desatCb:SetLabel(L["Show Desaturate On Cooldown"])
     desatCb:SetValue(style.desaturateOnCooldown or false)
     desatCb:SetFullWidth(true)
     desatCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -809,7 +810,7 @@ local function BuildEffectsTab(container)
     -- Cooldown Swipe
     -- ================================================================
     local swipeCb = AceGUI:Create("CheckBox")
-    swipeCb:SetLabel("Show Cooldown/Duration Swipe")
+    swipeCb:SetLabel(L["Show Cooldown/Duration Swipe"])
     swipeCb:SetValue(style.showCooldownSwipe ~= false)
     swipeCb:SetFullWidth(true)
     swipeCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -825,7 +826,7 @@ local function BuildEffectsTab(container)
     if swipeAdvExpanded and style.showCooldownSwipe ~= false then
         -- Reverse Swipe
         local reverseCb = AceGUI:Create("CheckBox")
-        reverseCb:SetLabel("Reverse Swipe")
+        reverseCb:SetLabel(L["Reverse Swipe"])
         reverseCb:SetValue(style.cooldownSwipeReverse or false)
         reverseCb:SetFullWidth(true)
         reverseCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -837,7 +838,7 @@ local function BuildEffectsTab(container)
 
         -- Show Swipe Fill
         local fillCb = AceGUI:Create("CheckBox")
-        fillCb:SetLabel("Show Swipe Fill")
+        fillCb:SetLabel(L["Show Swipe Fill"])
         fillCb:SetValue(style.showCooldownSwipeFill ~= false)
         fillCb:SetFullWidth(true)
         fillCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -849,7 +850,7 @@ local function BuildEffectsTab(container)
 
         -- Show Swipe Edge
         local edgeCb = AceGUI:Create("CheckBox")
-        edgeCb:SetLabel("Show Swipe Edge")
+        edgeCb:SetLabel(L["Show Swipe Edge"])
         edgeCb:SetValue(style.showCooldownSwipeEdge ~= false)
         edgeCb:SetFullWidth(true)
         edgeCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -864,7 +865,7 @@ local function BuildEffectsTab(container)
     -- GCD Swipe
     -- ================================================================
     local gcdCb = AceGUI:Create("CheckBox")
-    gcdCb:SetLabel("Show GCD Swipe")
+    gcdCb:SetLabel(L["Show GCD Swipe"])
     gcdCb:SetValue(style.showGCDSwipe == true)
     gcdCb:SetFullWidth(true)
     gcdCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -902,7 +903,7 @@ local function BuildEffectsTab(container)
     -- Assisted Highlight (icon-only)
     -- ================================================================
     local assistedCb = AceGUI:Create("CheckBox")
-    assistedCb:SetLabel("Show Assisted Highlight")
+    assistedCb:SetLabel(L["Show Assisted Highlight"])
     assistedCb:SetValue(style.showAssistedHighlight or false)
     assistedCb:SetFullWidth(true)
     assistedCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -916,7 +917,7 @@ local function BuildEffectsTab(container)
 
     if assistedAdvExpanded and style.showAssistedHighlight then
     local assistedCombatCb = AceGUI:Create("CheckBox")
-    assistedCombatCb:SetLabel("Show Only In Combat")
+    assistedCombatCb:SetLabel(L["Show Only In Combat"])
     assistedCombatCb:SetValue(style.assistedHighlightCombatOnly or false)
     assistedCombatCb:SetFullWidth(true)
     assistedCombatCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -971,7 +972,7 @@ local function BuildAppearanceTab(container)
     -- Icon Settings (size, spacing)
     -- ================================================================
     local iconHeading = AceGUI:Create("Heading")
-    iconHeading:SetText("Icon Settings")
+    iconHeading:SetText(L["Icon Settings"])
     ColorHeading(iconHeading)
     iconHeading:SetFullWidth(true)
     container:AddChild(iconHeading)
@@ -984,14 +985,14 @@ local function BuildAppearanceTab(container)
 
     if not iconSettingsCollapsed then
     local squareCb = AceGUI:Create("CheckBox")
-    squareCb:SetLabel("Square Icons")
+    squareCb:SetLabel(L["Square Icons"])
     squareCb:SetValue(style.maintainAspectRatio or false)
     squareCb:SetFullWidth(true)
     if group.masqueEnabled then
         squareCb:SetDisabled(true)
         local masqueLabel = squareCb.frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         masqueLabel:SetPoint("LEFT", squareCb.checkbg, "RIGHT", squareCb.text:GetStringWidth() + 8, 0)
-        masqueLabel:SetText("|cff00ff00(Masque skinning is active)|r")
+        masqueLabel:SetText(L["|cff00ff00(Masque skinning is active)|r"])
         table.insert(appearanceTabElements, masqueLabel)
     end
     squareCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -1009,7 +1010,7 @@ local function BuildAppearanceTab(container)
     -- Size sliders — always visible
     if style.maintainAspectRatio then
         local sizeSlider = AceGUI:Create("Slider")
-        sizeSlider:SetLabel("Button Size")
+        sizeSlider:SetLabel(L["Button Size"])
         sizeSlider:SetSliderValues(10, 150, 0.1)
         sizeSlider:SetValue(style.buttonSize or ST.BUTTON_SIZE)
         sizeSlider:SetFullWidth(true)
@@ -1020,7 +1021,7 @@ local function BuildAppearanceTab(container)
         container:AddChild(sizeSlider)
     else
         local wSlider = AceGUI:Create("Slider")
-        wSlider:SetLabel("Icon Width")
+        wSlider:SetLabel(L["Icon Width"])
         wSlider:SetSliderValues(10, 150, 0.1)
         wSlider:SetValue(style.iconWidth or style.buttonSize or ST.BUTTON_SIZE)
         wSlider:SetFullWidth(true)
@@ -1031,7 +1032,7 @@ local function BuildAppearanceTab(container)
         container:AddChild(wSlider)
 
         local hSlider = AceGUI:Create("Slider")
-        hSlider:SetLabel("Icon Height")
+        hSlider:SetLabel(L["Icon Height"])
         hSlider:SetSliderValues(10, 150, 0.1)
         hSlider:SetValue(style.iconHeight or style.buttonSize or ST.BUTTON_SIZE)
         hSlider:SetFullWidth(true)
@@ -1043,7 +1044,7 @@ local function BuildAppearanceTab(container)
     end
 
     local borderSlider = AceGUI:Create("Slider")
-    borderSlider:SetLabel("Border Size")
+    borderSlider:SetLabel(L["Border Size"])
     borderSlider:SetSliderValues(0, 5, 0.1)
     borderSlider:SetValue(style.borderSize or ST.DEFAULT_BORDER_SIZE)
     borderSlider:SetFullWidth(true)
@@ -1058,7 +1059,7 @@ local function BuildAppearanceTab(container)
 
     if group.buttons and #group.buttons > 1 then
         local spacingSlider = AceGUI:Create("Slider")
-        spacingSlider:SetLabel("Button Spacing")
+        spacingSlider:SetLabel(L["Button Spacing"])
         spacingSlider:SetSliderValues(0, 30, 0.1)
         spacingSlider:SetValue(style.buttonSpacing or ST.BUTTON_SPACING)
         spacingSlider:SetFullWidth(true)
@@ -1072,7 +1073,7 @@ local function BuildAppearanceTab(container)
 
     -- Show Cooldown Text toggle
     local cdTextCb = AceGUI:Create("CheckBox")
-    cdTextCb:SetLabel("Show Cooldown Text")
+    cdTextCb:SetLabel(L["Show Cooldown Text"])
     cdTextCb:SetValue(style.showCooldownText or false)
     cdTextCb:SetFullWidth(true)
     cdTextCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -1087,14 +1088,14 @@ local function BuildAppearanceTab(container)
 
     if cdTextAdvExpanded and style.showCooldownText then
         AddFontControls(container, style, "cooldown", { size = 12 }, refreshStyle)
-        AddColorPicker(container, style, "cooldownFontColor", "Font Color", {1, 1, 1, 1}, false, refreshStyle, refreshStyle)
+        AddColorPicker(container, style, "cooldownFontColor", L["Font Color"], {1, 1, 1, 1}, false, refreshStyle, refreshStyle)
 
         local cdAnchorDrop = AddAnchorDropdown(container, style, "cooldownTextAnchor", "CENTER", refreshStyle)
 
         -- (?) tooltip for shared positioning
         CreateInfoButton(cdAnchorDrop.frame, cdAnchorDrop.label, "LEFT", "RIGHT", 4, 0, {
-            "Shared Position",
-            {"Position is shared with Aura Duration Text by default. Enable 'Separate Text Positions' in the Aura Duration Text section to use independent positions.", 1, 1, 1, true},
+            L["Shared Position"],
+            {L["Position is shared with Aura Duration Text by default. Enable 'Separate Text Positions' in the Aura Duration Text section to use independent positions."], 1, 1, 1, true},
         }, cdAnchorDrop)
 
         AddOffsetSliders(container, style, "cooldownTextXOffset", "cooldownTextYOffset", { x = 0, y = 0 }, refreshStyle)
@@ -1103,7 +1104,7 @@ local function BuildAppearanceTab(container)
 
     -- Show Charge Text toggle
     local chargeTextCb = AceGUI:Create("CheckBox")
-    chargeTextCb:SetLabel("Show Charge Text")
+    chargeTextCb:SetLabel(L["Show Charge Text"])
     chargeTextCb:SetValue(style.showChargeText ~= false)
     chargeTextCb:SetFullWidth(true)
     chargeTextCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -1118,16 +1119,16 @@ local function BuildAppearanceTab(container)
 
     if chargeAdvExpanded and style.showChargeText ~= false then
         AddFontControls(container, style, "charge", { size = 12 }, refreshStyle)
-        AddColorPicker(container, style, "chargeFontColor", "Font Color (Max Charges)", {1, 1, 1, 1}, true, refreshStyle, refreshStyle)
-        AddColorPicker(container, style, "chargeFontColorMissing", "Font Color (Missing Charges)", {1, 1, 1, 1}, true, refreshStyle, refreshStyle)
-        AddColorPicker(container, style, "chargeFontColorZero", "Font Color (Zero Charges)", {1, 1, 1, 1}, true, refreshStyle, refreshStyle)
+        AddColorPicker(container, style, "chargeFontColor", L["Font Color (Max Charges)"], {1, 1, 1, 1}, true, refreshStyle, refreshStyle)
+        AddColorPicker(container, style, "chargeFontColorMissing", L["Font Color (Missing Charges)"], {1, 1, 1, 1}, true, refreshStyle, refreshStyle)
+        AddColorPicker(container, style, "chargeFontColorZero", L["Font Color (Zero Charges)"], {1, 1, 1, 1}, true, refreshStyle, refreshStyle)
         AddAnchorDropdown(container, style, "chargeAnchor", "BOTTOMRIGHT", refreshStyle)
         AddOffsetSliders(container, style, "chargeXOffset", "chargeYOffset", { x = -2, y = 2 }, refreshStyle)
     end -- chargeAdvExpanded + showChargeText
 
     -- Show Aura Duration Text toggle
     local auraTextCb = AceGUI:Create("CheckBox")
-    auraTextCb:SetLabel("Show Aura Duration Text")
+    auraTextCb:SetLabel(L["Show Aura Duration Text"])
     auraTextCb:SetValue(style.showAuraText ~= false)
     auraTextCb:SetFullWidth(true)
     auraTextCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -1141,8 +1142,8 @@ local function BuildAppearanceTab(container)
     local auraTextPromoteBtn = CreateCheckboxPromoteButton(auraTextCb, auraTextAdvBtn, "auraText", group, style)
 
     local auraPosInfo = CreateInfoButton(auraTextCb.frame, auraTextPromoteBtn, "LEFT", "RIGHT", 4, 0, {
-        "Shared Position",
-        {"Position is shared with Cooldown Text by default. Enable 'Separate Text Positions' in advanced settings to use independent positions.", 1, 1, 1, true},
+        L["Shared Position"],
+        {L["Position is shared with Cooldown Text by default. Enable 'Separate Text Positions' in advanced settings to use independent positions."], 1, 1, 1, true},
     }, auraTextCb)
     if style.showAuraText == false then
         auraPosInfo:Hide()
@@ -1153,7 +1154,7 @@ local function BuildAppearanceTab(container)
         AddColorPicker(container, style, "auraTextFontColor", "Font Color", {0, 0.925, 1, 1}, false, refreshStyle, refreshStyle)
 
         local sepPosCb = AceGUI:Create("CheckBox")
-        sepPosCb:SetLabel("Separate Text Positions")
+        sepPosCb:SetLabel(L["Separate Text Positions"])
         sepPosCb:SetValue(style.separateTextPositions or false)
         sepPosCb:SetFullWidth(true)
         sepPosCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -1164,8 +1165,8 @@ local function BuildAppearanceTab(container)
         container:AddChild(sepPosCb)
 
         CreateInfoButton(sepPosCb.frame, sepPosCb.checkbg, "LEFT", "RIGHT", sepPosCb.text:GetStringWidth() + 4, 0, {
-            "Separate Text Positions",
-            {"When enabled, aura duration text and cooldown text use independent positions. Aura text position controls appear below when toggled on; cooldown text position is in the Cooldown Text section.", 1, 1, 1, true},
+            L["Separate Text Positions"],
+            {L["When enabled, aura duration text and cooldown text use independent positions. Aura text position controls appear below when toggled on; cooldown text position is in the Cooldown Text section."], 1, 1, 1, true},
         }, sepPosCb)
 
         if style.separateTextPositions then
@@ -1176,7 +1177,7 @@ local function BuildAppearanceTab(container)
 
     -- Show Aura Stack Text toggle
     local auraStackCb = AceGUI:Create("CheckBox")
-    auraStackCb:SetLabel("Show Aura Stack Text")
+    auraStackCb:SetLabel(L["Show Aura Stack Text"])
     auraStackCb:SetValue(style.showAuraStackText ~= false)
     auraStackCb:SetFullWidth(true)
     auraStackCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -1191,14 +1192,14 @@ local function BuildAppearanceTab(container)
 
     if style.showAuraStackText ~= false and auraStackAdvExpanded then
         AddFontControls(container, style, "auraStack", { size = 12 }, refreshStyle)
-        AddColorPicker(container, style, "auraStackFontColor", "Font Color", {1, 1, 1, 1}, true, refreshStyle, refreshStyle)
+        AddColorPicker(container, style, "auraStackFontColor", L["Font Color"], {1, 1, 1, 1}, true, refreshStyle, refreshStyle)
         AddAnchorDropdown(container, style, "auraStackAnchor", "BOTTOMLEFT", refreshStyle)
         AddOffsetSliders(container, style, "auraStackXOffset", "auraStackYOffset", { x = 2, y = 2 }, refreshStyle)
     end -- auraStackAdvExpanded + showAuraStackText
 
     -- Show Keybind Text toggle
     local kbCb = AceGUI:Create("CheckBox")
-    kbCb:SetLabel("Show Keybind Text")
+    kbCb:SetLabel(L["Show Keybind Text"])
     kbCb:SetValue(style.showKeybindText or false)
     kbCb:SetFullWidth(true)
     kbCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -1214,12 +1215,12 @@ local function BuildAppearanceTab(container)
     if style.showKeybindText and kbAdvExpanded then
         -- Keybind uses a hardcoded 4-point anchor (not the full 9-point list)
         local kbAnchorDrop = AceGUI:Create("Dropdown")
-        kbAnchorDrop:SetLabel("Anchor")
+        kbAnchorDrop:SetLabel(L["Anchor"])
         kbAnchorDrop:SetList({
-            TOPRIGHT = "Top Right",
-            TOPLEFT = "Top Left",
-            BOTTOMRIGHT = "Bottom Right",
-            BOTTOMLEFT = "Bottom Left",
+            TOPRIGHT = L["Top Right"],
+            TOPLEFT = L["Top Left"],
+            BOTTOMRIGHT = L["Bottom Right"],
+            BOTTOMLEFT = L["Bottom Left"],
         })
         kbAnchorDrop:SetValue(style.keybindAnchor or "TOPRIGHT")
         kbAnchorDrop:SetFullWidth(true)
@@ -1231,7 +1232,7 @@ local function BuildAppearanceTab(container)
 
         AddOffsetSliders(container, style, "keybindXOffset", "keybindYOffset", { x = -2, y = -2 }, refreshStyle)
         AddFontControls(container, style, "keybind", { size = 10, sizeMin = 6, sizeMax = 24 }, refreshStyle)
-        AddColorPicker(container, style, "keybindFontColor", "Font Color", {1, 1, 1, 1}, true, refreshStyle, refreshStyle)
+        AddColorPicker(container, style, "keybindFontColor", L["Font Color"], {1, 1, 1, 1}, true, refreshStyle, refreshStyle)
     end -- showKeybindText + kbAdvExpanded
 
     -- Compact Mode toggle + Max Visible Buttons slider
@@ -1239,7 +1240,7 @@ local function BuildAppearanceTab(container)
 
     -- Border heading
     local borderHeading = AceGUI:Create("Heading")
-    borderHeading:SetText("Border")
+    borderHeading:SetText(L["Border"])
     ColorHeading(borderHeading)
     borderHeading:SetFullWidth(true)
     container:AddChild(borderHeading)
@@ -1252,7 +1253,7 @@ local function BuildAppearanceTab(container)
     CreatePromoteButton(borderHeading, "borderSettings", CS.selectedButton and group.buttons[CS.selectedButton], style)
 
     if not borderCollapsed then
-    local borderColor = AddColorPicker(container, style, "borderColor", "Border Color", {0, 0, 0, 1}, true, refreshStyle, refreshStyle)
+    local borderColor = AddColorPicker(container, style, "borderColor", L["Border Color"], {0, 0, 0, 1}, true, refreshStyle, refreshStyle)
     if group.masqueEnabled then
         borderColor:SetDisabled(true)
     end
@@ -1260,7 +1261,7 @@ local function BuildAppearanceTab(container)
 
     -- Icon Tint
     local iconTintHeading = AceGUI:Create("Heading")
-    iconTintHeading:SetText("Icon Tint")
+    iconTintHeading:SetText(L["Icon Tint"])
     ColorHeading(iconTintHeading)
     iconTintHeading:SetFullWidth(true)
     container:AddChild(iconTintHeading)
@@ -1273,20 +1274,20 @@ local function BuildAppearanceTab(container)
     local iconTintPromoteBtn = CreatePromoteButton(iconTintHeading, "iconTint", CS.selectedButton and group.buttons[CS.selectedButton], style)
 
     local iconTintInfoBtn = CreateInfoButton(iconTintHeading.frame, iconTintPromoteBtn, "LEFT", "RIGHT", 2, 0, {
-        "Icon Tint",
-        {"Recolor or fade icons without affecting cooldown text, glows, or borders.", 1, 1, 1, true},
+        L["Icon Tint"],
+        {L["Recolor or fade icons without affecting cooldown text, glows, or borders."], 1, 1, 1, true},
         " ",
-        {"Base Icon Color:", 1, 0.82, 0},
-        {"The default color for your icons. Lower the alpha to make icons semi-transparent while everything else stays visible.", 1, 1, 1, true},
+        {L["Base Icon Color:"], 1, 0.82, 0},
+        {L["The default color for your icons. Lower the alpha to make icons semi-transparent while everything else stays visible."], 1, 1, 1, true},
         " ",
-        {"Cooldown Tint:", 1, 0.82, 0},
-        {"A separate color used only while an ability is on cooldown. Great for dimming icons on cooldown while keeping ready abilities bright.", 1, 1, 1, true},
+        {L["Cooldown Tint:"], 1, 0.82, 0},
+        {L["A separate color used only while an ability is on cooldown. Great for dimming icons on cooldown while keeping ready abilities bright."], 1, 1, 1, true},
         " ",
-        {"Aura Tint:", 1, 0.82, 0},
-        {"A separate color applied while an aura-tracked ability's buff or debuff is active. Only affects buttons with aura tracking enabled.", 1, 1, 1, true},
+        {L["Aura Tint:"], 1, 0.82, 0},
+        {L["A separate color applied while an aura-tracked ability's buff or debuff is active. Only affects buttons with aura tracking enabled."], 1, 1, 1, true},
         " ",
-        {"Unusable Dimming Tint:", 1, 0.82, 0},
-        {"A color applied when an ability is not usable. Only appears when unusable dimming is enabled in the Indicators tab.", 1, 1, 1, true},
+        {L["Unusable Dimming Tint:"], 1, 0.82, 0},
+        {L["A color applied when an ability is not usable. Only appears when unusable dimming is enabled in the Indicators tab."], 1, 1, 1, true},
     }, tabInfoButtons)
 
     iconTintHeading.right:ClearAllPoints()
@@ -1302,7 +1303,7 @@ local function BuildAppearanceTab(container)
         end)
 
         local resetTintBtn = AceGUI:Create("Button")
-        resetTintBtn:SetText("Reset Colors to Default")
+        resetTintBtn:SetText(L["Reset Colors to Default"])
         resetTintBtn:SetFullWidth(true)
         resetTintBtn:SetCallback("OnClick", function()
             style.iconTintColor = {1, 1, 1, 1}
@@ -1332,7 +1333,7 @@ local function BuildAppearanceTab(container)
 
         if not masqueCollapsed then
         local masqueCb = AceGUI:Create("CheckBox")
-        masqueCb:SetLabel("Enable Masque Skinning")
+        masqueCb:SetLabel(L["Enable Masque Skinning"])
         masqueCb:SetValue(group.masqueEnabled or false)
         masqueCb:SetFullWidth(true)
         masqueCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -1342,11 +1343,11 @@ local function BuildAppearanceTab(container)
         container:AddChild(masqueCb)
 
         CreateInfoButton(masqueCb.frame, masqueCb.checkbg, "LEFT", "RIGHT", masqueCb.text:GetStringWidth() + 4, 0, {
-            "Masque Skinning",
-            {"Uses the Masque addon to apply custom button skins to this group. Configure skins via /masque or the Masque config panel.", 1, 1, 1, true},
+            L["Masque Skinning"],
+            {L["Uses the Masque addon to apply custom button skins to this group. Configure skins via /masque or the Masque config panel."], 1, 1, 1, true},
             " ",
-            {"Overridden Settings:", 1, 0.82, 0},
-            {"Border Size, Border Color, Square Icons (forced on)", 0.7, 0.7, 0.7, true},
+            {L["Overridden Settings:"], 1, 0.82, 0},
+            {L["Border Size, Border Color, Square Icons (forced on)"], 0.7, 0.7, 0.7, true},
         }, tabInfoButtons)
         end -- not masqueCollapsed
     end
@@ -1376,7 +1377,7 @@ local function BuildContainerGeneralTab(scroll, containerId)
 
     -- Enabled
     local enabledCb = AceGUI:Create("CheckBox")
-    enabledCb:SetLabel("Enabled")
+    enabledCb:SetLabel(L["Enabled"])
     enabledCb:SetFullWidth(true)
     enabledCb:SetValue(container.enabled ~= false)
     enabledCb:SetCallback("OnValueChanged", function(widget, event, value)
@@ -1388,7 +1389,7 @@ local function BuildContainerGeneralTab(scroll, containerId)
 
     -- Locked
     local lockedCb = AceGUI:Create("CheckBox")
-    lockedCb:SetLabel("Locked")
+    lockedCb:SetLabel(L["Locked"])
     lockedCb:SetFullWidth(true)
     lockedCb:SetValue(container.locked == true)
     lockedCb:SetCallback("OnValueChanged", function(widget, event, value)
@@ -1403,7 +1404,7 @@ local function BuildContainerGeneralTab(scroll, containerId)
     -- Layout
     -- ================================================================
     local layoutHeading = AceGUI:Create("Heading")
-    layoutHeading:SetText("Layout")
+    layoutHeading:SetText(L["Layout"])
     ColorHeading(layoutHeading)
     layoutHeading:SetFullWidth(true)
     scroll:AddChild(layoutHeading)
@@ -1425,7 +1426,7 @@ local function BuildContainerGeneralTab(scroll, containerId)
 
     local anchorBox = AceGUI:Create("EditBox")
     if anchorBox.editbox.Instructions then anchorBox.editbox.Instructions:Hide() end
-    anchorBox:SetLabel("Anchor to Frame")
+    anchorBox:SetLabel(L["Anchor to Frame"])
     local currentAnchor = container.anchor.relativeTo
     if currentAnchor == "UIParent" then currentAnchor = "" end
     anchorBox:SetText(currentAnchor)
@@ -1463,7 +1464,7 @@ local function BuildContainerGeneralTab(scroll, containerId)
     anchorRow:AddChild(anchorBox)
 
     local pickBtn = AceGUI:Create("Button")
-    pickBtn:SetText("Pick")
+    pickBtn:SetText(L["Pick"])
     pickBtn:SetRelativeWidth(0.24)
     pickBtn:SetCallback("OnClick", function()
         CS.StartPickFrame(function(name)
@@ -1506,12 +1507,12 @@ local function BuildContainerGeneralTab(scroll, containerId)
         end
     end
 
-    AddAnchorDropdown(scroll, container.anchor, "point", "CENTER", refreshContainerAnchor, "Anchor Point")
-    AddAnchorDropdown(scroll, container.anchor, "relativePoint", "CENTER", refreshContainerAnchor, "Relative Point")
+    AddAnchorDropdown(scroll, container.anchor, "point", "CENTER", refreshContainerAnchor, L["Anchor Point"])
+    AddAnchorDropdown(scroll, container.anchor, "relativePoint", "CENTER", refreshContainerAnchor, L["Relative Point"])
 
     -- X Offset
     local xSlider = AceGUI:Create("Slider")
-    xSlider:SetLabel("X Offset")
+    xSlider:SetLabel(L["X Offset"])
     xSlider:SetSliderValues(-2000, 2000, 0.1)
     xSlider:SetValue(container.anchor.x or 0)
     xSlider:SetFullWidth(true)
@@ -1527,7 +1528,7 @@ local function BuildContainerGeneralTab(scroll, containerId)
 
     -- Y Offset
     local ySlider = AceGUI:Create("Slider")
-    ySlider:SetLabel("Y Offset")
+    ySlider:SetLabel(L["Y Offset"])
     ySlider:SetSliderValues(-2000, 2000, 0.1)
     ySlider:SetValue(container.anchor.y or 0)
     ySlider:SetFullWidth(true)
@@ -1547,7 +1548,7 @@ local function BuildContainerGeneralTab(scroll, containerId)
     -- Frame Strata
     -- ================================================================
     local strataHeading = AceGUI:Create("Heading")
-    strataHeading:SetText("Frame Strata")
+    strataHeading:SetText(L["Frame Strata"])
     strataHeading:SetFullWidth(true)
     scroll:AddChild(strataHeading)
 
@@ -1565,7 +1566,7 @@ local function BuildContainerGeneralTab(scroll, containerId)
         ["HIGH"] = "High",
     }
     local strataDrop = AceGUI:Create("Dropdown")
-    strataDrop:SetLabel("Container Frame Strata")
+    strataDrop:SetLabel(L["Container Frame Strata"])
     strataDrop:SetList(strataOptions)
     strataDrop:SetValue(container.frameStrata or "MEDIUM")
     strataDrop:SetFullWidth(true)
@@ -1611,7 +1612,7 @@ local function BuildContainerLoadConditionsTab(scroll, containerId)
     end
 
     local heading = AceGUI:Create("Heading")
-    heading:SetText("Do Not Load When In")
+    heading:SetText(L["Do Not Load When In"])
     ColorHeading(heading)
     heading:SetFullWidth(true)
     scroll:AddChild(heading)
@@ -1624,15 +1625,15 @@ local function BuildContainerLoadConditionsTab(scroll, containerId)
 
     if not instanceCollapsed then
     local conditions = {
-        { key = "raid",          label = "Raid" },
-        { key = "dungeon",       label = "Dungeon" },
-        { key = "delve",         label = "Delve" },
-        { key = "battleground",  label = "Battleground" },
-        { key = "arena",         label = "Arena" },
-        { key = "openWorld",     label = "Open World" },
-        { key = "rested",        label = "Rested Area" },
-        { key = "petBattle",     label = "Pet Battle", default = true },
-        { key = "vehicleUI",     label = "Vehicle / Override UI", default = true },
+        { key = "raid",          label = L["Raid"] },
+        { key = "dungeon",       label = L["Dungeon"] },
+        { key = "delve",         label = L["Delve"] },
+        { key = "battleground",  label = L["Battleground"] },
+        { key = "arena",         label = L["Arena"] },
+        { key = "openWorld",     label = L["Open World"] },
+        { key = "rested",        label = L["Rested Area"] },
+        { key = "petBattle",     label = L["Pet Battle"], default = true },
+        { key = "vehicleUI",     label = L["Vehicle / Override UI"], default = true },
     }
 
     for _, cond in ipairs(conditions) do
@@ -1642,7 +1643,7 @@ local function BuildContainerLoadConditionsTab(scroll, containerId)
 
     -- Spec filter section
     local specHeading = AceGUI:Create("Heading")
-    specHeading:SetText("Specialization Filter")
+    specHeading:SetText(L["Specialization Filter"])
     ColorHeading(specHeading)
     specHeading:SetFullWidth(true)
     scroll:AddChild(specHeading)
@@ -1673,7 +1674,7 @@ local function BuildContainerLoadConditionsTab(scroll, containerId)
 
     if hasFolderSpecs then
         local inheritedLabel = AceGUI:Create("Label")
-        inheritedLabel:SetText("|cff888888Specs set by the parent folder cannot be changed here.|r")
+        inheritedLabel:SetText(L["|cff888888Specs set by the parent folder cannot be changed here.|r"])
         inheritedLabel:SetFullWidth(true)
         scroll:AddChild(inheritedLabel)
     end
@@ -1752,7 +1753,7 @@ local function BuildContainerLoadConditionsTab(scroll, containerId)
     end
     if hasOwnSpecs then
         local clearBtn = AceGUI:Create("Button")
-        clearBtn:SetText("Clear All Spec Filters")
+        clearBtn:SetText(L["Clear All Spec Filters"])
         clearBtn:SetFullWidth(true)
         clearBtn:SetCallback("OnClick", function()
             if folderSpecs then

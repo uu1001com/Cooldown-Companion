@@ -5,6 +5,7 @@
 
 local ADDON_NAME, ST = ...
 local CooldownCompanion = ST.Addon
+local L = LibStub("AceLocale-3.0"):GetLocale("CooldownCompanion", true) or {}
 local AceGUI = LibStub("AceGUI-3.0")
 local CS = ST._configState
 
@@ -645,7 +646,7 @@ local function OpenFormatEditor(style, groupId, opts)
     end
 
     local window = AceGUI:Create("Window")
-    window:SetTitle((opts and opts.title) or "Format String Editor")
+    window:SetTitle((opts and opts.title) or L["Format String Editor"])
     window:SetWidth(400)
     window:SetHeight(600)
     window:SetLayout("List")
@@ -664,7 +665,7 @@ local function OpenFormatEditor(style, groupId, opts)
     -- EDIT BOX (MultiLineEditBox) with inline syntax coloring
     -- ================================================================
     local editGroup = AceGUI:Create("MultiLineEditBox")
-    editGroup:SetLabel("Format String")
+    editGroup:SetLabel(L["Format String"])
     editGroup:SetFullWidth(true)
     editGroup:SetNumLines(6)
     editGroup.button:Hide()  -- hide "Accept" button, we save on change
@@ -706,7 +707,7 @@ local function OpenFormatEditor(style, groupId, opts)
     -- PREVIEW SECTION (directly beneath edit box)
     -- ================================================================
     local previewHeading = AceGUI:Create("Heading")
-    previewHeading:SetText("Preview")
+    previewHeading:SetText(L["Preview"])
     previewHeading:SetFullWidth(true)
     window:AddChild(previewHeading)
 
@@ -811,22 +812,22 @@ local function OpenFormatEditor(style, groupId, opts)
     -- TOKEN INSERT BUTTONS
     -- ================================================================
     local tokenHeading = AceGUI:Create("Heading")
-    tokenHeading:SetText("Insert Token")
+    tokenHeading:SetText(L["Insert Token"])
     tokenHeading:SetFullWidth(true)
     window:AddChild(tokenHeading)
 
     local tokenInfo = CreateInfoButton(tokenHeading.frame, tokenHeading.label, "LEFT", "RIGHT", 4, 0, {
-        {"Available Tokens", 1, 0.82, 0},
+        {L["Available Tokens"], 1, 0.82, 0},
         " ",
-        {"|cff00ff00{name}|r  Spell/item display name", 1, 1, 1},
-        {"|cff00ff00{time}|r  Cooldown time remaining", 1, 1, 1},
-        {"|cff00ff00{charges}|r  Current charges (if spell has charges)", 1, 1, 1},
-        {"|cff00ff00{maxcharges}|r  Maximum charges (if spell has charges)", 1, 1, 1},
-        {"|cff00ff00{stacks}|r  Aura stacks / item count", 1, 1, 1},
-        {"|cff00ff00{aura}|r  Aura duration remaining", 1, 1, 1},
-        {"|cff00ff00{keybind}|r  Keybind text", 1, 1, 1},
-        {"|cff00ff00{status}|r  Shows ready, cooldown, or aura automatically", 1, 1, 1},
-        {"|cff00ff00{icon}|r  Inline spell icon", 1, 1, 1},
+        {L["|cff00ff00{name}|r  Spell/item display name"], 1, 1, 1},
+        {L["|cff00ff00{time}|r  Cooldown time remaining"], 1, 1, 1},
+        {L["|cff00ff00{charges}|r  Current charges (if spell has charges)"], 1, 1, 1},
+        {L["|cff00ff00{maxcharges}|r  Maximum charges (if spell has charges)"], 1, 1, 1},
+        {L["|cff00ff00{stacks}|r  Aura stacks / item count"], 1, 1, 1},
+        {L["|cff00ff00{aura}|r  Aura duration remaining"], 1, 1, 1},
+        {L["|cff00ff00{keybind}|r  Keybind text"], 1, 1, 1},
+        {L["|cff00ff00{status}|r  Shows ready, cooldown, or aura automatically"], 1, 1, 1},
+        {L["|cff00ff00{icon}|r  Inline spell icon"], 1, 1, 1},
     }, tokenHeading)
     tokenHeading.right:ClearAllPoints()
     tokenHeading.right:SetPoint("RIGHT", tokenHeading.frame, "RIGHT", -3, 0)
@@ -851,23 +852,23 @@ local function OpenFormatEditor(style, groupId, opts)
     -- EFFECT INSERT BUTTONS
     -- ================================================================
     local effectHeading = AceGUI:Create("Heading")
-    effectHeading:SetText("Insert Effect")
+    effectHeading:SetText(L["Insert Effect"])
     effectHeading:SetFullWidth(true)
     window:AddChild(effectHeading)
 
     local effectInfo = CreateInfoButton(effectHeading.frame, effectHeading.label, "LEFT", "RIGHT", 4, 0, {
-        {"Visual Effects", 1, 0.82, 0, true},
+        {L["Visual Effects"], 1, 0.82, 0, true},
         " ",
-        {"Wrap tokens or text in effect tags to add", 1, 1, 1, true},
-        {"animated visual indicators.", 1, 1, 1, true},
+        {L["Wrap tokens or text in effect tags to add"], 1, 1, 1, true},
+        {L["animated visual indicators."], 1, 1, 1, true},
         " ",
-        {"|cffcc44ff{pulse}|r  Smooth sine alpha oscillation (~1Hz)", 1, 1, 1, true},
+        {L["|cffcc44ff{pulse}|r  Smooth sine alpha oscillation (~1Hz)"], 1, 1, 1, true},
         " ",
-        {"Composes with conditionals:", 0.7, 0.7, 0.7, true},
-        {"|cffffff00{?charges}|r|cffcc44ff{pulse}|r|cff00ff00{charges}|r|cffcc44ff{/pulse}|r|cffffff00{/charges}|r", 0.7, 0.7, 0.7, true},
-        {"Pulse only when charges exist.", 0.7, 0.7, 0.7, true},
+        {L["Composes with conditionals:"], 0.7, 0.7, 0.7, true},
+        {L["|cffffff00{?charges}|r|cffcc44ff{pulse}|r|cff00ff00{charges}|r|cffcc44ff{/pulse}|r|cffffff00{/charges}|r"], 0.7, 0.7, 0.7, true},
+        {L["Pulse only when charges exist."], 0.7, 0.7, 0.7, true},
         " ",
-        {"Pulse affects the whole line's alpha.", 0.7, 0.7, 0.7, true},
+        {L["Pulse affects the whole line's alpha."], 0.7, 0.7, 0.7, true},
     }, effectHeading)
     effectHeading.right:ClearAllPoints()
     effectHeading.right:SetPoint("RIGHT", effectHeading.frame, "RIGHT", -3, 0)
@@ -890,27 +891,27 @@ local function OpenFormatEditor(style, groupId, opts)
     -- COLOR INSERT BUTTONS
     -- ================================================================
     local colorHeading = AceGUI:Create("Heading")
-    colorHeading:SetText("Insert Color")
+    colorHeading:SetText(L["Insert Color"])
     colorHeading:SetFullWidth(true)
     window:AddChild(colorHeading)
 
     local colorInfo = CreateInfoButton(colorHeading.frame, colorHeading.label, "LEFT", "RIGHT", 4, 0, {
-        {"Color Overrides", 1, 0.82, 0, true},
+        {L["Color Overrides"], 1, 0.82, 0, true},
         " ",
-        {"Wrap tokens or literal text to force a specific", 1, 1, 1, true},
-        {"color, overriding the token's default coloring.", 1, 1, 1, true},
+        {L["Wrap tokens or literal text to force a specific"], 1, 1, 1, true},
+        {L["color, overriding the token's default coloring."], 1, 1, 1, true},
         " ",
-        {"|cff44bbff{cooldown}|r  Cooldown color (red by default)", 1, 1, 1, true},
-        {"|cff44bbff{ready}|r  Ready color (green by default)", 1, 1, 1, true},
-        {"|cff44bbff{active}|r  Aura active color (cyan by default)", 1, 1, 1, true},
-        {"|cff44bbff{custom}|r  User-defined custom color (gold by default)", 1, 1, 1, true},
+        {L["|cff44bbff{cooldown}|r  Cooldown color (red by default)"], 1, 1, 1, true},
+        {L["|cff44bbff{ready}|r  Ready color (green by default)"], 1, 1, 1, true},
+        {L["|cff44bbff{active}|r  Aura active color (cyan by default)"], 1, 1, 1, true},
+        {L["|cff44bbff{custom}|r  User-defined custom color (gold by default)"], 1, 1, 1, true},
         " ",
-        {"Example:", 0.7, 0.7, 0.7, true},
-        {"|cff44bbff{cooldown}|r|cff00ff00{name}|r|cff44bbff{/cooldown}|r", 0.7, 0.7, 0.7, true},
-        {"Shows the spell name in the cooldown color.", 0.7, 0.7, 0.7, true},
+        {L["Example:"], 0.7, 0.7, 0.7, true},
+        {L["|cff44bbff{cooldown}|r|cff00ff00{name}|r|cff44bbff{/cooldown}|r"], 0.7, 0.7, 0.7, true},
+        {L["Shows the spell name in the cooldown color."], 0.7, 0.7, 0.7, true},
         " ",
-        {"Nestable: inner color overrides outer.", 0.7, 0.7, 0.7, true},
-        {"Composes with conditionals and effects.", 0.7, 0.7, 0.7, true},
+        {L["Nestable: inner color overrides outer."], 0.7, 0.7, 0.7, true},
+        {L["Composes with conditionals and effects."], 0.7, 0.7, 0.7, true},
     }, colorHeading)
     colorHeading.right:ClearAllPoints()
     colorHeading.right:SetPoint("RIGHT", colorHeading.frame, "RIGHT", -3, 0)
@@ -933,45 +934,45 @@ local function OpenFormatEditor(style, groupId, opts)
         colorGroup:AddChild(colorBtn)
     end
 
-    AddColorPicker(window, style, "textCustomColor", "Custom Color", {1, 0.82, 0, 1}, true, UpdateDisplay, UpdateDisplay)
+    AddColorPicker(window, style, "textCustomColor", L["Custom Color"], {1, 0.82, 0, 1}, true, UpdateDisplay, UpdateDisplay)
 
     -- ================================================================
     -- CONDITIONAL INSERT BUTTONS
     -- ================================================================
     local condHeading = AceGUI:Create("Heading")
-    condHeading:SetText("Insert Conditional")
+    condHeading:SetText(L["Insert Conditional"])
     condHeading:SetFullWidth(true)
     window:AddChild(condHeading)
 
     local condInfo = CreateInfoButton(condHeading.frame, condHeading.label, "LEFT", "RIGHT", 4, 0, {
-        {"Available Conditionals", 1, 0.82, 0, true},
+        {L["Available Conditionals"], 1, 0.82, 0, true},
         " ",
-        {"Show or hide parts of the format string based", 1, 1, 1, true},
-        {"on whether a condition is true.", 1, 1, 1, true},
+        {L["Show or hide parts of the format string based"], 1, 1, 1, true},
+        {L["on whether a condition is true."], 1, 1, 1, true},
         " ",
-        {"|cffffff00{time}|r  Cooldown time remaining", 1, 1, 1, true},
-        {"|cffffff00{available}|r  Off cooldown / has charges", 1, 1, 1, true},
-        {"|cffffff00{charges}|r  Spell has charges", 1, 1, 1, true},
-        {"|cffffff00{maxcharges}|r  At max charges", 1, 1, 1, true},
-        {"|cffffff00{missingcharges}|r  Recharging with charges left", 1, 1, 1, true},
-        {"|cffffff00{zerocharges}|r  All charges spent", 1, 1, 1, true},
-        {"|cffffff00{stacks}|r  Aura stacks / item count", 1, 1, 1, true},
-        {"|cffffff00{aura}|r  Aura duration remaining", 1, 1, 1, true},
-        {"|cffffff00{keybind}|r  Keybind text", 1, 1, 1, true},
-        {"|cffffff00{pandemic}|r  Aura in pandemic window", 1, 1, 1, true},
-        {"|cffffff00{proc}|r  Spell proc overlay active", 1, 1, 1, true},
-        {"|cffffff00{unusable}|r  Spell/item not usable", 1, 1, 1, true},
-        {"|cffffff00{oor}|r  Target out of range", 1, 1, 1, true},
-        {"|cffffff00{incombat}|r  Player is in combat", 1, 1, 1, true},
+        {L["|cffffff00{time}|r  Cooldown time remaining"], 1, 1, 1, true},
+        {L["|cffffff00{available}|r  Off cooldown / has charges"], 1, 1, 1, true},
+        {L["|cffffff00{charges}|r  Spell has charges"], 1, 1, 1, true},
+        {L["|cffffff00{maxcharges}|r  At max charges"], 1, 1, 1, true},
+        {L["|cffffff00{missingcharges}|r  Recharging with charges left"], 1, 1, 1, true},
+        {L["|cffffff00{zerocharges}|r  All charges spent"], 1, 1, 1, true},
+        {L["|cffffff00{stacks}|r  Aura stacks / item count"], 1, 1, 1, true},
+        {L["|cffffff00{aura}|r  Aura duration remaining"], 1, 1, 1, true},
+        {L["|cffffff00{keybind}|r  Keybind text"], 1, 1, 1, true},
+        {L["|cffffff00{pandemic}|r  Aura in pandemic window"], 1, 1, 1, true},
+        {L["|cffffff00{proc}|r  Spell proc overlay active"], 1, 1, 1, true},
+        {L["|cffffff00{unusable}|r  Spell/item not usable"], 1, 1, 1, true},
+        {L["|cffffff00{oor}|r  Target out of range"], 1, 1, 1, true},
+        {L["|cffffff00{incombat}|r  Player is in combat"], 1, 1, 1, true},
         " ",
-        {"Syntax", 1, 0.82, 0, true},
+        {L["Syntax"], 1, 0.82, 0, true},
         " ",
-        {"|cffffff00{?token}|r...|cffffff00{/token}|r  Show when true", 1, 1, 1, true},
-        {"|cffff8844{!token}|r...|cffff8844{/token}|r  Show when false", 1, 1, 1, true},
+        {L["|cffffff00{?token}|r...|cffffff00{/token}|r  Show when true"], 1, 1, 1, true},
+        {L["|cffff8844{!token}|r...|cffff8844{/token}|r  Show when false"], 1, 1, 1, true},
         " ",
-        {"Example:", 0.7, 0.7, 0.7, true},
-        {"|cffffff00{?time}|rCD: |cff00ff00{time}|r|cffffff00{/time}|r", 0.7, 0.7, 0.7, true},
-        {"Shows 'CD: 1:23' on cooldown, nothing when ready.", 0.7, 0.7, 0.7, true},
+        {L["Example:"], 0.7, 0.7, 0.7, true},
+        {L["|cffffff00{?time}|rCD: |cff00ff00{time}|r|cffffff00{/time}|r"], 0.7, 0.7, 0.7, true},
+        {L["Shows 'CD: 1:23' on cooldown, nothing when ready."], 0.7, 0.7, 0.7, true},
     }, condHeading)
     condHeading.right:ClearAllPoints()
     condHeading.right:SetPoint("RIGHT", condHeading.frame, "RIGHT", -3, 0)
@@ -997,13 +998,13 @@ local function OpenFormatEditor(style, groupId, opts)
     end
 
     local showBtn = AceGUI:Create("Button")
-    showBtn:SetText("Show if present")
+    showBtn:SetText(L["Show if present"])
     showBtn:SetAutoWidth(true)
     showBtn:SetCallback("OnClick", function() InsertConditional("?") end)
     condGroup:AddChild(showBtn)
 
     local hideBtn = AceGUI:Create("Button")
-    hideBtn:SetText("Show if empty")
+    hideBtn:SetText(L["Show if empty"])
     hideBtn:SetAutoWidth(true)
     hideBtn:SetCallback("OnClick", function() InsertConditional("!") end)
     condGroup:AddChild(hideBtn)
@@ -1012,7 +1013,7 @@ local function OpenFormatEditor(style, groupId, opts)
     -- SAVE BUTTON (clamped to window bottom)
     -- ================================================================
     local saveBtn = AceGUI:Create("Button")
-    saveBtn:SetText("Save & Close")
+    saveBtn:SetText(L["Save & Close"])
     saveBtn:SetCallback("OnClick", function()
         if currentRawText and currentRawText ~= "" then
             currentFormatTarget.textFormat = currentRawText
@@ -1063,7 +1064,7 @@ local function OpenFormatEditor(style, groupId, opts)
         currentGroupId = newGroupId
         currentFormatTarget = newOpts.saveTarget or newStyle
         currentDefaultFormat = newOpts.defaultFormat or "{name}  {status}"
-        window:SetTitle(newOpts.title or "Format String Editor")
+        window:SetTitle(newOpts.title or L["Format String Editor"])
         currentRawText = currentFormatTarget.textFormat or currentDefaultFormat
         ApplyColorized(currentRawText, #currentRawText)
         UpdateDisplay()

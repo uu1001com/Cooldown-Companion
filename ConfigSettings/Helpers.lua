@@ -1,5 +1,6 @@
 local ADDON_NAME, ST = ...
 local CooldownCompanion = ST.Addon
+local L = LibStub("AceLocale-3.0"):GetLocale("CooldownCompanion", true) or {}
 local AceGUI = LibStub("AceGUI-3.0")
 local CS = ST._configState
 local ShowPopupAboveConfig = CS.ShowPopupAboveConfig
@@ -132,7 +133,7 @@ local function AddAdvancedToggle(parentWidget, settingKey, tabInfoBtns, isEnable
 
     btn:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:AddLine(isExpanded and "Hide advanced settings" or "Show advanced settings")
+        GameTooltip:AddLine(isExpanded and L["Hide advanced settings"] or L["Show advanced settings"])
         GameTooltip:Show()
     end)
     btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -180,9 +181,9 @@ local function CreatePromoteButton(headingWidget, sectionId, buttonData, groupSt
     promoteBtn:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         if canPromote then
-            GameTooltip:AddLine("Override " .. sectionLabel .. " for this button")
+            GameTooltip:AddLine(L["Override "] .. sectionLabel .. L[" for this button"])
         else
-            GameTooltip:AddLine("Select a button to add an override", 0.5, 0.5, 0.5)
+            GameTooltip:AddLine(L["Select a button to add an override"], 0.5, 0.5, 0.5)
         end
         GameTooltip:Show()
     end)
@@ -221,7 +222,7 @@ local function CreateRevertButton(headingWidget, buttonData, sectionId)
     revertBtn:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         local sectionDef = ST.OVERRIDE_SECTIONS[sectionId]
-        GameTooltip:AddLine("Revert " .. (sectionDef and sectionDef.label or sectionId) .. " to group defaults")
+        GameTooltip:AddLine(L["Revert "] .. (sectionDef and sectionDef.label or sectionId) .. L[" to group defaults"])
         GameTooltip:Show()
     end)
     revertBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -272,9 +273,9 @@ local function CreateCheckboxPromoteButton(cbWidget, anchorAfterFrame, sectionId
     promoteBtn:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         if canPromote then
-            GameTooltip:AddLine("Override " .. sectionLabel .. " for this button")
+            GameTooltip:AddLine(L["Override "] .. sectionLabel .. L[" for this button"])
         else
-            GameTooltip:AddLine("Select a button to add an override", 0.5, 0.5, 0.5)
+            GameTooltip:AddLine(L["Select a button to add an override"], 0.5, 0.5, 0.5)
         end
         GameTooltip:Show()
     end)
@@ -411,7 +412,7 @@ end
 -- conditional growth-direction + max-visible-buttons controls.
 local function BuildCompactModeControls(container, group, tabInfoButtons)
     local compactCb = AceGUI:Create("CheckBox")
-    compactCb:SetLabel("Compact Mode")
+    compactCb:SetLabel(L["Compact Mode"])
     compactCb:SetValue(group.compactLayout or false)
     compactCb:SetFullWidth(true)
     compactCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -437,13 +438,13 @@ local function BuildCompactModeControls(container, group, tabInfoButtons)
         compactXOff = compactCb.text:GetStringWidth() + 6
     end
     CreateInfoButton(compactCb.frame, compactAnchor, "LEFT", compactRelPoint, compactXOff, 0, {
-        "Compact Mode",
-        {"When per-button visibility rules hide a button, shift remaining buttons to fill the gap and resize the group frame to fit visible buttons only.", 1, 1, 1, true},
+        L["Compact Mode"],
+        {L["When per-button visibility rules hide a button, shift remaining buttons to fill the gap and resize the group frame to fit visible buttons only."], 1, 1, 1, true},
     }, tabInfoButtons)
 
     if compactAdvExpanded and group.compactLayout then
         local growthDirectionDrop = AceGUI:Create("Dropdown")
-        growthDirectionDrop:SetLabel("Growth Direction")
+        growthDirectionDrop:SetLabel(L["Growth Direction"])
         growthDirectionDrop:SetList(GetCompactGrowthDirectionLabels(group), {"start", "center", "end"})
         growthDirectionDrop:SetValue(NormalizeCompactGrowthDirection(group.compactGrowthDirection))
         growthDirectionDrop:SetFullWidth(true)
@@ -460,13 +461,13 @@ local function BuildCompactModeControls(container, group, tabInfoButtons)
         container:AddChild(growthDirectionDrop)
 
         CreateInfoButton(growthDirectionDrop.frame, growthDirectionDrop.label, "LEFT", "CENTER", growthDirectionDrop.label:GetStringWidth() / 2 + 4, 0, {
-            "Growth Direction",
-            {"Choose which edge acts as the compact anchor icon/bar as visibility changes. Horizontal uses Left/Center/Right, vertical uses Top/Center/Bottom.", 1, 1, 1, true},
+            L["Growth Direction"],
+            {L["Choose which edge acts as the compact anchor icon/bar as visibility changes. Horizontal uses Left/Center/Right, vertical uses Top/Center/Bottom."], 1, 1, 1, true},
         }, tabInfoButtons)
 
         local totalButtons = #group.buttons
         local maxVisSlider = AceGUI:Create("Slider")
-        maxVisSlider:SetLabel("Max Visible Buttons")
+        maxVisSlider:SetLabel(L["Max Visible Buttons"])
         maxVisSlider:SetSliderValues(1, math.max(totalButtons, 1), 1)
         maxVisSlider:SetValue(group.maxVisibleButtons == 0 and totalButtons or group.maxVisibleButtons)
         maxVisSlider:SetFullWidth(true)
@@ -483,8 +484,8 @@ local function BuildCompactModeControls(container, group, tabInfoButtons)
         container:AddChild(maxVisSlider)
 
         CreateInfoButton(maxVisSlider.frame, maxVisSlider.label, "LEFT", "CENTER", maxVisSlider.label:GetStringWidth() / 2 + 4, 0, {
-            "Max Visible Buttons",
-            {"Limits how many buttons can appear at once. The first buttons (by group order) that pass visibility checks are shown; the rest are hidden.", 1, 1, 1, true},
+            L["Max Visible Buttons"],
+            {L["Limits how many buttons can appear at once. The first buttons (by group order) that pass visibility checks are shown; the rest are hidden."], 1, 1, 1, true},
         }, tabInfoButtons)
     end
 end
@@ -507,25 +508,25 @@ local function BuildGroupSettingPresetControls(container, group, mode, tabInfoBu
     end
 
     local heading = AceGUI:Create("Heading")
-    heading:SetText(mode == "bars" and "Bar Panel Preset" or "Icon Panel Preset")
+    heading:SetText(mode == "bars" and L["Bar Panel Preset"] or L["Icon Panel Preset"])
     ColorHeading(heading)
     heading:SetFullWidth(true)
     container:AddChild(heading)
 
-    local presetModeLabel = mode == "bars" and "Bar Panel Presets" or "Icon Panel Presets"
+    local presetModeLabel = mode == "bars" and L["Bar Panel Presets"] or L["Icon Panel Presets"]
     local modeSpecificLine = mode == "bars"
-        and "Bar presets only work on bar panels."
-        or "Icon presets only work on icon panels."
+        and L["Bar presets only work on bar panels."]
+        or L["Icon presets only work on icon panels."]
     local headingInfoBtn = CreateInfoButton(heading.frame, heading.label, "LEFT", "RIGHT", 4, 0, {
         presetModeLabel,
-        {"Click Save to store this panel's settings as a preset.", 1, 1, 1},
+        {L["Click Save to store this panel's settings as a preset."], 1, 1, 1},
         " ",
-        {"Presets save appearance, indicator, and text settings.", 1, 1, 1},
-        {"Load Conditions (including Spec/Hero filters) are not saved or changed.", 1, 1, 1},
-        {"Presets do not include Columns 1, 2, or 3.", 1, 1, 1},
-        {"Anchors are not saved or changed.", 1, 1, 1},
+        {L["Presets save appearance, indicator, and text settings."], 1, 1, 1},
+        {L["Load Conditions (including Spec/Hero filters) are not saved or changed."], 1, 1, 1},
+        {L["Presets do not include Columns 1, 2, or 3."], 1, 1, 1},
+        {L["Anchors are not saved or changed."], 1, 1, 1},
         " ",
-        {"Apply resets preset settings first, then applies the preset.", 1, 1, 1},
+        {L["Apply resets preset settings first, then applies the preset."], 1, 1, 1},
         " ",
         {modeSpecificLine, 1, 1, 1},
     }, tabInfoButtons)
@@ -536,7 +537,7 @@ local function BuildGroupSettingPresetControls(container, group, mode, tabInfoBu
     heading.right:SetPoint("LEFT", headingInfoBtn, "RIGHT", 4, 0)
 
     local presetDrop = AceGUI:Create("Dropdown")
-    presetDrop:SetLabel("Preset")
+    presetDrop:SetLabel(L["Preset"])
     presetDrop:SetList(presetList, presetOrder)
     presetDrop:SetValue(selectedPreset)
     presetDrop:SetFullWidth(true)
@@ -556,7 +557,7 @@ local function BuildGroupSettingPresetControls(container, group, mode, tabInfoBu
 
     if #presetOrder == 0 then
         local hintLabel = AceGUI:Create("Label")
-        hintLabel:SetText("|cff888888No presets saved for this group mode yet.|r")
+        hintLabel:SetText(L["|cff888888No presets saved for this group mode yet.|r"])
         hintLabel:SetFullWidth(true)
         container:AddChild(hintLabel)
     end
@@ -566,7 +567,7 @@ local function BuildGroupSettingPresetControls(container, group, mode, tabInfoBu
     buttonRow:SetLayout("Flow")
 
     applyBtn = AceGUI:Create("Button")
-    applyBtn:SetText("Apply")
+    applyBtn:SetText(L["Apply"])
     applyBtn:SetRelativeWidth(0.32)
     applyBtn:SetCallback("OnClick", function()
         local presetName = CS.groupPresetSelection and CS.groupPresetSelection[mode]
@@ -577,18 +578,18 @@ local function BuildGroupSettingPresetControls(container, group, mode, tabInfoBu
             if err == "missing_preset" and CS.groupPresetSelection then
                 CS.groupPresetSelection[mode] = nil
             end
-            CooldownCompanion:Print("Preset apply failed.")
+            CooldownCompanion:Print(L["Preset apply failed."])
         end
         CooldownCompanion:RefreshConfigPanel()
     end)
     buttonRow:AddChild(applyBtn)
 
     local saveBtn = AceGUI:Create("Button")
-    saveBtn:SetText("Save")
+    saveBtn:SetText(L["Save"])
     saveBtn:SetRelativeWidth(0.32)
     saveBtn:SetCallback("OnClick", function()
         if not ShowPopupAboveConfig then
-            CooldownCompanion:Print("Preset save is unavailable.")
+            CooldownCompanion:Print(L["Preset save is unavailable."])
             return
         end
         ShowPopupAboveConfig("CDC_SAVE_GROUP_SETTINGS_PRESET", nil, {
@@ -600,13 +601,13 @@ local function BuildGroupSettingPresetControls(container, group, mode, tabInfoBu
     buttonRow:AddChild(saveBtn)
 
     deleteBtn = AceGUI:Create("Button")
-    deleteBtn:SetText("Delete")
+    deleteBtn:SetText(L["Delete"])
     deleteBtn:SetRelativeWidth(0.32)
     deleteBtn:SetCallback("OnClick", function()
         local presetName = CS.groupPresetSelection and CS.groupPresetSelection[mode]
         if not presetName then return end
         if not ShowPopupAboveConfig then
-            CooldownCompanion:Print("Preset delete is unavailable.")
+            CooldownCompanion:Print(L["Preset delete is unavailable."])
             return
         end
         ShowPopupAboveConfig("CDC_DELETE_GROUP_SETTINGS_PRESET", presetName, {
@@ -653,15 +654,15 @@ local function CreateCharacterCopyButton(enableCb, systemKey, label, onCopied)
 
     btn:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText("Copy " .. label .. " Settings")
-        GameTooltip:AddLine("Copy settings from another character on this profile.", 1, 1, 1, true)
+        GameTooltip:SetText(L["Copy "] .. label .. L[" Settings"])
+        GameTooltip:AddLine(L["Copy settings from another character on this profile."], 1, 1, 1, true)
         GameTooltip:Show()
     end)
     btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     btn:SetScript("OnClick", function()
         if not CS.charCopyMenu then
-            CS.charCopyMenu = CreateFrame("Frame", "CDCCharCopyMenu", UIParent, "UIDropDownMenuTemplate")
+            CS.charCopyMenu = CreateFrame("Frame", L["CDCCharCopyMenu"], UIParent, "UIDropDownMenuTemplate")
         end
         local vals, order = CooldownCompanion:GetCharacterScopedSettingsCopyOptions(systemKey)
         if #order == 0 then return end
@@ -674,7 +675,7 @@ local function CreateCharacterCopyButton(enableCb, systemKey, label, onCopied)
                 info.func = function()
                     CloseDropDownMenus()
                     if not ShowPopupAboveConfig then
-                        CooldownCompanion:Print("Copy confirmation is unavailable.")
+                        CooldownCompanion:Print(L["Copy confirmation is unavailable."])
                         return
                     end
                     ShowPopupAboveConfig("CDC_CONFIRM_CHARACTER_SCOPED_COPY", label, {
@@ -771,7 +772,7 @@ local function AddFontControls(container, tbl, prefix, defaults, refreshFn)
     local outlineKey = prefix .. "FontOutline"
 
     local fontSizeSlider = AceGUI:Create("Slider")
-    fontSizeSlider:SetLabel("Font Size")
+    fontSizeSlider:SetLabel(L["Font Size"])
     fontSizeSlider:SetSliderValues(defaults.sizeMin or 8, defaults.sizeMax or 32, defaults.sizeStep or 1)
     fontSizeSlider:SetValue(tbl[sizeKey] or defaults.size or 12)
     fontSizeSlider:SetFullWidth(true)
@@ -782,7 +783,7 @@ local function AddFontControls(container, tbl, prefix, defaults, refreshFn)
     container:AddChild(fontSizeSlider)
 
     local fontDrop = AceGUI:Create("Dropdown")
-    fontDrop:SetLabel("Font")
+    fontDrop:SetLabel(L["Font"])
     CS.SetupFontDropdown(fontDrop)
     fontDrop:SetValue(tbl[fontKey] or defaults.font or "Friz Quadrata TT")
     fontDrop:SetFullWidth(true)
@@ -793,7 +794,7 @@ local function AddFontControls(container, tbl, prefix, defaults, refreshFn)
     container:AddChild(fontDrop)
 
     local outlineDrop = AceGUI:Create("Dropdown")
-    outlineDrop:SetLabel("Font Outline")
+    outlineDrop:SetLabel(L["Font Outline"])
     outlineDrop:SetList(CS.outlineOptions)
     outlineDrop:SetValue(tbl[outlineKey] or defaults.outline or "OUTLINE")
     outlineDrop:SetFullWidth(true)
@@ -811,7 +812,7 @@ local function AddOffsetSliders(container, tbl, xKey, yKey, defaults, refreshFn)
     local step = defaults.step or 0.1
 
     local xSlider = AceGUI:Create("Slider")
-    xSlider:SetLabel("X Offset")
+    xSlider:SetLabel(L["X Offset"])
     xSlider:SetSliderValues(-range, range, step)
     xSlider:SetValue(tbl[xKey] or defaults.x or 0)
     xSlider:SetFullWidth(true)
@@ -822,7 +823,7 @@ local function AddOffsetSliders(container, tbl, xKey, yKey, defaults, refreshFn)
     container:AddChild(xSlider)
 
     local ySlider = AceGUI:Create("Slider")
-    ySlider:SetLabel("Y Offset")
+    ySlider:SetLabel(L["Y Offset"])
     ySlider:SetSliderValues(-range, range, step)
     ySlider:SetValue(tbl[yKey] or defaults.y or 0)
     ySlider:SetFullWidth(true)
@@ -888,7 +889,7 @@ local function BuildAlphaControls(container, config, refreshFn, collapseKey, opt
     local tabInfoBtns = CS.tabInfoButtons
 
     local alphaHeading = AceGUI:Create("Heading")
-    alphaHeading:SetText("Alpha")
+    alphaHeading:SetText(L["Alpha"])
     ColorHeading(alphaHeading)
     alphaHeading:SetFullWidth(true)
     container:AddChild(alphaHeading)
@@ -902,7 +903,7 @@ local function BuildAlphaControls(container, config, refreshFn, collapseKey, opt
     if alphaCollapsed then return end
 
     local baseAlphaSlider = AceGUI:Create("Slider")
-    baseAlphaSlider:SetLabel("Baseline Alpha")
+    baseAlphaSlider:SetLabel(L["Baseline Alpha"])
     baseAlphaSlider:SetSliderValues(0, 1, 0.1)
     baseAlphaSlider:SetValue(config.baselineAlpha or 1)
     baseAlphaSlider:SetFullWidth(true)
@@ -915,8 +916,8 @@ local function BuildAlphaControls(container, config, refreshFn, collapseKey, opt
     container:AddChild(baseAlphaSlider)
 
     CreateInfoButton(baseAlphaSlider.frame, baseAlphaSlider.label, "LEFT", "CENTER", baseAlphaSlider.label:GetStringWidth() / 2 + 4, 0, {
-        "Alpha",
-        {"Controls transparency. Alpha = 1 is fully visible. Alpha = 0 means completely hidden.\n\nThe first four options (In Combat, Out of Combat, Regular Mount, Skyriding) are 3-way toggles — click to cycle through Disabled, |cff00ff00Fully Visible|r, and |cffff0000Fully Hidden|r.\n\n|cff00ff00Fully Visible|r overrides alpha to 1 when the condition is met.\n\n|cffff0000Fully Hidden|r overrides alpha to 0 when the condition is met.\n\nIf both apply simultaneously, |cff00ff00Fully Visible|r takes priority.", 1, 1, 1, true},
+        L["Alpha"],
+        {L["Controls transparency. Alpha = 1 is fully visible. Alpha = 0 means completely hidden.\n\nThe first four options (In Combat, Out of Combat, Regular Mount, Skyriding) are 3-way toggles — click to cycle through Disabled, |cff00ff00Fully Visible|r, and |cffff0000Fully Hidden|r.\n\n|cff00ff00Fully Visible|r overrides alpha to 1 when the condition is met.\n\n|cffff0000Fully Hidden|r overrides alpha to 0 when the condition is met.\n\nIf both apply simultaneously, |cff00ff00Fully Visible|r takes priority."], 1, 1, 1, true},
     }, tabInfoBtns)
 
     do
@@ -928,9 +929,9 @@ local function BuildAlphaControls(container, config, refreshFn, collapseKey, opt
 
         local function TriStateLabel(base, value)
             if value == true then
-                return base .. " - |cff00ff00Fully Visible|r"
+                return base .. L[" - |cff00ff00Fully Visible|r"]
             elseif value == nil then
-                return base .. " - |cffff0000Fully Hidden|r"
+                return base .. L[" - |cffff0000Fully Hidden|r"]
             end
             return base
         end
@@ -950,10 +951,10 @@ local function BuildAlphaControls(container, config, refreshFn, collapseKey, opt
             return cb
         end
 
-        container:AddChild(CreateTriStateToggle("In Combat", "forceAlphaInCombat", "forceHideInCombat"))
-        container:AddChild(CreateTriStateToggle("Out of Combat", "forceAlphaOutOfCombat", "forceHideOutOfCombat"))
-        container:AddChild(CreateTriStateToggle("Regular Mount", "forceAlphaRegularMounted", "forceHideRegularMounted"))
-        container:AddChild(CreateTriStateToggle("Skyriding", "forceAlphaDragonriding", "forceHideDragonriding"))
+        container:AddChild(CreateTriStateToggle(L["In Combat"], "forceAlphaInCombat", "forceHideInCombat"))
+        container:AddChild(CreateTriStateToggle(L["Out of Combat"], "forceAlphaOutOfCombat", "forceHideOutOfCombat"))
+        container:AddChild(CreateTriStateToggle(L["Regular Mount"], "forceAlphaRegularMounted", "forceHideRegularMounted"))
+        container:AddChild(CreateTriStateToggle(L["Skyriding"], "forceAlphaDragonriding", "forceHideDragonriding"))
 
         local mountedActive = config.forceAlphaRegularMounted
             or config.forceHideRegularMounted
@@ -963,7 +964,7 @@ local function BuildAlphaControls(container, config, refreshFn, collapseKey, opt
         if mountedActive and (opts.isGlobal or isDruid) then
             local travelVal = config.treatTravelFormAsMounted or false
             local travelCb = AceGUI:Create("CheckBox")
-            travelCb:SetLabel("Include Druid Travel Form (applies to both)")
+            travelCb:SetLabel(L["Include Druid Travel Form (applies to both)"])
             travelCb:SetValue(travelVal)
             travelCb:SetFullWidth(true)
             travelCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -974,7 +975,7 @@ local function BuildAlphaControls(container, config, refreshFn, collapseKey, opt
 
         local targetVal = config.forceAlphaTargetExists or false
         local targetCb = AceGUI:Create("CheckBox")
-        targetCb:SetLabel(targetVal and "Target Exists - |cff00ff00Fully Visible|r" or "Target Exists")
+        targetCb:SetLabel(targetVal and L["Target Exists - |cff00ff00Fully Visible|r"] or L["Target Exists"])
         targetCb:SetValue(targetVal)
         targetCb:SetFullWidth(true)
         targetCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -985,7 +986,7 @@ local function BuildAlphaControls(container, config, refreshFn, collapseKey, opt
 
         local mouseoverVal = config.forceAlphaMouseover or false
         local mouseoverCb = AceGUI:Create("CheckBox")
-        mouseoverCb:SetLabel(mouseoverVal and "Mouseover - |cff00ff00Fully Visible|r" or "Mouseover")
+        mouseoverCb:SetLabel(mouseoverVal and L["Mouseover - |cff00ff00Fully Visible|r"] or L["Mouseover"])
         mouseoverCb:SetValue(mouseoverVal)
         mouseoverCb:SetFullWidth(true)
         mouseoverCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -995,12 +996,12 @@ local function BuildAlphaControls(container, config, refreshFn, collapseKey, opt
         container:AddChild(mouseoverCb)
 
         CreateInfoButton(mouseoverCb.frame, mouseoverCb.text, "LEFT", "RIGHT", 4, 0, {
-            "Mouseover",
-            {"When enabled, mousing over forces full visibility. Like all |cff00ff00Force Visible|r conditions, this overrides |cffff0000Force Hidden|r.", 1, 1, 1, true},
+            L["Mouseover"],
+            {L["When enabled, mousing over forces full visibility. Like all |cff00ff00Force Visible|r conditions, this overrides |cffff0000Force Hidden|r."], 1, 1, 1, true},
         }, tabInfoBtns)
 
         local fadeCb = AceGUI:Create("CheckBox")
-        fadeCb:SetLabel("Custom Fade Settings")
+        fadeCb:SetLabel(L["Custom Fade Settings"])
         fadeCb:SetValue(config.customFade or false)
         fadeCb:SetFullWidth(true)
         fadeCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -1011,7 +1012,7 @@ local function BuildAlphaControls(container, config, refreshFn, collapseKey, opt
 
         if config.customFade then
         local fadeDelaySlider = AceGUI:Create("Slider")
-        fadeDelaySlider:SetLabel("Fade Delay (seconds)")
+        fadeDelaySlider:SetLabel(L["Fade Delay (seconds)"])
         fadeDelaySlider:SetSliderValues(0, 5, 0.1)
         fadeDelaySlider:SetValue(config.fadeDelay or 1)
         fadeDelaySlider:SetFullWidth(true)
@@ -1021,7 +1022,7 @@ local function BuildAlphaControls(container, config, refreshFn, collapseKey, opt
         container:AddChild(fadeDelaySlider)
 
         local fadeInSlider = AceGUI:Create("Slider")
-        fadeInSlider:SetLabel("Fade In Duration (seconds)")
+        fadeInSlider:SetLabel(L["Fade In Duration (seconds)"])
         fadeInSlider:SetSliderValues(0, 5, 0.1)
         fadeInSlider:SetValue(config.fadeInDuration or 0.2)
         fadeInSlider:SetFullWidth(true)
@@ -1031,7 +1032,7 @@ local function BuildAlphaControls(container, config, refreshFn, collapseKey, opt
         container:AddChild(fadeInSlider)
 
         local fadeOutSlider = AceGUI:Create("Slider")
-        fadeOutSlider:SetLabel("Fade Out Duration (seconds)")
+        fadeOutSlider:SetLabel(L["Fade Out Duration (seconds)"])
         fadeOutSlider:SetSliderValues(0, 5, 0.1)
         fadeOutSlider:SetValue(config.fadeOutDuration or 0.2)
         fadeOutSlider:SetFullWidth(true)

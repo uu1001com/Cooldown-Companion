@@ -9,7 +9,7 @@
 ]]
 
 local ADDON_NAME, ST = ...
-
+local L = LibStub("AceLocale-3.0"):GetLocale("CooldownCompanion", true) or {}
 ------------------------------------------------------------------------
 -- Timing & Limits
 ------------------------------------------------------------------------
@@ -77,25 +77,25 @@ local DEFAULT_POWER_COLORS = {
 }
 
 local POWER_NAMES = {
-    [0]  = "Mana",
-    [1]  = "Rage",
-    [2]  = "Focus",
-    [3]  = "Energy",
-    [4]  = "Combo Points",
-    [5]  = "Runes",
-    [6]  = "Runic Power",
-    [7]  = "Soul Shards",
-    [8]  = "Astral Power",
-    [9]  = "Holy Power",
-    [11] = "Maelstrom",
-    [12] = "Chi",
-    [13] = "Insanity",
-    [16] = "Arcane Charges",
-    [17] = "Fury",
-    [100] = "Maelstrom Weapon",
-    [101] = "Stagger",
-    [18] = "Pain",
-    [19] = "Essence",
+    [0]  = L["Mana"],
+    [1]  = L["Rage"],
+    [2]  = L["Focus"],
+    [3]  = L["Energy"],
+    [4]  = L["Combo Points"],
+    [5]  = L["Runes"],
+    [6]  = L["Runic Power"],
+    [7]  = L["Soul Shards"],
+    [8]  = L["Astral Power"],
+    [9]  = L["Holy Power"],
+    [11] = L["Maelstrom"],
+    [12] = L["Chi"],
+    [13] = L["Insanity"],
+    [16] = L["Arcane Charges"],
+    [17] = L["Fury"],
+    [100] = L["Maelstrom Weapon"],
+    [101] = L["Stagger"],
+    [18] = L["Pain"],
+    [19] = L["Essence"],
 }
 
 ------------------------------------------------------------------------

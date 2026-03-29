@@ -7,6 +7,7 @@
 
 local ADDON_NAME, ST = ...
 local CooldownCompanion = ST.Addon
+local L = LibStub("AceLocale-3.0"):GetLocale("CooldownCompanion", true) or {}
 local AceGUI = LibStub("AceGUI-3.0")
 local CS = ST._configState
 
@@ -94,7 +95,7 @@ local function BuildResourceBarAnchoringPanel(container)
 
     -- Enable Resource Bars
     local enableCb = AceGUI:Create("CheckBox")
-    enableCb:SetLabel("Enable Resource Bars")
+    enableCb:SetLabel(L["Enable Resource Bars"])
     enableCb:SetValue(settings.enabled)
     enableCb:SetFullWidth(true)
     enableCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -105,7 +106,7 @@ local function BuildResourceBarAnchoringPanel(container)
     end)
     container:AddChild(enableCb)
 
-    CreateCharacterCopyButton(enableCb, "resourceBars", "Resource Bars", function()
+    CreateCharacterCopyButton(enableCb, "resourceBars", L["Resource Bars"], function()
         CooldownCompanion:EvaluateResourceBars()
         CooldownCompanion:UpdateAnchorStacking()
         CooldownCompanion:RefreshConfigPanel()
@@ -118,10 +119,10 @@ local function BuildResourceBarAnchoringPanel(container)
 
     -- Anchoring Mode dropdown
     local anchorModeDrop = AceGUI:Create("Dropdown")
-    anchorModeDrop:SetLabel("Anchoring Mode")
+    anchorModeDrop:SetLabel(L["Anchoring Mode"])
     anchorModeDrop:SetList({
-        attached = "Attached to Panel",
-        independent = "Independent",
+        attached = L["Attached to Panel"],
+        independent = L["Independent"],
     }, { "attached", "independent" })
     anchorModeDrop:SetValue(isIndependentStack and "independent" or "attached")
     anchorModeDrop:SetFullWidth(true)
@@ -136,7 +137,7 @@ local function BuildResourceBarAnchoringPanel(container)
     -- Inherit panel alpha (only when attached to panel)
     if not isIndependentStack then
         local inheritCb = AceGUI:Create("CheckBox")
-        inheritCb:SetLabel("Inherit panel alpha")
+        inheritCb:SetLabel(L["Inherit panel alpha"])
         inheritCb:SetValue(settings.inheritAlpha)
         inheritCb:SetFullWidth(true)
         inheritCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -149,7 +150,7 @@ local function BuildResourceBarAnchoringPanel(container)
 
     -- Preview toggle (ephemeral)
     local previewCb = AceGUI:Create("CheckBox")
-    previewCb:SetLabel("Preview Resource Bars")
+    previewCb:SetLabel(L["Preview Resource Bars"])
     previewCb:SetValue(CooldownCompanion:IsResourceBarPreviewActive())
     previewCb:SetFullWidth(true)
     previewCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -163,7 +164,7 @@ local function BuildResourceBarAnchoringPanel(container)
 
     -- ============ Resource Toggles Section ============
     local toggleHeading = AceGUI:Create("Heading")
-    toggleHeading:SetText("Resource Toggles")
+    toggleHeading:SetText(L["Resource Toggles"])
     ColorHeading(toggleHeading)
     toggleHeading:SetFullWidth(true)
     container:AddChild(toggleHeading)
@@ -182,7 +183,7 @@ local function BuildResourceBarAnchoringPanel(container)
         local NO_MANA_CLASSES = { [1] = true, [3] = true, [4] = true, [6] = true, [12] = true }
         if classID and not NO_MANA_CLASSES[classID] then
             local manaCb = AceGUI:Create("CheckBox")
-            manaCb:SetLabel("Hide Mana for Non-Healer Specs")
+            manaCb:SetLabel(L["Hide Mana for Non-Healer Specs"])
             manaCb:SetValue(settings.hideManaForNonHealer ~= false)
             manaCb:SetFullWidth(true)
             manaCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -197,14 +198,14 @@ local function BuildResourceBarAnchoringPanel(container)
         local rbHeightAdvBtns = {}
         local resources = GetConfigActiveResources()
         for _, pt in ipairs(resources) do
-            local name = POWER_NAMES[pt] or ("Power " .. pt)
+            local name = POWER_NAMES[pt] or (L["Power "] .. pt)
             if not settings.resources[pt] then
                 settings.resources[pt] = {}
             end
             local enabled = settings.resources[pt].enabled ~= false
 
             local resCb = AceGUI:Create("CheckBox")
-            resCb:SetLabel("Show " .. name)
+            resCb:SetLabel(L["Show "] .. name)
             resCb:SetValue(enabled)
             resCb:SetFullWidth(true)
             resCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -268,7 +269,7 @@ local function BuildResourceBarPositioningPanel(container)
 
     if not settings.enabled then
         local label = AceGUI:Create("Label")
-        label:SetText("Enable Resource Bars to configure positioning.")
+        label:SetText(L["Enable Resource Bars to configure positioning."])
         label:SetFullWidth(true)
         container:AddChild(label)
         return
@@ -280,10 +281,10 @@ local function BuildResourceBarPositioningPanel(container)
 
     -- Bar Orientation
     local orientDrop = AceGUI:Create("Dropdown")
-    orientDrop:SetLabel("Bar Orientation")
+    orientDrop:SetLabel(L["Bar Orientation"])
     orientDrop:SetList({
-        horizontal = "Horizontal",
-        vertical = "Vertical",
+        horizontal = L["Horizontal"],
+        vertical = L["Vertical"],
     }, { "horizontal", "vertical" })
     orientDrop:SetValue(settings.orientation or "horizontal")
     orientDrop:SetFullWidth(true)
@@ -297,10 +298,10 @@ local function BuildResourceBarPositioningPanel(container)
 
     -- Vertical Fill Direction
     local fillDirDrop = AceGUI:Create("Dropdown")
-    fillDirDrop:SetLabel("Vertical Fill Direction")
+    fillDirDrop:SetLabel(L["Vertical Fill Direction"])
     fillDirDrop:SetList({
-        bottom_to_top = "Bottom to Top",
-        top_to_bottom = "Top to Bottom",
+        bottom_to_top = L["Bottom to Top"],
+        top_to_bottom = L["Top to Bottom"],
     }, { "bottom_to_top", "top_to_bottom" })
     fillDirDrop:SetValue(settings.verticalFillDirection or "bottom_to_top")
     fillDirDrop:SetDisabled(not isVerticalLayout)
@@ -314,7 +315,7 @@ local function BuildResourceBarPositioningPanel(container)
 
     -- Bar Spacing
     local spacingSlider = AceGUI:Create("Slider")
-    spacingSlider:SetLabel("Bar Spacing")
+    spacingSlider:SetLabel(L["Bar Spacing"])
     spacingSlider:SetSliderValues(0, 20, 0.1)
     spacingSlider:SetValue(settings.barSpacing or 3.6)
     spacingSlider:SetFullWidth(true)
@@ -327,7 +328,7 @@ local function BuildResourceBarPositioningPanel(container)
 
     -- Segment Gap
     local segGapSlider = AceGUI:Create("Slider")
-    segGapSlider:SetLabel("Segment Gap")
+    segGapSlider:SetLabel(L["Segment Gap"])
     segGapSlider:SetSliderValues(0, 20, 0.1)
     segGapSlider:SetValue(settings.segmentGap or 4)
     segGapSlider:SetFullWidth(true)
@@ -343,7 +344,7 @@ local function BuildResourceBarPositioningPanel(container)
     -- ============ Anchor Settings (independent mode only) ============
     if isIndependentStack then
         local stackPosHeading = AceGUI:Create("Heading")
-        stackPosHeading:SetText("Anchor Settings")
+        stackPosHeading:SetText(L["Anchor Settings"])
         ColorHeading(stackPosHeading)
         stackPosHeading:SetFullWidth(true)
         container:AddChild(stackPosHeading)
@@ -363,7 +364,7 @@ local function BuildResourceBarPositioningPanel(container)
             local anchor = settings.independentAnchor
 
             local unlockCb = AceGUI:Create("CheckBox")
-            unlockCb:SetLabel("Unlock Placement")
+            unlockCb:SetLabel(L["Unlock Placement"])
             unlockCb:SetValue(not settings.independentAnchorLocked)
             unlockCb:SetFullWidth(true)
             unlockCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -373,7 +374,7 @@ local function BuildResourceBarPositioningPanel(container)
             container:AddChild(unlockCb)
 
             local widthSlider = AceGUI:Create("Slider")
-            widthSlider:SetLabel("Bar Width")
+            widthSlider:SetLabel(L["Bar Width"])
             widthSlider:SetSliderValues(20, 600, 1)
             widthSlider:SetValue(settings.independentWidth or 200)
             widthSlider:SetFullWidth(true)
@@ -391,7 +392,7 @@ local function BuildResourceBarPositioningPanel(container)
 
             local anchorBox = AceGUI:Create("EditBox")
             if anchorBox.editbox.Instructions then anchorBox.editbox.Instructions:Hide() end
-            anchorBox:SetLabel("Anchor to Frame")
+            anchorBox:SetLabel(L["Anchor to Frame"])
             local currentRelativeTo = anchor.relativeTo
             if not currentRelativeTo or currentRelativeTo == "UIParent" then currentRelativeTo = "" end
             anchorBox:SetText(currentRelativeTo)
@@ -424,7 +425,7 @@ local function BuildResourceBarPositioningPanel(container)
             anchorRow:AddChild(anchorBox)
 
             local pickBtn = AceGUI:Create("Button")
-            pickBtn:SetText("Pick")
+            pickBtn:SetText(L["Pick"])
             pickBtn:SetRelativeWidth(0.24)
             pickBtn:SetCallback("OnClick", function()
                 CS.StartPickFrame(function(name)
@@ -459,11 +460,11 @@ local function BuildResourceBarPositioningPanel(container)
                 CooldownCompanion:UpdateAnchorStacking()
             end
 
-            AddAnchorDropdown(container, anchor, "point", "CENTER", refreshResourceBarAnchor, "Anchor Point")
-            AddAnchorDropdown(container, anchor, "relativePoint", "CENTER", refreshResourceBarAnchor, "Relative Point")
+            AddAnchorDropdown(container, anchor, "point", "CENTER", refreshResourceBarAnchor, L["Anchor Point"])
+            AddAnchorDropdown(container, anchor, "relativePoint", "CENTER", refreshResourceBarAnchor, L["Relative Point"])
 
             local xSlider = AceGUI:Create("Slider")
-            xSlider:SetLabel("X Offset")
+            xSlider:SetLabel(L["X Offset"])
             xSlider:SetSliderValues(-2000, 2000, 0.1)
             xSlider:SetValue(anchor.x or 0)
             xSlider:SetFullWidth(true)
@@ -476,7 +477,7 @@ local function BuildResourceBarPositioningPanel(container)
             container:AddChild(xSlider)
 
             local ySlider = AceGUI:Create("Slider")
-            ySlider:SetLabel("Y Offset")
+            ySlider:SetLabel(L["Y Offset"])
             ySlider:SetSliderValues(-2000, 2000, 0.1)
             ySlider:SetValue(anchor.y or 0)
             ySlider:SetFullWidth(true)
@@ -493,7 +494,7 @@ local function BuildResourceBarPositioningPanel(container)
     -- ============ Layout Section (attached mode only) ============
     if not isIndependentStack then
         local posHeading = AceGUI:Create("Heading")
-        posHeading:SetText("Layout")
+        posHeading:SetText(L["Layout"])
         ColorHeading(posHeading)
         posHeading:SetFullWidth(true)
         container:AddChild(posHeading)
@@ -525,7 +526,7 @@ local function BuildResourceBarPositioningPanel(container)
 
             if isVerticalLayout then
                 local castGapSlider = AceGUI:Create("Slider")
-                castGapSlider:SetLabel("Cast Bar Y Offset")
+                castGapSlider:SetLabel(L["Cast Bar Y Offset"])
                 castGapSlider:SetSliderValues(0, 50, 0.1)
                 castGapSlider:SetValue(settings.yOffset or 3)
                 castGapSlider:SetFullWidth(true)
@@ -587,8 +588,8 @@ local function BuildBarHeightControls(container, settings)
     container:AddChild(customHeightsCb)
 
     CreateInfoButton(customHeightsCb.frame, customHeightsCb.checkbg, "LEFT", "RIGHT", customHeightsCb.text:GetStringWidth() + 4, 0, {
-        "Custom Resource Bar Heights",
-        {"When enabled, each resource can have its own bar height. Click the advanced settings toggle for a resource in Column 1 to configure its individual height.", 1, 1, 1, true},
+        L["Custom Resource Bar Heights"],
+        {L["When enabled, each resource can have its own bar height. Click the advanced settings toggle for a resource in Column 1 to configure its individual height."], 1, 1, 1, true},
     }, customHeightsCb)
 end
 
@@ -596,10 +597,10 @@ ST._BuildBarHeightControls = BuildBarHeightControls
 
 local function BuildResourceBarStylingPanel(container, sectionMode)
     local settings = CooldownCompanion:GetResourceBarSettings()
-
+    local L = LibStub("AceLocale-3.0"):GetLocale("CooldownCompanion", true) or {}
     if not settings.enabled then
         local label = AceGUI:Create("Label")
-        label:SetText("Enable Resource Bars to configure styling.")
+        label:SetText(L["Enable Resource Bars to configure styling."])
         label:SetFullWidth(true)
         container:AddChild(label)
         return
@@ -615,7 +616,7 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
     if showBarText then
     -- Bar Texture
     local texDrop = AceGUI:Create("Dropdown")
-    texDrop:SetLabel("Bar Texture")
+    texDrop:SetLabel(L["Bar Texture"])
     texDrop:SetList(GetResourceBarTextureOptions())
     texDrop:SetValue(settings.barTexture or "Solid")
     texDrop:SetFullWidth(true)
@@ -630,7 +631,7 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
     -- Brightness slider (only for Blizzard Class texture)
     if settings.barTexture == "blizzard_class" then
         local brightSlider = AceGUI:Create("Slider")
-        brightSlider:SetLabel("Class Texture Brightness")
+        brightSlider:SetLabel(L["Class Texture Brightness"])
         brightSlider:SetSliderValues(0.5, 2.0, 0.1)
         brightSlider:SetValue(settings.classBarBrightness or 1.3)
         brightSlider:SetFullWidth(true)
@@ -642,11 +643,11 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
     end
 
     -- Background Color
-    AddColorPicker(container, settings, "backgroundColor", "Background Color", { 0, 0, 0, 0.5 }, true, applyBars)
+    AddColorPicker(container, settings, "backgroundColor", L["Background Color"], { 0, 0, 0, 0.5 }, true, applyBars)
 
     -- Border Style
     local borderDrop = AceGUI:Create("Dropdown")
-    borderDrop:SetLabel("Border Style")
+    borderDrop:SetLabel(L["Border Style"])
     borderDrop:SetList({
         pixel = "Pixel",
         none = "None",
@@ -661,10 +662,10 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
     container:AddChild(borderDrop)
 
     if settings.borderStyle == "pixel" then
-        AddColorPicker(container, settings, "borderColor", "Border Color", { 0, 0, 0, 1 }, true, applyBars)
+        AddColorPicker(container, settings, "borderColor", L["Border Color"], { 0, 0, 0, 1 }, true, applyBars)
 
         local borderSizeSlider = AceGUI:Create("Slider")
-        borderSizeSlider:SetLabel("Border Size")
+        borderSizeSlider:SetLabel(L["Border Size"])
         borderSizeSlider:SetSliderValues(0, 4, 0.1)
         borderSizeSlider:SetValue(settings.borderSize or 1)
         borderSizeSlider:SetIsPercent(false)
@@ -680,7 +681,7 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
     local rbTextAdvBtns = {}
 
     local textHeading = AceGUI:Create("Heading")
-    textHeading:SetText("Text")
+    textHeading:SetText(L["Text"])
     ColorHeading(textHeading)
     textHeading:SetFullWidth(true)
     container:AddChild(textHeading)
@@ -707,7 +708,7 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
                 settings.resources[capturedPt] = {}
             end
             local resSettings = settings.resources[capturedPt]
-            local name = POWER_NAMES[capturedPt] or ("Power " .. capturedPt)
+            local name = POWER_NAMES[capturedPt] or (L["Power "] .. capturedPt)
 
             local showTextEnabled
             if isSegmentedResource then
@@ -718,7 +719,7 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
             end
 
             local cb = AceGUI:Create("CheckBox")
-            cb:SetLabel("Show " .. name .. " Text")
+            cb:SetLabel(L["Show "] .. name .. L[" Text"])
             cb:SetValue(showTextEnabled)
             cb:SetFullWidth(true)
             cb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -740,20 +741,20 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
             local advExpanded = AddAdvancedToggle(cb, "rbText_" .. capturedPt, rbTextAdvBtns, showTextEnabled)
             if advExpanded and showTextEnabled then
                 local textFormatDrop = AceGUI:Create("Dropdown")
-                textFormatDrop:SetLabel("Text Format")
+                textFormatDrop:SetLabel(L["Text Format"])
                 local textFormatOptions
                 local textFormatOrder
                 if isSegmentedResource then
                     textFormatOptions = {
-                        current = "Current Value",
-                        current_max = "Current / Max",
+                        current = L["Current Value"],
+                        current_max = L["Current / Max"],
                     }
                     textFormatOrder = { "current", "current_max" }
                 else
                     textFormatOptions = {
-                        current = "Current Value",
-                        current_max = "Current / Max",
-                        percent = "Percent",
+                        current = L["Current Value"],
+                        current_max = L["Current / Max"],
+                        percent = L["Percent"],
                     }
                     textFormatOrder = { "current", "current_max", "percent" }
                 end
@@ -789,7 +790,7 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
                 container:AddChild(textFormatDrop)
 
                 local fontDrop = AceGUI:Create("Dropdown")
-                fontDrop:SetLabel("Font")
+                fontDrop:SetLabel(L["Font"])
                 CS.SetupFontDropdown(fontDrop)
                 fontDrop:SetValue(resSettings.textFont or DEFAULT_RESOURCE_TEXT_FONT)
                 fontDrop:SetFullWidth(true)
@@ -800,7 +801,7 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
                 container:AddChild(fontDrop)
 
                 local sizeDrop = AceGUI:Create("Slider")
-                sizeDrop:SetLabel("Font Size")
+                sizeDrop:SetLabel(L["Font Size"])
                 sizeDrop:SetSliderValues(6, 24, 1)
                 sizeDrop:SetValue(resSettings.textFontSize or DEFAULT_RESOURCE_TEXT_SIZE)
                 sizeDrop:SetFullWidth(true)
@@ -811,7 +812,7 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
                 container:AddChild(sizeDrop)
 
                 local outlineDrop = AceGUI:Create("Dropdown")
-                outlineDrop:SetLabel("Outline")
+                outlineDrop:SetLabel(L["Outline"])
                 outlineDrop:SetList(CS.outlineOptions)
                 outlineDrop:SetValue(resSettings.textFontOutline or DEFAULT_RESOURCE_TEXT_OUTLINE)
                 outlineDrop:SetFullWidth(true)
@@ -821,10 +822,10 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
                 end)
                 container:AddChild(outlineDrop)
 
-                AddColorPicker(container, settings.resources[capturedPt], "textFontColor", "Text Color", DEFAULT_RESOURCE_TEXT_COLOR, true, applyBars)
+                AddColorPicker(container, settings.resources[capturedPt], "textFontColor", L["Text Color"], DEFAULT_RESOURCE_TEXT_COLOR, true, applyBars)
 
                 local textAnchorDrop = AceGUI:Create("Dropdown")
-                textAnchorDrop:SetLabel("Text Anchor")
+                textAnchorDrop:SetLabel(L["Text Anchor"])
                 local textAnchorValues = {}
                 for _, pt in ipairs(CS.anchorPoints) do
                     textAnchorValues[pt] = CS.anchorPointLabels[pt]
@@ -839,7 +840,7 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
                 container:AddChild(textAnchorDrop)
 
                 local textXSlider = AceGUI:Create("Slider")
-                textXSlider:SetLabel("Text X Offset")
+                textXSlider:SetLabel(L["Text X Offset"])
                 textXSlider:SetSliderValues(-50, 50, 0.1)
                 textXSlider:SetValue(resSettings.textXOffset or DEFAULT_RESOURCE_TEXT_X_OFFSET)
                 textXSlider:SetFullWidth(true)
@@ -850,7 +851,7 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
                 container:AddChild(textXSlider)
 
                 local textYSlider = AceGUI:Create("Slider")
-                textYSlider:SetLabel("Text Y Offset")
+                textYSlider:SetLabel(L["Text Y Offset"])
                 textYSlider:SetSliderValues(-50, 50, 0.1)
                 textYSlider:SetValue(resSettings.textYOffset or DEFAULT_RESOURCE_TEXT_Y_OFFSET)
                 textYSlider:SetFullWidth(true)
@@ -862,7 +863,7 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
 
                 if HIDE_AT_ZERO_ELIGIBLE[capturedPt] then
                     local hideAtZeroCb = AceGUI:Create("CheckBox")
-                    hideAtZeroCb:SetLabel("Hide at 0")
+                    hideAtZeroCb:SetLabel(L["Hide at 0"])
                     hideAtZeroCb:SetValue(resSettings.hideTextAtZero == true)
                     hideAtZeroCb:SetFullWidth(true)
                     hideAtZeroCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -881,7 +882,7 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
     if showColors then
     -- ============ Per-Resource Colors Section ============
     local colorHeading = AceGUI:Create("Heading")
-    colorHeading:SetText("Per-Resource Colors")
+    colorHeading:SetText(L["Per-Resource Colors"])
     ColorHeading(colorHeading)
     colorHeading:SetFullWidth(true)
     container:AddChild(colorHeading)
@@ -895,8 +896,8 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
     end)
 
     local colorInfoBtn = CreateInfoButton(colorHeading.frame, colorCollapseBtn, "LEFT", "RIGHT", 4, 0, {
-        "Per-Resource Colors",
-        {"These color settings are per-specialization. Switch specs to configure different colors.", 1, 1, 1, true},
+        L["Per-Resource Colors"],
+        {L["These color settings are per-specialization. Switch specs to configure different colors."], 1, 1, 1, true},
     }, colorHeading)
 
     colorHeading.right:ClearAllPoints()
@@ -907,7 +908,7 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
 
     if not _colorSpecID and not colorCollapsed then
         local specUnavailLabel = AceGUI:Create("Label")
-        specUnavailLabel:SetText("Specialization data not yet available.")
+        specUnavailLabel:SetText(L["Specialization data not yet available."])
         specUnavailLabel:SetFullWidth(true)
         container:AddChild(specUnavailLabel)
     end
@@ -922,12 +923,12 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
             if pt == 4 then
                 -- Combo Points: two color pickers (normal vs at max)
                 local _p4n = { comboColor = ReadSpecOverrideKey(settings, 4, _colorSpecID, "comboColor", DEFAULT_COMBO_COLOR) }
-                AddColorPicker(container, _p4n, "comboColor", "Combo Points", DEFAULT_COMBO_COLOR, false,
+                AddColorPicker(container, _p4n, "comboColor", L["Combo Points"], DEFAULT_COMBO_COLOR, false,
                     function() WriteSpecOverrideKey(settings, 4, _colorSpecID, "comboColor", _p4n.comboColor); applyBars() end,
                     function() WriteSpecOverrideKey(settings, 4, _colorSpecID, "comboColor", _p4n.comboColor) end)
 
                 local _p4m = { comboMaxColor = ReadSpecOverrideKey(settings, 4, _colorSpecID, "comboMaxColor", DEFAULT_COMBO_MAX_COLOR) }
-                AddColorPicker(container, _p4m, "comboMaxColor", "Combo Points (Max)", DEFAULT_COMBO_MAX_COLOR, false,
+                AddColorPicker(container, _p4m, "comboMaxColor", L["Combo Points (Max)"], DEFAULT_COMBO_MAX_COLOR, false,
                     function() WriteSpecOverrideKey(settings, 4, _colorSpecID, "comboMaxColor", _p4m.comboMaxColor); applyBars() end,
                     function() WriteSpecOverrideKey(settings, 4, _colorSpecID, "comboMaxColor", _p4m.comboMaxColor) end)
 
@@ -935,125 +936,125 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
                 local _, _, classID = UnitClass("player")
                 if classID == 4 then
                     local _p4c = { comboChargedColor = ReadSpecOverrideKey(settings, 4, _colorSpecID, "comboChargedColor", DEFAULT_COMBO_CHARGED_COLOR) }
-                    AddColorPicker(container, _p4c, "comboChargedColor", "Combo Points (Charged)", DEFAULT_COMBO_CHARGED_COLOR, false,
+                    AddColorPicker(container, _p4c, "comboChargedColor", L["Combo Points (Charged)"], DEFAULT_COMBO_CHARGED_COLOR, false,
                         function() WriteSpecOverrideKey(settings, 4, _colorSpecID, "comboChargedColor", _p4c.comboChargedColor); applyBars() end,
                         function() WriteSpecOverrideKey(settings, 4, _colorSpecID, "comboChargedColor", _p4c.comboChargedColor) end)
                 end
             elseif pt == 5 then
                 -- Runes: three color pickers (ready, recharging, max)
                 local _p5r = { runeReadyColor = ReadSpecOverrideKey(settings, 5, _colorSpecID, "runeReadyColor", DEFAULT_RUNE_READY_COLOR) }
-                AddColorPicker(container, _p5r, "runeReadyColor", "Runes (Ready)", DEFAULT_RUNE_READY_COLOR, false,
+                AddColorPicker(container, _p5r, "runeReadyColor", L["Runes (Ready)"], DEFAULT_RUNE_READY_COLOR, false,
                     function() WriteSpecOverrideKey(settings, 5, _colorSpecID, "runeReadyColor", _p5r.runeReadyColor); applyBars() end,
                     function() WriteSpecOverrideKey(settings, 5, _colorSpecID, "runeReadyColor", _p5r.runeReadyColor) end)
 
                 local _p5c = { runeRechargingColor = ReadSpecOverrideKey(settings, 5, _colorSpecID, "runeRechargingColor", DEFAULT_RUNE_RECHARGING_COLOR) }
-                AddColorPicker(container, _p5c, "runeRechargingColor", "Runes (Recharging)", DEFAULT_RUNE_RECHARGING_COLOR, false,
+                AddColorPicker(container, _p5c, "runeRechargingColor", L["Runes (Recharging)"], DEFAULT_RUNE_RECHARGING_COLOR, false,
                     function() WriteSpecOverrideKey(settings, 5, _colorSpecID, "runeRechargingColor", _p5c.runeRechargingColor); applyBars() end,
                     function() WriteSpecOverrideKey(settings, 5, _colorSpecID, "runeRechargingColor", _p5c.runeRechargingColor) end)
 
                 local _p5m = { runeMaxColor = ReadSpecOverrideKey(settings, 5, _colorSpecID, "runeMaxColor", DEFAULT_RUNE_MAX_COLOR) }
-                AddColorPicker(container, _p5m, "runeMaxColor", "Runes (All Ready)", DEFAULT_RUNE_MAX_COLOR, false,
+                AddColorPicker(container, _p5m, "runeMaxColor", L["Runes (All Ready)"], DEFAULT_RUNE_MAX_COLOR, false,
                     function() WriteSpecOverrideKey(settings, 5, _colorSpecID, "runeMaxColor", _p5m.runeMaxColor); applyBars() end,
                     function() WriteSpecOverrideKey(settings, 5, _colorSpecID, "runeMaxColor", _p5m.runeMaxColor) end)
             elseif pt == 7 then
                 -- Soul Shards: three color pickers (ready, recharging, max)
                 local _p7r = { shardReadyColor = ReadSpecOverrideKey(settings, 7, _colorSpecID, "shardReadyColor", DEFAULT_SHARD_READY_COLOR) }
-                AddColorPicker(container, _p7r, "shardReadyColor", "Soul Shards (Ready)", DEFAULT_SHARD_READY_COLOR, false,
+                AddColorPicker(container, _p7r, "shardReadyColor", L["Soul Shards (Ready)"], DEFAULT_SHARD_READY_COLOR, false,
                     function() WriteSpecOverrideKey(settings, 7, _colorSpecID, "shardReadyColor", _p7r.shardReadyColor); applyBars() end,
                     function() WriteSpecOverrideKey(settings, 7, _colorSpecID, "shardReadyColor", _p7r.shardReadyColor) end)
 
                 local _p7c = { shardRechargingColor = ReadSpecOverrideKey(settings, 7, _colorSpecID, "shardRechargingColor", DEFAULT_SHARD_RECHARGING_COLOR) }
-                AddColorPicker(container, _p7c, "shardRechargingColor", "Soul Shards (Recharging)", DEFAULT_SHARD_RECHARGING_COLOR, false,
+                AddColorPicker(container, _p7c, "shardRechargingColor", L["Soul Shards (Recharging)"], DEFAULT_SHARD_RECHARGING_COLOR, false,
                     function() WriteSpecOverrideKey(settings, 7, _colorSpecID, "shardRechargingColor", _p7c.shardRechargingColor); applyBars() end,
                     function() WriteSpecOverrideKey(settings, 7, _colorSpecID, "shardRechargingColor", _p7c.shardRechargingColor) end)
 
                 local _p7m = { shardMaxColor = ReadSpecOverrideKey(settings, 7, _colorSpecID, "shardMaxColor", DEFAULT_SHARD_MAX_COLOR) }
-                AddColorPicker(container, _p7m, "shardMaxColor", "Soul Shards (Max)", DEFAULT_SHARD_MAX_COLOR, false,
+                AddColorPicker(container, _p7m, "shardMaxColor", L["Soul Shards (Max)"], DEFAULT_SHARD_MAX_COLOR, false,
                     function() WriteSpecOverrideKey(settings, 7, _colorSpecID, "shardMaxColor", _p7m.shardMaxColor); applyBars() end,
                     function() WriteSpecOverrideKey(settings, 7, _colorSpecID, "shardMaxColor", _p7m.shardMaxColor) end)
             elseif pt == 9 then
                 -- Holy Power: two color pickers (normal vs max)
                 local _p9n = { holyColor = ReadSpecOverrideKey(settings, 9, _colorSpecID, "holyColor", DEFAULT_HOLY_COLOR) }
-                AddColorPicker(container, _p9n, "holyColor", "Holy Power", DEFAULT_HOLY_COLOR, false,
+                AddColorPicker(container, _p9n, "holyColor", L["Holy Power"], DEFAULT_HOLY_COLOR, false,
                     function() WriteSpecOverrideKey(settings, 9, _colorSpecID, "holyColor", _p9n.holyColor); applyBars() end,
                     function() WriteSpecOverrideKey(settings, 9, _colorSpecID, "holyColor", _p9n.holyColor) end)
 
                 local _p9m = { holyMaxColor = ReadSpecOverrideKey(settings, 9, _colorSpecID, "holyMaxColor", DEFAULT_HOLY_MAX_COLOR) }
-                AddColorPicker(container, _p9m, "holyMaxColor", "Holy Power (Max)", DEFAULT_HOLY_MAX_COLOR, false,
+                AddColorPicker(container, _p9m, "holyMaxColor", L["Holy Power (Max)"], DEFAULT_HOLY_MAX_COLOR, false,
                     function() WriteSpecOverrideKey(settings, 9, _colorSpecID, "holyMaxColor", _p9m.holyMaxColor); applyBars() end,
                     function() WriteSpecOverrideKey(settings, 9, _colorSpecID, "holyMaxColor", _p9m.holyMaxColor) end)
             elseif pt == 12 then
                 -- Chi: two color pickers (normal vs max)
                 local _p12n = { chiColor = ReadSpecOverrideKey(settings, 12, _colorSpecID, "chiColor", DEFAULT_CHI_COLOR) }
-                AddColorPicker(container, _p12n, "chiColor", "Chi", DEFAULT_CHI_COLOR, false,
+                AddColorPicker(container, _p12n, "chiColor", L["Chi"], DEFAULT_CHI_COLOR, false,
                     function() WriteSpecOverrideKey(settings, 12, _colorSpecID, "chiColor", _p12n.chiColor); applyBars() end,
                     function() WriteSpecOverrideKey(settings, 12, _colorSpecID, "chiColor", _p12n.chiColor) end)
 
                 local _p12m = { chiMaxColor = ReadSpecOverrideKey(settings, 12, _colorSpecID, "chiMaxColor", DEFAULT_CHI_MAX_COLOR) }
-                AddColorPicker(container, _p12m, "chiMaxColor", "Chi (Max)", DEFAULT_CHI_MAX_COLOR, false,
+                AddColorPicker(container, _p12m, "chiMaxColor", L["Chi (Max)"], DEFAULT_CHI_MAX_COLOR, false,
                     function() WriteSpecOverrideKey(settings, 12, _colorSpecID, "chiMaxColor", _p12m.chiMaxColor); applyBars() end,
                     function() WriteSpecOverrideKey(settings, 12, _colorSpecID, "chiMaxColor", _p12m.chiMaxColor) end)
             elseif pt == 16 then
                 -- Arcane Charges: two color pickers (normal vs max)
                 local _p16n = { arcaneColor = ReadSpecOverrideKey(settings, 16, _colorSpecID, "arcaneColor", DEFAULT_ARCANE_COLOR) }
-                AddColorPicker(container, _p16n, "arcaneColor", "Arcane Charges", DEFAULT_ARCANE_COLOR, false,
+                AddColorPicker(container, _p16n, "arcaneColor", L["Arcane Charges"], DEFAULT_ARCANE_COLOR, false,
                     function() WriteSpecOverrideKey(settings, 16, _colorSpecID, "arcaneColor", _p16n.arcaneColor); applyBars() end,
                     function() WriteSpecOverrideKey(settings, 16, _colorSpecID, "arcaneColor", _p16n.arcaneColor) end)
 
                 local _p16m = { arcaneMaxColor = ReadSpecOverrideKey(settings, 16, _colorSpecID, "arcaneMaxColor", DEFAULT_ARCANE_MAX_COLOR) }
-                AddColorPicker(container, _p16m, "arcaneMaxColor", "Arcane Charges (Max)", DEFAULT_ARCANE_MAX_COLOR, false,
+                AddColorPicker(container, _p16m, "arcaneMaxColor", L["Arcane Charges (Max)"], DEFAULT_ARCANE_MAX_COLOR, false,
                     function() WriteSpecOverrideKey(settings, 16, _colorSpecID, "arcaneMaxColor", _p16m.arcaneMaxColor); applyBars() end,
                     function() WriteSpecOverrideKey(settings, 16, _colorSpecID, "arcaneMaxColor", _p16m.arcaneMaxColor) end)
             elseif pt == 19 then
                 -- Essence: three color pickers (ready, recharging, max)
                 local _p19r = { essenceReadyColor = ReadSpecOverrideKey(settings, 19, _colorSpecID, "essenceReadyColor", DEFAULT_ESSENCE_READY_COLOR) }
-                AddColorPicker(container, _p19r, "essenceReadyColor", "Essence (Ready)", DEFAULT_ESSENCE_READY_COLOR, false,
+                AddColorPicker(container, _p19r, "essenceReadyColor", L["Essence (Ready)"], DEFAULT_ESSENCE_READY_COLOR, false,
                     function() WriteSpecOverrideKey(settings, 19, _colorSpecID, "essenceReadyColor", _p19r.essenceReadyColor); applyBars() end,
                     function() WriteSpecOverrideKey(settings, 19, _colorSpecID, "essenceReadyColor", _p19r.essenceReadyColor) end)
 
                 local _p19c = { essenceRechargingColor = ReadSpecOverrideKey(settings, 19, _colorSpecID, "essenceRechargingColor", DEFAULT_ESSENCE_RECHARGING_COLOR) }
-                AddColorPicker(container, _p19c, "essenceRechargingColor", "Essence (Recharging)", DEFAULT_ESSENCE_RECHARGING_COLOR, false,
+                AddColorPicker(container, _p19c, "essenceRechargingColor", L["Essence (Recharging)"], DEFAULT_ESSENCE_RECHARGING_COLOR, false,
                     function() WriteSpecOverrideKey(settings, 19, _colorSpecID, "essenceRechargingColor", _p19c.essenceRechargingColor); applyBars() end,
                     function() WriteSpecOverrideKey(settings, 19, _colorSpecID, "essenceRechargingColor", _p19c.essenceRechargingColor) end)
 
                 local _p19m = { essenceMaxColor = ReadSpecOverrideKey(settings, 19, _colorSpecID, "essenceMaxColor", DEFAULT_ESSENCE_MAX_COLOR) }
-                AddColorPicker(container, _p19m, "essenceMaxColor", "Essence (Max)", DEFAULT_ESSENCE_MAX_COLOR, false,
+                AddColorPicker(container, _p19m, "essenceMaxColor", L["Essence (Max)"], DEFAULT_ESSENCE_MAX_COLOR, false,
                     function() WriteSpecOverrideKey(settings, 19, _colorSpecID, "essenceMaxColor", _p19m.essenceMaxColor); applyBars() end,
                     function() WriteSpecOverrideKey(settings, 19, _colorSpecID, "essenceMaxColor", _p19m.essenceMaxColor) end)
             elseif pt == 100 then
                 -- Maelstrom Weapon: three color pickers (base, overlay, max)
                 local _p100b = { mwBaseColor = ReadSpecOverrideKey(settings, 100, _colorSpecID, "mwBaseColor", DEFAULT_MW_BASE_COLOR) }
-                AddColorPicker(container, _p100b, "mwBaseColor", "MW (Base)", DEFAULT_MW_BASE_COLOR, false,
+                AddColorPicker(container, _p100b, "mwBaseColor", L["MW (Base)"], DEFAULT_MW_BASE_COLOR, false,
                     function() WriteSpecOverrideKey(settings, 100, _colorSpecID, "mwBaseColor", _p100b.mwBaseColor); applyBars() end,
                     function() WriteSpecOverrideKey(settings, 100, _colorSpecID, "mwBaseColor", _p100b.mwBaseColor) end)
 
                 local _p100o = { mwOverlayColor = ReadSpecOverrideKey(settings, 100, _colorSpecID, "mwOverlayColor", DEFAULT_MW_OVERLAY_COLOR) }
-                AddColorPicker(container, _p100o, "mwOverlayColor", "MW (Overlay)", DEFAULT_MW_OVERLAY_COLOR, false,
+                AddColorPicker(container, _p100o, "mwOverlayColor", L["MW (Overlay)"], DEFAULT_MW_OVERLAY_COLOR, false,
                     function() WriteSpecOverrideKey(settings, 100, _colorSpecID, "mwOverlayColor", _p100o.mwOverlayColor); applyBars() end,
                     function() WriteSpecOverrideKey(settings, 100, _colorSpecID, "mwOverlayColor", _p100o.mwOverlayColor) end)
 
                 local _p100m = { mwMaxColor = ReadSpecOverrideKey(settings, 100, _colorSpecID, "mwMaxColor", DEFAULT_MW_MAX_COLOR) }
-                AddColorPicker(container, _p100m, "mwMaxColor", "MW (Max)", DEFAULT_MW_MAX_COLOR, false,
+                AddColorPicker(container, _p100m, "mwMaxColor", L["MW (Max)"], DEFAULT_MW_MAX_COLOR, false,
                     function() WriteSpecOverrideKey(settings, 100, _colorSpecID, "mwMaxColor", _p100m.mwMaxColor); applyBars() end,
                     function() WriteSpecOverrideKey(settings, 100, _colorSpecID, "mwMaxColor", _p100m.mwMaxColor) end)
             elseif pt == 101 then
                 -- Stagger: three color pickers (green/yellow/red thresholds)
                 local _p101g = { staggerGreenColor = ReadSpecOverrideKey(settings, 101, _colorSpecID, "staggerGreenColor", { 0.52, 0.90, 0.52 }) }
-                AddColorPicker(container, _p101g, "staggerGreenColor", "Stagger (Low)", { 0.52, 0.90, 0.52 }, false,
+                AddColorPicker(container, _p101g, "staggerGreenColor", L["Stagger (Low)"], { 0.52, 0.90, 0.52 }, false,
                     function() WriteSpecOverrideKey(settings, 101, _colorSpecID, "staggerGreenColor", _p101g.staggerGreenColor); applyBars() end,
                     function() WriteSpecOverrideKey(settings, 101, _colorSpecID, "staggerGreenColor", _p101g.staggerGreenColor) end)
 
                 local _p101y = { staggerYellowColor = ReadSpecOverrideKey(settings, 101, _colorSpecID, "staggerYellowColor", { 1.0, 0.85, 0.36 }) }
-                AddColorPicker(container, _p101y, "staggerYellowColor", "Stagger (Medium)", { 1.0, 0.85, 0.36 }, false,
+                AddColorPicker(container, _p101y, "staggerYellowColor", L["Stagger (Medium)"], { 1.0, 0.85, 0.36 }, false,
                     function() WriteSpecOverrideKey(settings, 101, _colorSpecID, "staggerYellowColor", _p101y.staggerYellowColor); applyBars() end,
                     function() WriteSpecOverrideKey(settings, 101, _colorSpecID, "staggerYellowColor", _p101y.staggerYellowColor) end)
 
                 local _p101r = { staggerRedColor = ReadSpecOverrideKey(settings, 101, _colorSpecID, "staggerRedColor", { 1.0, 0.42, 0.42 }) }
-                AddColorPicker(container, _p101r, "staggerRedColor", "Stagger (High)", { 1.0, 0.42, 0.42 }, false,
+                AddColorPicker(container, _p101r, "staggerRedColor", L["Stagger (High)"], { 1.0, 0.42, 0.42 }, false,
                     function() WriteSpecOverrideKey(settings, 101, _colorSpecID, "staggerRedColor", _p101r.staggerRedColor); applyBars() end,
                     function() WriteSpecOverrideKey(settings, 101, _colorSpecID, "staggerRedColor", _p101r.staggerRedColor) end)
             else
-                local name = POWER_NAMES[pt] or ("Power " .. pt)
+                local name = POWER_NAMES[pt] or (L["Power "] .. pt)
 
                 if settings.barTexture == "blizzard_class" and ST.POWER_ATLAS_TYPES and ST.POWER_ATLAS_TYPES[pt] then
                     -- Atlas-backed type; color picker not applicable
@@ -1071,7 +1072,7 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
 
     -- ============ Thresholds & Ticks Section ============
     local thresholdHeading = AceGUI:Create("Heading")
-    thresholdHeading:SetText("Thresholds & Ticks")
+    thresholdHeading:SetText(L["Thresholds & Ticks"])
     ColorHeading(thresholdHeading)
     thresholdHeading:SetFullWidth(true)
     container:AddChild(thresholdHeading)
@@ -1085,10 +1086,10 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
     end)
 
     local thresholdInfoBtn = CreateInfoButton(thresholdHeading.frame, thresholdCollapseBtn, "LEFT", "RIGHT", 4, 0, {
-        "Thresholds & Ticks",
-        {"Segmented resources: recolor when current value is at/above a configured threshold.", 1, 1, 1, true},
+        L["Thresholds & Ticks"],
+        {L["Segmented resources: recolor when current value is at/above a configured threshold."], 1, 1, 1, true},
         " ",
-        {"Continuous resources: draw a static marker by percent or absolute value.", 1, 1, 1, true},
+        {L["Continuous resources: draw a static marker by percent or absolute value."], 1, 1, 1, true},
     }, thresholdHeading)
 
     thresholdHeading.right:ClearAllPoints()
@@ -1111,7 +1112,7 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
                 if isSegmented then
                     local thresholdAdvKey = "rbSegThreshold_" .. capturedPt
                     local thresholdEnableCb = AceGUI:Create("CheckBox")
-                    thresholdEnableCb:SetLabel("Enable " .. resourceName .. " Threshold Color")
+                    thresholdEnableCb:SetLabel(L["Enable "] .. resourceName .. L[" Threshold Color"])
                     thresholdEnableCb:SetValue(ReadSpecOverrideKey(settings, capturedPt, _colorSpecID, "segThresholdEnabled", false) == true)
                     thresholdEnableCb:SetFullWidth(true)
                     thresholdEnableCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -1138,7 +1139,7 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
                     if _segEnabled and thresholdAdvExpanded then
                         local thresholdEdit = AceGUI:Create("EditBox")
                         if thresholdEdit.editbox.Instructions then thresholdEdit.editbox.Instructions:Hide() end
-                        thresholdEdit:SetLabel(resourceName .. " Threshold Value (>=)")
+                        thresholdEdit:SetLabel(resourceName .. L[" Threshold Value (>=)"])
                         local _segVal = ReadSpecOverrideKey(settings, capturedPt, _colorSpecID, "segThresholdValue", nil)
                         thresholdEdit:SetText(tostring(GetSegmentedThresholdValueConfig({ segThresholdValue = _segVal })))
                         thresholdEdit:SetFullWidth(true)
@@ -1163,7 +1164,7 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
                         container:AddChild(thresholdEdit)
 
                         local _pSeg = { segThresholdColor = GetSafeRGBConfig(ReadSpecOverrideKey(settings, capturedPt, _colorSpecID, "segThresholdColor", nil), DEFAULT_SEG_THRESHOLD_COLOR) }
-                        AddColorPicker(container, _pSeg, "segThresholdColor", resourceName .. " Threshold Color", DEFAULT_SEG_THRESHOLD_COLOR, false,
+                        AddColorPicker(container, _pSeg, "segThresholdColor", resourceName .. L[" Threshold Color"], DEFAULT_SEG_THRESHOLD_COLOR, false,
                             function() WriteSpecOverrideKey(settings, capturedPt, _colorSpecID, "segThresholdColor", _pSeg.segThresholdColor); applyBars() end,
                             function() WriteSpecOverrideKey(settings, capturedPt, _colorSpecID, "segThresholdColor", _pSeg.segThresholdColor) end)
                     end
@@ -1172,7 +1173,7 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
                     local tickAdvKey = "rbTickMarker_" .. capturedPt
                     local _tickEnabled = ReadSpecOverrideKey(settings, capturedPt, _colorSpecID, "continuousTickEnabled", false) == true
                     local tickEnableCb = AceGUI:Create("CheckBox")
-                    tickEnableCb:SetLabel("Enable " .. resourceName .. " Tick Marker")
+                    tickEnableCb:SetLabel(L["Enable "] .. resourceName .. L[" Tick Marker"])
                     tickEnableCb:SetValue(_tickEnabled)
                     tickEnableCb:SetFullWidth(true)
                     tickEnableCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -1191,7 +1192,7 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
 
                     if _tickEnabled then
                         local tickCombatCb = AceGUI:Create("CheckBox")
-                        tickCombatCb:SetLabel("Show Only In Combat")
+                        tickCombatCb:SetLabel(L["Show Only In Combat"])
                         tickCombatCb:SetValue(ReadSpecOverrideKey(settings, capturedPt, _colorSpecID, "continuousTickCombatOnly", false))
                         tickCombatCb:SetFullWidth(true)
                         tickCombatCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -1212,10 +1213,10 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
                         local _tickModeRes = { continuousTickMode = ReadSpecOverrideKey(settings, capturedPt, _colorSpecID, "continuousTickMode", nil) }
                         local tickMode = GetContinuousTickModeConfig(_tickModeRes)
                         local modeDrop = AceGUI:Create("Dropdown")
-                        modeDrop:SetLabel("Tick Mode")
+                        modeDrop:SetLabel(L["Tick Mode"])
                         modeDrop:SetList({
-                            percent = "Percent",
-                            absolute = "Absolute Value",
+                            percent = L["Percent"],
+                            absolute = L["Absolute Value"],
                         }, { "percent", "absolute" })
                         modeDrop:SetValue(tickMode)
                         modeDrop:SetFullWidth(true)
@@ -1232,7 +1233,7 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
                         if tickMode == "percent" then
                             local _tickPercentRes = { continuousTickPercent = ReadSpecOverrideKey(settings, capturedPt, _colorSpecID, "continuousTickPercent", nil) }
                             local percentSlider = AceGUI:Create("Slider")
-                            percentSlider:SetLabel(resourceName .. " Tick Percent")
+                            percentSlider:SetLabel(resourceName .. L[" Tick Percent"])
                             percentSlider:SetSliderValues(0, 100, 1)
                             percentSlider:SetValue(GetContinuousTickPercentConfig(_tickPercentRes))
                             percentSlider:SetIsPercent(false)
@@ -1246,7 +1247,7 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
                             local _tickAbsRes = { continuousTickAbsolute = ReadSpecOverrideKey(settings, capturedPt, _colorSpecID, "continuousTickAbsolute", nil) }
                             local absoluteEdit = AceGUI:Create("EditBox")
                             if absoluteEdit.editbox.Instructions then absoluteEdit.editbox.Instructions:Hide() end
-                            absoluteEdit:SetLabel(resourceName .. " Tick Absolute Value")
+                            absoluteEdit:SetLabel(resourceName .. L[" Tick Absolute Value"])
                             absoluteEdit:SetText(tostring(GetContinuousTickAbsoluteConfig(_tickAbsRes)))
                             absoluteEdit:SetFullWidth(true)
                             absoluteEdit:DisableButton(true)
@@ -1270,13 +1271,13 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
                         local _tickColorResolved = GetSafeRGBAConfig(ReadSpecOverrideKey(settings, capturedPt, _colorSpecID, "continuousTickColor", nil), DEFAULT_CONTINUOUS_TICK_COLOR)
                         if _tickColorResolved[4] == nil then _tickColorResolved = { _tickColorResolved[1], _tickColorResolved[2], _tickColorResolved[3], 1 } end
                         local _pTick = { continuousTickColor = _tickColorResolved }
-                        AddColorPicker(container, _pTick, "continuousTickColor", resourceName .. " Tick Color", DEFAULT_CONTINUOUS_TICK_COLOR, true,
+                        AddColorPicker(container, _pTick, "continuousTickColor", resourceName .. L[" Tick Color"], DEFAULT_CONTINUOUS_TICK_COLOR, true,
                             function() WriteSpecOverrideKey(settings, capturedPt, _colorSpecID, "continuousTickColor", _pTick.continuousTickColor); applyBars() end,
                             function() WriteSpecOverrideKey(settings, capturedPt, _colorSpecID, "continuousTickColor", _pTick.continuousTickColor) end)
 
                         local _tickWidthVal = ReadSpecOverrideKey(settings, capturedPt, _colorSpecID, "continuousTickWidth", nil)
                         local tickWidthSlider = AceGUI:Create("Slider")
-                        tickWidthSlider:SetLabel(resourceName .. " Tick Width")
+                        tickWidthSlider:SetLabel(resourceName .. L[" Tick Width"])
                         tickWidthSlider:SetSliderValues(1, 10, 1)
                         tickWidthSlider:SetValue(tonumber(_tickWidthVal) or DEFAULT_CONTINUOUS_TICK_WIDTH)
                         tickWidthSlider:SetFullWidth(true)
@@ -1385,7 +1386,7 @@ local function BuildCustomAuraBarAnchorSettings(container, customBars, settings,
     EnsureCustomAuraIndependentConfig(cab, settings)
 
     local unlockCb = AceGUI:Create("CheckBox")
-    unlockCb:SetLabel("Unlock Placement")
+    unlockCb:SetLabel(L["Unlock Placement"])
     unlockCb:SetValue(cab.independentLocked ~= true)
     unlockCb:SetFullWidth(true)
     unlockCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -1397,10 +1398,10 @@ local function BuildCustomAuraBarAnchorSettings(container, customBars, settings,
     container:AddChild(unlockCb)
 
     local modeDrop = AceGUI:Create("Dropdown")
-    modeDrop:SetLabel("Anchor Target")
+    modeDrop:SetLabel(L["Anchor Target"])
     modeDrop:SetList({
-        group = "Group",
-        frame = "Frame Name / Pick",
+        group = L["Group"],
+        frame = L["Frame Name / Pick"],
     }, { "group", "frame" })
     modeDrop:SetValue(cab.independentAnchorTargetMode or "group")
     modeDrop:SetFullWidth(true)
@@ -1413,7 +1414,7 @@ local function BuildCustomAuraBarAnchorSettings(container, customBars, settings,
 
     if (cab.independentAnchorTargetMode or "group") == "group" then
         local groupDrop = AceGUI:Create("Dropdown")
-        groupDrop:SetLabel("Anchor to Panel")
+        groupDrop:SetLabel(L["Anchor to Panel"])
         CooldownCompanion:PopulateAnchorDropdown(groupDrop)
         groupDrop:SetValue(cab.independentAnchorGroupId and tostring(cab.independentAnchorGroupId) or "")
         groupDrop:SetFullWidth(true)
@@ -1429,7 +1430,7 @@ local function BuildCustomAuraBarAnchorSettings(container, customBars, settings,
 
         local frameEdit = AceGUI:Create("EditBox")
         if frameEdit.editbox.Instructions then frameEdit.editbox.Instructions:Hide() end
-        frameEdit:SetLabel("Anchor to Frame")
+        frameEdit:SetLabel(L["Anchor to Frame"])
         frameEdit:SetText(cab.independentAnchorFrameName or "")
         frameEdit:SetRelativeWidth(0.68)
         frameEdit:SetCallback("OnEnterPressed", function(widget, event, text)
@@ -1439,7 +1440,7 @@ local function BuildCustomAuraBarAnchorSettings(container, customBars, settings,
         frameRow:AddChild(frameEdit)
 
         local pickBtn = AceGUI:Create("Button")
-        pickBtn:SetText("Pick")
+        pickBtn:SetText(L["Pick"])
         pickBtn:SetRelativeWidth(0.24)
         pickBtn:SetCallback("OnClick", function()
             CS.StartPickFrame(function(name)
@@ -1464,7 +1465,7 @@ local function BuildCustomAuraBarAnchorSettings(container, customBars, settings,
     end
 
     local anchorPointDrop = AceGUI:Create("Dropdown")
-    anchorPointDrop:SetLabel("Anchor Point")
+    anchorPointDrop:SetLabel(L["Anchor Point"])
     anchorPointDrop:SetList(pointValues, CS.anchorPoints)
     anchorPointDrop:SetValue(cab.independentAnchor.point or "CENTER")
     anchorPointDrop:SetFullWidth(true)
@@ -1475,7 +1476,7 @@ local function BuildCustomAuraBarAnchorSettings(container, customBars, settings,
     container:AddChild(anchorPointDrop)
 
     local relativePointDrop = AceGUI:Create("Dropdown")
-    relativePointDrop:SetLabel("Relative Point")
+    relativePointDrop:SetLabel(L["Relative Point"])
     relativePointDrop:SetList(pointValues, CS.anchorPoints)
     relativePointDrop:SetValue(cab.independentAnchor.relativePoint or "CENTER")
     relativePointDrop:SetFullWidth(true)
@@ -1486,7 +1487,7 @@ local function BuildCustomAuraBarAnchorSettings(container, customBars, settings,
     container:AddChild(relativePointDrop)
 
     local xSlider = AceGUI:Create("Slider")
-    xSlider:SetLabel("X Offset")
+    xSlider:SetLabel(L["X Offset"])
     xSlider:SetSliderValues(-2000, 2000, 0.1)
     xSlider:SetValue(cab.independentAnchor.x or 0)
     xSlider:SetFullWidth(true)
@@ -1497,7 +1498,7 @@ local function BuildCustomAuraBarAnchorSettings(container, customBars, settings,
     container:AddChild(xSlider)
 
     local ySlider = AceGUI:Create("Slider")
-    ySlider:SetLabel("Y Offset")
+    ySlider:SetLabel(L["Y Offset"])
     ySlider:SetSliderValues(-2000, 2000, 0.1)
     ySlider:SetValue(cab.independentAnchor.y or 0)
     ySlider:SetFullWidth(true)
@@ -1508,7 +1509,7 @@ local function BuildCustomAuraBarAnchorSettings(container, customBars, settings,
     container:AddChild(ySlider)
 
     local widthSlider = AceGUI:Create("Slider")
-    widthSlider:SetLabel("Width")
+    widthSlider:SetLabel(L["Width"])
     widthSlider:SetSliderValues(4, 1200, 0.1)
     widthSlider:SetValue(cab.independentSize.width or 120)
     widthSlider:SetFullWidth(true)
@@ -1519,7 +1520,7 @@ local function BuildCustomAuraBarAnchorSettings(container, customBars, settings,
     container:AddChild(widthSlider)
 
     local heightSlider = AceGUI:Create("Slider")
-    heightSlider:SetLabel("Height")
+    heightSlider:SetLabel(L["Height"])
     heightSlider:SetSliderValues(4, 1200, 0.1)
     heightSlider:SetValue(cab.independentSize.height or 12)
     heightSlider:SetFullWidth(true)
@@ -1532,10 +1533,10 @@ local function BuildCustomAuraBarAnchorSettings(container, customBars, settings,
     local resolvedOrientation = GetResolvedCustomAuraIndependentOrientation(cab, settings)
 
     local orientationDrop = AceGUI:Create("Dropdown")
-    orientationDrop:SetLabel("Orientation")
+    orientationDrop:SetLabel(L["Orientation"])
     orientationDrop:SetList({
-        horizontal = "Horizontal",
-        vertical = "Vertical",
+        horizontal = L["Horizontal"],
+        vertical = L["Vertical"],
     }, { "horizontal", "vertical" })
     orientationDrop:SetValue(resolvedOrientation)
     orientationDrop:SetFullWidth(true)
@@ -1551,11 +1552,11 @@ local function BuildCustomAuraBarAnchorSettings(container, customBars, settings,
 
     if resolvedOrientation == "vertical" then
         local fillDrop = AceGUI:Create("Dropdown")
-        fillDrop:SetLabel("Vertical Fill Direction")
+        fillDrop:SetLabel(L["Vertical Fill Direction"])
         fillDrop:SetList({
-            inherit = "Inherit Global",
-            bottom_to_top = "Bottom to Top",
-            top_to_bottom = "Top to Bottom",
+            inherit = L["Inherit Global"],
+            bottom_to_top = L["Bottom to Top"],
+            top_to_bottom = L["Top to Bottom"],
         }, { "inherit", "bottom_to_top", "top_to_bottom" })
         fillDrop:SetValue(cab.independentVerticalFillDirection or "inherit")
         fillDrop:SetFullWidth(true)
@@ -1606,7 +1607,7 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
 
     -- Enable checkbox
     local enableCab = AceGUI:Create("CheckBox")
-    enableCab:SetLabel("Enable")
+    enableCab:SetLabel(L["Enable"])
     enableCab:SetValue(cab.enabled == true)
     enableCab:SetFullWidth(true)
     enableCab:SetCallback("OnValueChanged", function(widget, event, val)
@@ -1619,7 +1620,7 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
 
     if cab.enabled then
         local independentCb = AceGUI:Create("CheckBox")
-        independentCb:SetLabel("Independent Anchor & Size")
+        independentCb:SetLabel(L["Independent Anchor & Size"])
         independentCb:SetValue(IsTruthyConfigFlag(cab.independentAnchorEnabled))
         independentCb:SetFullWidth(true)
         independentCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -1669,7 +1670,7 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
         subTabRow:SetFullWidth(true)
 
         local settingsBtn = AceGUI:Create("Button")
-        settingsBtn:SetText(independentSubTab == "settings" and ClassColorText("[Settings]") or "Settings")
+        settingsBtn:SetText(independentSubTab == "settings" and ClassColorText(L["[Settings]"]) or L["Settings"])
         settingsBtn:SetRelativeWidth(0.49)
         settingsBtn:SetCallback("OnClick", function()
             local currentTab = CS.customAuraBarSubTabs and CS.customAuraBarSubTabs[capturedIdx] or "settings"
@@ -1682,7 +1683,7 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
         subTabRow:AddChild(settingsBtn)
 
         local anchorBtn = AceGUI:Create("Button")
-        anchorBtn:SetText(independentSubTab == "anchor" and ClassColorText("[Anchor Settings]") or "Anchor Settings")
+        anchorBtn:SetText(independentSubTab == "anchor" and ClassColorText(L["[Anchor Settings]"]) or L["Anchor Settings"])
         anchorBtn:SetRelativeWidth(0.49)
         anchorBtn:SetCallback("OnClick", function()
             local currentTab = CS.customAuraBarSubTabs and CS.customAuraBarSubTabs[capturedIdx] or "settings"
@@ -1711,13 +1712,13 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
             local trackedAuraText
             if trackedAuraName then
                 local iconPrefix = trackedAuraIcon and ("|T" .. trackedAuraIcon .. ":16:16:0:0|t ") or ""
-                trackedAuraText = "|cffffcc00Tracking Aura:|r " .. iconPrefix
+                trackedAuraText = L["|cffffcc00Tracking Aura:|r "] .. iconPrefix
                     .. "|cffffffff" .. trackedAuraName .. "|r"
             elseif cab.spellID then
-                trackedAuraText = "|cffffcc00Tracking Aura:|r |cffffffffSpell ID "
+                trackedAuraText = L["|cffffcc00Tracking Aura:|r |cffffffffSpell ID "]
                     .. tostring(cab.spellID) .. "|r"
             else
-                trackedAuraText = "|cffffcc00Tracking Aura:|r |cff999999None selected|r"
+                trackedAuraText = L["|cffffcc00Tracking Aura:|r |cff999999None selected|r"]
             end
             trackedAuraLabel:SetText(trackedAuraText)
             trackedAuraLabel:SetFullWidth(true)
@@ -1726,7 +1727,7 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
             -- Spell ID edit box with autocomplete
             local spellEdit = AceGUI:Create("EditBox")
             if spellEdit.editbox.Instructions then spellEdit.editbox.Instructions:Hide() end
-            spellEdit:SetLabel("Spell ID or Name")
+            spellEdit:SetLabel(L["Spell ID or Name"])
             spellEdit:SetText(cab.spellID and tostring(cab.spellID) or "")
             spellEdit:SetFullWidth(true)
             spellEdit:DisableButton(true)
@@ -1776,10 +1777,10 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
 
             -- Tracking Mode dropdown
             local trackDrop = AceGUI:Create("Dropdown")
-            trackDrop:SetLabel("Tracking Mode")
+            trackDrop:SetLabel(L["Tracking Mode"])
             trackDrop:SetList({
-                stacks = "Stack Count",
-                active = "Active (On/Off)",
+                stacks = L["Stack Count"],
+                active = L["Active (On/Off)"],
             }, { "stacks", "active" })
             trackDrop:SetValue(cab.trackingMode or "stacks")
             trackDrop:SetFullWidth(true)
@@ -1795,7 +1796,7 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
             if (cab.trackingMode or "stacks") ~= "active" then
             local maxEdit = AceGUI:Create("EditBox")
             if maxEdit.editbox.Instructions then maxEdit.editbox.Instructions:Hide() end
-            maxEdit:SetLabel("Max Stacks")
+            maxEdit:SetLabel(L["Max Stacks"])
             maxEdit:SetText(tostring(cab.maxStacks or 1))
             maxEdit:SetFullWidth(true)
             maxEdit:SetCallback("OnEnterPressed", function(widget, event, text)
@@ -1813,11 +1814,11 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
             -- Display Mode dropdown (hidden in "active" tracking mode)
             if (cab.trackingMode or "stacks") ~= "active" then
             local modeDrop = AceGUI:Create("Dropdown")
-            modeDrop:SetLabel("Display Mode")
+            modeDrop:SetLabel(L["Display Mode"])
             modeDrop:SetList({
-                continuous = "Continuous",
-                segmented = "Segmented",
-                overlay = "Overlay",
+                continuous = L["Continuous"],
+                segmented = L["Segmented"],
+                overlay = L["Overlay"],
             }, { "continuous", "segmented", "overlay" })
             modeDrop:SetValue(cab.displayMode or "segmented")
             modeDrop:SetFullWidth(true)
@@ -1853,7 +1854,7 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
             -- ---- Colors section (only when has spell ID) ----
             if cab.spellID then
                 local colorHeading = AceGUI:Create("Heading")
-                colorHeading:SetText("Colors")
+                colorHeading:SetText(L["Colors"])
                 ColorHeading(colorHeading)
                 colorHeading:SetFullWidth(true)
                 container:AddChild(colorHeading)
@@ -1861,13 +1862,13 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                 -- Bar Color (all modes)
                 local cabIdx = capturedIdx
                 local cabApplyBars = function() CooldownCompanion:ApplyResourceBars() end
-                AddColorPicker(container, customBars[cabIdx], "barColor", "Bar Color", {0.5, 0.5, 1}, false,
+                AddColorPicker(container, customBars[cabIdx], "barColor", L["Bar Color"], {0.5, 0.5, 1}, false,
                     cabApplyBars, function() CooldownCompanion:RecolorCustomAuraBar(customBars[cabIdx]) end)
 
                 local isActiveTracking = (cab.trackingMode or "stacks") == "active"
                 if not isActiveTracking then
                     local thresholdCb = AceGUI:Create("CheckBox")
-                    thresholdCb:SetLabel("Enable Max Stack Color")
+                    thresholdCb:SetLabel(L["Enable Max Stack Color"])
                     thresholdCb:SetValue(cab.thresholdColorEnabled == true)
                     thresholdCb:SetFullWidth(true)
                     thresholdCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -1878,7 +1879,7 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                     container:AddChild(thresholdCb)
 
                     if cab.thresholdColorEnabled == true then
-                        AddColorPicker(container, customBars[cabIdx], "thresholdMaxColor", "Max Stack Color", DEFAULT_CUSTOM_AURA_MAX_COLOR, false,
+                        AddColorPicker(container, customBars[cabIdx], "thresholdMaxColor", L["Max Stack Color"], DEFAULT_CUSTOM_AURA_MAX_COLOR, false,
                             cabApplyBars, function() CooldownCompanion:RecolorCustomAuraBar(customBars[cabIdx]) end)
                     end
                 end
@@ -1886,7 +1887,7 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                 -- Max Stacks Glow (independent of threshold color)
                 if not isActiveTracking then
                     local glowCb = AceGUI:Create("CheckBox")
-                    glowCb:SetLabel("Max Stack Indicator")
+                    glowCb:SetLabel(L["Max Stack Indicator"])
                     glowCb:SetValue(cab.maxStacksGlowEnabled == true)
                     glowCb:SetFullWidth(true)
                     glowCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -1899,18 +1900,18 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                     local glowAdvExpanded, glowAdvBtn = AddAdvancedToggle(glowCb, "maxStacksIndicator", tabInfoButtons, cab.maxStacksGlowEnabled == true)
 
                     CreateInfoButton(glowCb.frame, glowAdvBtn, "LEFT", "RIGHT", 4, 0, {
-                        "Max Stack Indicator",
-                        {"Due to combat restrictions, individual bar segments cannot be highlighted independently.", 1, 1, 1, true},
+                        L["Max Stack Indicator"],
+                        {L["Due to combat restrictions, individual bar segments cannot be highlighted independently."], 1, 1, 1, true},
                         " ",
-                        {"The indicator covers the entire resource bar and appears automatically when your buff reaches its maximum stack count.", 1, 1, 1, true},
+                        {L["The indicator covers the entire resource bar and appears automatically when your buff reaches its maximum stack count."], 1, 1, 1, true},
                         " ",
-                        {"The Pulsing Overlay style is only available for continuous display mode.", 1, 1, 1, true},
+                        {L["The Pulsing Overlay style is only available for continuous display mode."], 1, 1, 1, true},
                     }, glowCb)
 
                     if glowAdvExpanded and cab.maxStacksGlowEnabled then
                         -- Preview (ephemeral, not saved)
                         local previewCb = AceGUI:Create("CheckBox")
-                        previewCb:SetLabel("Preview Indicator")
+                        previewCb:SetLabel(L["Preview Indicator"])
                         previewCb:SetValue(CooldownCompanion:IsResourceBarPreviewActive())
                         previewCb:SetFullWidth(true)
                         previewCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -1934,20 +1935,20 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                         local styleList, styleOrder
                         if isContinuousDisplay then
                             styleList = {
-                                solidBorder = "Solid Border",
-                                pulsingBorder = "Pulsing Border",
-                                pulsingOverlay = "Pulsing Overlay",
+                                solidBorder = L["Solid Border"],
+                                pulsingBorder = L["Pulsing Border"],
+                                pulsingOverlay = L["Pulsing Overlay"],
                             }
                             styleOrder = { "solidBorder", "pulsingBorder", "pulsingOverlay" }
                         else
                             styleList = {
-                                solidBorder = "Solid Border",
-                                pulsingBorder = "Pulsing Border",
+                                solidBorder = L["Solid Border"],
+                                pulsingBorder = L["Pulsing Border"],
                             }
                             styleOrder = { "solidBorder", "pulsingBorder" }
                         end
                         local styleDrop = AceGUI:Create("Dropdown")
-                        styleDrop:SetLabel("Indicator Style")
+                        styleDrop:SetLabel(L["Indicator Style"])
                         styleDrop:SetList(styleList, styleOrder)
                         styleDrop:SetValue(currentStyle)
                         styleDrop:SetFullWidth(true)
@@ -1959,13 +1960,13 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                         container:AddChild(styleDrop)
 
                         -- Color picker
-                        AddColorPicker(container, customBars[cabIdx], "maxStacksGlowColor", "Indicator Color", {1, 0.84, 0, 0.9}, true,
+                        AddColorPicker(container, customBars[cabIdx], "maxStacksGlowColor", L["Indicator Color"], {1, 0.84, 0, 0.9}, true,
                             cabApplyBars, cabApplyBars)
 
                         -- Border size slider (border styles only — overlay has no size param)
                         if currentStyle ~= "pulsingOverlay" then
                             local sizeSlider = AceGUI:Create("Slider")
-                            sizeSlider:SetLabel("Border Size")
+                            sizeSlider:SetLabel(L["Border Size"])
                             sizeSlider:SetSliderValues(1, 8, 1)
                             sizeSlider:SetValue(cab.maxStacksGlowSize or 2)
                             sizeSlider:SetFullWidth(true)
@@ -1979,7 +1980,7 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                         -- Pulse speed slider (pulsing styles only)
                         if currentStyle == "pulsingBorder" or currentStyle == "pulsingOverlay" then
                             local speedSlider = AceGUI:Create("Slider")
-                            speedSlider:SetLabel("Pulse Duration")
+                            speedSlider:SetLabel(L["Pulse Duration"])
                             speedSlider:SetSliderValues(0.1, 2.0, 0.1)
                             speedSlider:SetValue(cab.maxStacksGlowSpeed or 0.5)
                             speedSlider:SetFullWidth(true)
@@ -1994,14 +1995,14 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
 
                 -- Overlay Color (overlay mode only)
                 if cab.displayMode == "overlay" and (cab.trackingMode or "stacks") ~= "active" then
-                    local cpOverlay = AddColorPicker(container, customBars[cabIdx], "overlayColor", "Overlay Color", {1, 0.84, 0}, false,
+                    local cpOverlay = AddColorPicker(container, customBars[cabIdx], "overlayColor", L["Overlay Color"], {1, 0.84, 0}, false,
                         cabApplyBars, function() CooldownCompanion:RecolorCustomAuraBar(customBars[cabIdx]) end)
 
                     -- Overlay Color tooltip (?) — use SetDescription for AceGUI-safe approach
                     cpOverlay:SetCallback("OnEnter", function(widget)
                         GameTooltip:SetOwner(widget.frame, "ANCHOR_RIGHT")
-                        GameTooltip:AddLine("Overlay Color")
-                        GameTooltip:AddLine("Number of bar segments equals half the max stacks. Overlay color activates once base segments are full.", 1, 1, 1, true)
+                        GameTooltip:AddLine(L["Overlay Color"])
+                        GameTooltip:AddLine(L["Number of bar segments equals half the max stacks. Overlay color activates once base segments are full."], 1, 1, 1, true)
                         GameTooltip:Show()
                     end)
                     cpOverlay:SetCallback("OnLeave", function()
@@ -2016,7 +2017,7 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                 if isContinuous then
                     -- Show Duration Text
                     local durationTextCb = AceGUI:Create("CheckBox")
-                    durationTextCb:SetLabel("Show Duration Text")
+                    durationTextCb:SetLabel(L["Show Duration Text"])
                     durationTextCb:SetValue(cab.showDurationText == true)
                     durationTextCb:SetFullWidth(true)
                     durationTextCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -2033,7 +2034,7 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                     end
 
                     local stackTextCb = AceGUI:Create("CheckBox")
-                    stackTextCb:SetLabel("Show Stack Text")
+                    stackTextCb:SetLabel(L["Show Stack Text"])
                     stackTextCb:SetValue(stackVal == true)
                     stackTextCb:SetFullWidth(true)
                     stackTextCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -2048,7 +2049,7 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                     local durationAdvExpanded = AddAdvancedToggle(durationTextCb, "rbCabDurationText_" .. capturedIdx, rbCabTextAdvBtns, showDuration)
                     if durationAdvExpanded and showDuration then
                         local fontDrop = AceGUI:Create("Dropdown")
-                        fontDrop:SetLabel("Duration Font")
+                        fontDrop:SetLabel(L["Duration Font"])
                         CS.SetupFontDropdown(fontDrop)
                         fontDrop:SetValue(cab.durationTextFont or DEFAULT_RESOURCE_TEXT_FONT)
                         fontDrop:SetFullWidth(true)
@@ -2059,7 +2060,7 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                         container:AddChild(fontDrop)
 
                         local sizeDrop = AceGUI:Create("Slider")
-                        sizeDrop:SetLabel("Duration Font Size")
+                        sizeDrop:SetLabel(L["Duration Font Size"])
                         sizeDrop:SetSliderValues(6, 24, 1)
                         sizeDrop:SetValue(cab.durationTextFontSize or DEFAULT_RESOURCE_TEXT_SIZE)
                         sizeDrop:SetFullWidth(true)
@@ -2070,7 +2071,7 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                         container:AddChild(sizeDrop)
 
                         local outlineDrop = AceGUI:Create("Dropdown")
-                        outlineDrop:SetLabel("Duration Outline")
+                        outlineDrop:SetLabel(L["Duration Outline"])
                         outlineDrop:SetList(CS.outlineOptions)
                         outlineDrop:SetValue(cab.durationTextFontOutline or DEFAULT_RESOURCE_TEXT_OUTLINE)
                         outlineDrop:SetFullWidth(true)
@@ -2080,10 +2081,10 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                         end)
                         container:AddChild(outlineDrop)
 
-                        AddColorPicker(container, customBars[cabIdx], "durationTextFontColor", "Duration Text Color", DEFAULT_RESOURCE_TEXT_COLOR, true, cabApplyBars)
+                        AddColorPicker(container, customBars[cabIdx], "durationTextFontColor", L["Duration Text Color"], DEFAULT_RESOURCE_TEXT_COLOR, true, cabApplyBars)
 
                         local decimalCheck = AceGUI:Create("CheckBox")
-                        decimalCheck:SetLabel("Show Decimal Point")
+                        decimalCheck:SetLabel(L["Show Decimal Point"])
                         decimalCheck:SetValue(cab.decimalTimers or false)
                         decimalCheck:SetFullWidth(true)
                         decimalCheck:SetCallback("OnValueChanged", function(widget, event, val)
@@ -2093,9 +2094,9 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                         container:AddChild(decimalCheck)
 
                         CreateInfoButton(decimalCheck.frame, decimalCheck.checkbg, "LEFT", "RIGHT", decimalCheck.text:GetStringWidth() + 4, 0, {
-                            "Show Decimal Point",
-                            {"Shows one decimal place on duration text", 1, 1, 1, true},
-                            {"(e.g. \"4.5\" instead of \"5\").", 1, 1, 1, true},
+                            L["Show Decimal Point"],
+                            {L["Shows one decimal place on duration text"], 1, 1, 1, true},
+                            {L["(e.g. \"4.5\" instead of \"5\")."], 1, 1, 1, true},
                         }, decimalCheck)
                     end
 
@@ -2103,10 +2104,10 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                     if stackAdvExpanded and showStack then
                         if not isActive then
                             local stackTextFormatDrop = AceGUI:Create("Dropdown")
-                            stackTextFormatDrop:SetLabel("Text Format")
+                            stackTextFormatDrop:SetLabel(L["Text Format"])
                             local stackTextFormatOptions = {
-                                current = "Current Value",
-                                current_max = "Current / Max",
+                                current = L["Current Value"],
+                                current_max = L["Current / Max"],
                             }
                             local stackTextFormatOrder = { "current", "current_max" }
                             stackTextFormatDrop:SetList(stackTextFormatOptions, stackTextFormatOrder)
@@ -2128,7 +2129,7 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                         end
 
                         local fontDrop = AceGUI:Create("Dropdown")
-                        fontDrop:SetLabel("Stack Font")
+                        fontDrop:SetLabel(L["Stack Font"])
                         CS.SetupFontDropdown(fontDrop)
                         fontDrop:SetValue(cab.stackTextFont or DEFAULT_RESOURCE_TEXT_FONT)
                         fontDrop:SetFullWidth(true)
@@ -2139,7 +2140,7 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                         container:AddChild(fontDrop)
 
                         local sizeDrop = AceGUI:Create("Slider")
-                        sizeDrop:SetLabel("Stack Font Size")
+                        sizeDrop:SetLabel(L["Stack Font Size"])
                         sizeDrop:SetSliderValues(6, 24, 1)
                         sizeDrop:SetValue(cab.stackTextFontSize or DEFAULT_RESOURCE_TEXT_SIZE)
                         sizeDrop:SetFullWidth(true)
@@ -2150,7 +2151,7 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                         container:AddChild(sizeDrop)
 
                         local outlineDrop = AceGUI:Create("Dropdown")
-                        outlineDrop:SetLabel("Stack Outline")
+                        outlineDrop:SetLabel(L["Stack Outline"])
                         outlineDrop:SetList(CS.outlineOptions)
                         outlineDrop:SetValue(cab.stackTextFontOutline or DEFAULT_RESOURCE_TEXT_OUTLINE)
                         outlineDrop:SetFullWidth(true)
@@ -2160,13 +2161,13 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                         end)
                         container:AddChild(outlineDrop)
 
-                        AddColorPicker(container, customBars[cabIdx], "stackTextFontColor", "Stack Text Color", DEFAULT_RESOURCE_TEXT_COLOR, true, cabApplyBars)
+                        AddColorPicker(container, customBars[cabIdx], "stackTextFontColor", L["Stack Text Color"], DEFAULT_RESOURCE_TEXT_COLOR, true, cabApplyBars)
                     end
                 end
 
                 -- Hide When Inactive
                 local hideCb = AceGUI:Create("CheckBox")
-                hideCb:SetLabel("Hide When Inactive")
+                hideCb:SetLabel(L["Hide When Inactive"])
                 hideCb:SetValue(cab.hideWhenInactive == true)
                 hideCb:SetFullWidth(true)
                 hideCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -2177,7 +2178,7 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
 
                 -- ---- Talent Conditions section ----
                 local talentHeading = AceGUI:Create("Heading")
-                talentHeading:SetText("Talent Conditions")
+                talentHeading:SetText(L["Talent Conditions"])
                 ColorHeading(talentHeading)
                 talentHeading:SetFullWidth(true)
                 container:AddChild(talentHeading)
@@ -2191,8 +2192,8 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                 end)
 
                 local talentInfoBtn = CreateInfoButton(talentHeading.frame, talentCollapseBtn, "LEFT", "RIGHT", 2, 0, {
-                    "Talent Conditions",
-                    {"Show or hide this custom aura bar based on which talents you have selected. If you add multiple conditions, all of them must pass.", 1, 1, 1, true},
+                    L["Talent Conditions"],
+                    {L["Show or hide this custom aura bar based on which talents you have selected. If you add multiple conditions, all of them must pass."], 1, 1, 1, true},
                 }, tabInfoButtons)
                 talentHeading.right:ClearAllPoints()
                 talentHeading.right:SetPoint("RIGHT", talentHeading.frame, "RIGHT", -3, 0)
@@ -2217,7 +2218,7 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                             summaryLabel:SetText(condCount .. " conditions" .. ST._GetConditionListContextSuffix(conditions))
                         end
                     else
-                        summaryLabel:SetText("|cff888888None|r")
+                        summaryLabel:SetText(L["|cff888888None|r"])
                     end
                     summaryLabel:SetFullWidth(true)
                     container:AddChild(summaryLabel)
@@ -2253,14 +2254,14 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                             and (not cond.heroSubTreeID or cond.heroSubTreeID == currentHeroSubTreeID)
                         if matchesCurrentScope and cache and not cache[cond.nodeID] then
                             local warnLabel = AceGUI:Create("Label")
-                            warnLabel:SetText("|cffff8800  This talent is not in your current active tree, so it behaves as not taken right now.|r")
+                            warnLabel:SetText(L["|cffff8800  This talent is not in your current active tree, so it behaves as not taken right now.|r"])
                             warnLabel:SetFullWidth(true)
                             container:AddChild(warnLabel)
                         end
                     end
                 else
                     local emptyLabel = AceGUI:Create("Label")
-                    emptyLabel:SetText("|cff888888No talent conditions set.|r")
+                    emptyLabel:SetText(L["|cff888888No talent conditions set.|r"])
                     emptyLabel:SetFullWidth(true)
                     container:AddChild(emptyLabel)
                 end
@@ -2271,7 +2272,7 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                 talentBtnRow:SetLayout("Flow")
 
                 local pickBtn = AceGUI:Create("Button")
-                pickBtn:SetText(condCount > 0 and "Edit" or "Pick Talents")
+                pickBtn:SetText(condCount > 0 and L["Edit"] or L["Pick Talents"])
                 pickBtn:SetRelativeWidth(condCount > 0 and 0.5 or 1)
                 pickBtn:SetCallback("OnClick", function()
                     local initialConditions = cab.talentConditions
@@ -2332,7 +2333,7 @@ local function BuildLayoutOrderPanel(container)
 
     if not rbSettings or not rbSettings.enabled then
         local label = AceGUI:Create("Label")
-        label:SetText("Enable Resource Bars to configure layout.")
+        label:SetText(L["Enable Resource Bars to configure layout."])
         label:SetFullWidth(true)
         container:AddChild(label)
         return
@@ -2341,7 +2342,7 @@ local function BuildLayoutOrderPanel(container)
     local layout = CooldownCompanion:GetSpecLayoutOrder()
     if not layout then
         local label = AceGUI:Create("Label")
-        label:SetText("Specialization data loading...")
+        label:SetText(L["Specialization data loading..."])
         label:SetFullWidth(true)
         container:AddChild(label)
         return
@@ -2356,7 +2357,7 @@ local function BuildLayoutOrderPanel(container)
     local layoutSpecID = GetCurrentConfigSpecID()
     if not layoutSpecID then
         local specLabel = AceGUI:Create("Label")
-        specLabel:SetText("Specialization data not yet available.")
+        specLabel:SetText(L["Specialization data not yet available."])
         specLabel:SetFullWidth(true)
         container:AddChild(specLabel)
         return
@@ -2391,7 +2392,7 @@ local function BuildLayoutOrderPanel(container)
 
         if #slots == 0 then
             local emptyLabel = AceGUI:Create("Label")
-            emptyLabel:SetText("|cff888888No active entries in this section.|r")
+            emptyLabel:SetText(L["|cff888888No active entries in this section.|r"])
             emptyLabel:SetFullWidth(true)
             container:AddChild(emptyLabel)
             return
@@ -2417,7 +2418,7 @@ local function BuildLayoutOrderPanel(container)
         for rowIdx, slot in ipairs(displayList) do
             if rowIdx == dividerIdx then
                 local divLabel = AceGUI:Create("Heading")
-                divLabel:SetText(dividerLabel or "Icons")
+                divLabel:SetText(dividerLabel or L["Icons"])
                 divLabel:SetFullWidth(true)
                 container:AddChild(divLabel)
             end
@@ -2508,7 +2509,7 @@ local function BuildLayoutOrderPanel(container)
             end
         end
         if showResource then
-            local name = POWER_NAMES[pt] or ("Power " .. pt)
+            local name = POWER_NAMES[pt] or (L["Power "] .. pt)
             local function ensureLayoutRes()
                 if not layout.resources[pt] then layout.resources[pt] = {} end
                 return layout.resources[pt]
@@ -2554,7 +2555,7 @@ local function BuildLayoutOrderPanel(container)
         local cab = customBars and customBars[slotIdx]
         if cab and cab.enabled and cab.spellID and not IsTruthyConfigFlag(cab.independentAnchorEnabled) then
             local spellInfo = C_Spell.GetSpellInfo(cab.spellID)
-            local slotName = "Custom Aura " .. slotIdx
+            local slotName = L["Custom Aura "] .. slotIdx
             if spellInfo and spellInfo.name then
                 slotName = slotName .. ": " .. spellInfo.name
             end
@@ -2609,7 +2610,7 @@ local function BuildLayoutOrderPanel(container)
         if cbAnchor and cbAnchor == rbAnchor then
             local cbColor = cbSettings.barColor or { 1.0, 0.7, 0.0 }
             table.insert(castSlots, {
-                label = "Cast Bar",
+                label = L["Cast Bar"],
                 color = cbColor,
                 getPos = function() return (layout.castBar and layout.castBar.position) or "below" end,
                 getOrder = function() return (layout.castBar and layout.castBar.order) or 2000 end,
@@ -2631,31 +2632,31 @@ local function BuildLayoutOrderPanel(container)
         end
         if #resourceSlots == 0 then
             local label = AceGUI:Create("Label")
-            label:SetText("No active bars to order. Enable resources or custom aura bars first.")
+            label:SetText(L["No active bars to order. Enable resources or custom aura bars first."])
             label:SetFullWidth(true)
             container:AddChild(label)
             return
         end
-        RenderSlotOrdering(resourceSlots, nil, "above", "below", "Icons", "Up", "Down")
+        RenderSlotOrdering(resourceSlots, nil, "above", "below", L["Icons"], L["Up"], L["Down"])
         return
     end
 
     if #resourceSlots == 0 and #castSlots == 0 then
         local label = AceGUI:Create("Label")
-        label:SetText("No active bars to order. Enable resources, custom aura bars, or cast bar first.")
+        label:SetText(L["No active bars to order. Enable resources, custom aura bars, or cast bar first."])
         label:SetFullWidth(true)
         container:AddChild(label)
         return
     end
 
-    RenderSlotOrdering(resourceSlots, nil, "left", "right", "Icons", "Left", "Right")
+    RenderSlotOrdering(resourceSlots, nil, "left", "right", L["Icons"], L["Left"], L["Right"])
 
     if #castSlots > 0 then
         local spacer = AceGUI:Create("Label")
         spacer:SetText(" ")
         spacer:SetFullWidth(true)
         container:AddChild(spacer)
-        RenderSlotOrdering(castSlots, "Cast Bar", "above", "below", "Icons", "Up", "Down")
+        RenderSlotOrdering(castSlots, L["Cast Bar"], "above", "below", L["Icons"], L["Up"], L["Down"])
     end
 end
 

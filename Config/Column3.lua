@@ -6,6 +6,7 @@
 local ADDON_NAME, ST = ...
 local CooldownCompanion = ST.Addon
 local CS = ST._configState
+local L = LibStub("AceLocale-3.0"):GetLocale("CooldownCompanion", true) or {}
 local AceGUI = LibStub("AceGUI-3.0")
 
 local RenderAutoAddFlow = ST._RenderAutoAddFlow
@@ -232,12 +233,12 @@ local function RefreshColumn3()
 
         local group = CooldownCompanion.db.profile.groups[CS.selectedGroup]
         local isTextMode = group and group.displayMode == "text"
-        local tabs = { { value = "appearance", text = "Appearance" } }
+        local tabs = { { value = "appearance", text = L["Appearance"] } }
         if not isTextMode then
-            tabs[#tabs + 1] = { value = "effects", text = "Indicators" }
+            tabs[#tabs + 1] = { value = "effects", text = L["Indicators"] }
         end
-        tabs[#tabs + 1] = { value = "layout", text = "Layout" }
-        tabs[#tabs + 1] = { value = "loadconditions", text = "Load Conditions" }
+        tabs[#tabs + 1] = { value = "layout", text = L["Layout"] }
+        tabs[#tabs + 1] = { value = "loadconditions", text = L["Load Conditions"] }
         col3Normal._panelTabGroup:SetTabs(tabs)
 
         -- Migrate stale tab / text-mode redirect

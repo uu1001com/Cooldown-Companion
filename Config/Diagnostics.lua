@@ -6,7 +6,7 @@
 local ADDON_NAME, ST = ...
 local CooldownCompanion = ST.Addon
 local CS = ST._configState
-
+local L = LibStub("AceLocale-3.0"):GetLocale("CooldownCompanion", true) or {}
 local AceGUI = LibStub("AceGUI-3.0")
 local AceSerializer = LibStub("AceSerializer-3.0")
 local LibDeflate = LibStub("LibDeflate")
@@ -16,12 +16,12 @@ local decodedDiagnostic = nil
 local diagnosticDecodeFrame = nil
 
 local RESOURCE_NAMES = {
-    [0] = "Mana", [1] = "Rage", [2] = "Focus", [3] = "Energy",
-    [4] = "Combo Points", [5] = "Runes", [6] = "Runic Power",
-    [7] = "Soul Shards", [8] = "Lunar Power", [9] = "Holy Power",
-    [10] = "Alternate", [11] = "Maelstrom", [12] = "Chi",
-    [13] = "Insanity", [16] = "Arcane Charges", [17] = "Fury",
-    [18] = "Pain", [19] = "Essence", [100] = "Maelstrom Weapon",
+    [0] = L["Mana"], [1] = L["Rage"], [2] = L["Focus"], [3] = L["Energy"],
+    [4] = L["Combo Points"], [5] = L["Runes"], [6] = L["Runic Power"],
+    [7] = L["Soul Shards"], [8] = L["Lunar Power"], [9] = L["Holy Power"],
+    [10] = L["Alternate"], [11] = L["Maelstrom"], [12] = L["Chi"],
+    [13] = L["Insanity"], [16] = L["Arcane Charges"], [17] = L["Fury"],
+    [18] = L["Pain"], [19] = L["Essence"], [100] = L["Maelstrom Weapon"],
 }
 
 local function BuildDiagnosticSnapshot()

@@ -5,6 +5,7 @@
 
 local ADDON_NAME, ST = ...
 local CooldownCompanion = ST.Addon
+local L = LibStub("AceLocale-3.0"):GetLocale("CooldownCompanion", true) or {}
 local AceGUI = LibStub("AceGUI-3.0")
 local CS = ST._configState
 
@@ -207,7 +208,7 @@ local function ResolveConditionClassName(cond)
 
     if cond.classID then
         local name = GetClassInfo(cond.classID)
-        return name or ("Class " .. cond.classID)
+        return name or (L["Class "] .. cond.classID)
     end
 
     return nil
@@ -224,7 +225,7 @@ local function ResolveConditionSpecName(cond)
 
     if cond.specID then
         local _, name = GetSpecializationInfoForSpecID(cond.specID)
-        return name or ("Spec " .. cond.specID)
+        return name or (L["Spec "] .. cond.specID)
     end
 
     return nil
@@ -240,7 +241,7 @@ local function ResolveConditionHeroName(cond)
     end
 
     if cond.heroSubTreeID then
-        return "Hero " .. cond.heroSubTreeID
+        return L["Hero "] .. cond.heroSubTreeID
     end
 
     return nil
@@ -302,7 +303,7 @@ local function GetConditionListContextSuffix(list)
 end
 
 local function GetConditionDisplayName(cond)
-    return (cond.name or "Unknown Talent") .. GetConditionContextSuffix(cond)
+    return (cond.name or L["Unknown Talent"]) .. GetConditionContextSuffix(cond)
 end
 
 ------------------------------------------------------------------------
@@ -452,7 +453,7 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
     end
 
     local heading = AceGUI:Create("Heading")
-    heading:SetText("Visibility Rules")
+    heading:SetText(L["Visibility Rules"])
     ColorHeading(heading)
     heading:SetFullWidth(true)
     scroll:AddChild(heading)
@@ -481,7 +482,7 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
     else allNeverUnusable = IsNeverUnusableButton(buttonData) end
     if not allPassive and not allNoCooldown then
     local hideCDCb = AceGUI:Create("CheckBox")
-    hideCDCb:SetLabel("Hide While On Cooldown")
+    hideCDCb:SetLabel(L["Hide While On Cooldown"])
     SetCheckboxValue(hideCDCb, "hideWhileOnCooldown")
     hideCDCb:SetFullWidth(true)
     WrapBatchCallback(hideCDCb, function(widget, event, val)
@@ -502,7 +503,7 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
     else showFallbackOnCooldown = buttonData.hideWhileOnCooldown end
     if showFallbackOnCooldown then
         local fallbackOnCDCb = AceGUI:Create("CheckBox")
-        fallbackOnCDCb:SetLabel("Use Baseline Alpha Fallback")
+        fallbackOnCDCb:SetLabel(L["Use Baseline Alpha Fallback"])
         SetCheckboxValue(fallbackOnCDCb, "useBaselineAlphaFallbackOnCooldown")
         fallbackOnCDCb:SetFullWidth(true)
         ApplyCheckboxIndent(fallbackOnCDCb, 20)
@@ -512,14 +513,14 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
         scroll:AddChild(fallbackOnCDCb)
 
         CreateInfoButton(fallbackOnCDCb.frame, fallbackOnCDCb.checkbg, "LEFT", "RIGHT", fallbackOnCDCb.text:GetStringWidth() + 4, 0, {
-            "Use Baseline Alpha Fallback",
-            {"Instead of fully hiding, show the button dimmed at the group's baseline alpha. The button keeps its layout position.", 1, 1, 1, true},
+            L["Use Baseline Alpha Fallback"],
+            {L["Instead of fully hiding, show the button dimmed at the group's baseline alpha. The button keeps its layout position."], 1, 1, 1, true},
         }, infoButtons)
     end
 
     -- Hide While Not On Cooldown
     local hideNotCDCb = AceGUI:Create("CheckBox")
-    hideNotCDCb:SetLabel("Hide While Not On Cooldown")
+    hideNotCDCb:SetLabel(L["Hide While Not On Cooldown"])
     SetCheckboxValue(hideNotCDCb, "hideWhileNotOnCooldown")
     hideNotCDCb:SetFullWidth(true)
     WrapBatchCallback(hideNotCDCb, function(widget, event, val)
@@ -540,7 +541,7 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
     else showFallbackNotOnCooldown = buttonData.hideWhileNotOnCooldown end
     if showFallbackNotOnCooldown then
         local fallbackNotOnCDCb = AceGUI:Create("CheckBox")
-        fallbackNotOnCDCb:SetLabel("Use Baseline Alpha Fallback")
+        fallbackNotOnCDCb:SetLabel(L["Use Baseline Alpha Fallback"])
         SetCheckboxValue(fallbackNotOnCDCb, "useBaselineAlphaFallbackNotOnCooldown")
         fallbackNotOnCDCb:SetFullWidth(true)
         ApplyCheckboxIndent(fallbackNotOnCDCb, 20)
@@ -550,8 +551,8 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
         scroll:AddChild(fallbackNotOnCDCb)
 
         CreateInfoButton(fallbackNotOnCDCb.frame, fallbackNotOnCDCb.checkbg, "LEFT", "RIGHT", fallbackNotOnCDCb.text:GetStringWidth() + 4, 0, {
-            "Use Baseline Alpha Fallback",
-            {"Instead of fully hiding, show the button dimmed at the group's baseline alpha. The button keeps its layout position.", 1, 1, 1, true},
+            L["Use Baseline Alpha Fallback"],
+            {L["Instead of fully hiding, show the button dimmed at the group's baseline alpha. The button keeps its layout position."], 1, 1, 1, true},
         }, infoButtons)
     end
 
@@ -561,7 +562,7 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
     if not allNeverUnusable then
     -- Hide While Unusable
     local hideUnusableCb = AceGUI:Create("CheckBox")
-    hideUnusableCb:SetLabel("Hide While Unusable")
+    hideUnusableCb:SetLabel(L["Hide While Unusable"])
     SetCheckboxValue(hideUnusableCb, "hideWhileUnusable")
     hideUnusableCb:SetFullWidth(true)
     WrapBatchCallback(hideUnusableCb, function(widget, event, val)
@@ -575,8 +576,8 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
 
     -- (?) tooltip
     CreateInfoButton(hideUnusableCb.frame, hideUnusableCb.checkbg, "LEFT", "RIGHT", hideUnusableCb.text:GetStringWidth() + 4, 0, {
-        "Hide While Unusable",
-        {"Uses the same logic as unusable dimming, but completely hides the button instead of dimming it.", 1, 1, 1, true},
+        L["Hide While Unusable"],
+        {L["Uses the same logic as unusable dimming, but completely hides the button instead of dimming it."], 1, 1, 1, true},
     }, infoButtons)
 
     -- Baseline Alpha Fallback (nested under hideWhileUnusable)
@@ -585,7 +586,7 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
     else showFallbackUnusable = buttonData.hideWhileUnusable end
     if showFallbackUnusable then
         local fallbackUnusableCb = AceGUI:Create("CheckBox")
-        fallbackUnusableCb:SetLabel("Use Baseline Alpha Fallback")
+        fallbackUnusableCb:SetLabel(L["Use Baseline Alpha Fallback"])
         SetCheckboxValue(fallbackUnusableCb, "useBaselineAlphaFallbackUnusable")
         fallbackUnusableCb:SetFullWidth(true)
         ApplyCheckboxIndent(fallbackUnusableCb, 20)
@@ -595,8 +596,8 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
         scroll:AddChild(fallbackUnusableCb)
 
         CreateInfoButton(fallbackUnusableCb.frame, fallbackUnusableCb.checkbg, "LEFT", "RIGHT", fallbackUnusableCb.text:GetStringWidth() + 4, 0, {
-            "Use Baseline Alpha Fallback",
-            {"Instead of fully hiding, show the button dimmed at the group's baseline alpha. The button keeps its layout position.", 1, 1, 1, true},
+            L["Use Baseline Alpha Fallback"],
+            {L["Instead of fully hiding, show the button dimmed at the group's baseline alpha. The button keeps its layout position."], 1, 1, 1, true},
         }, infoButtons)
     end
     end -- not allNeverUnusable
@@ -610,7 +611,7 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
     end
     if showNoProcToggle then
         local hideNoProcCb = AceGUI:Create("CheckBox")
-        hideNoProcCb:SetLabel("Hide While No Proc")
+        hideNoProcCb:SetLabel(L["Hide While No Proc"])
         SetCheckboxValue(hideNoProcCb, "hideWhileNoProc")
         hideNoProcCb:SetFullWidth(true)
         WrapBatchCallback(hideNoProcCb, function(widget, event, val)
@@ -628,7 +629,7 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
         else showFallbackNoProc = buttonData.hideWhileNoProc end
         if showFallbackNoProc then
             local fallbackNoProcCb = AceGUI:Create("CheckBox")
-            fallbackNoProcCb:SetLabel("Use Baseline Alpha Fallback")
+            fallbackNoProcCb:SetLabel(L["Use Baseline Alpha Fallback"])
             SetCheckboxValue(fallbackNoProcCb, "useBaselineAlphaFallbackNoProc")
             fallbackNoProcCb:SetFullWidth(true)
             ApplyCheckboxIndent(fallbackNoProcCb, 20)
@@ -638,8 +639,8 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
             scroll:AddChild(fallbackNoProcCb)
 
             CreateInfoButton(fallbackNoProcCb.frame, fallbackNoProcCb.checkbg, "LEFT", "RIGHT", fallbackNoProcCb.text:GetStringWidth() + 4, 0, {
-                "Use Baseline Alpha Fallback",
-                {"Instead of fully hiding, show the button dimmed at the group's baseline alpha. The button keeps its layout position.", 1, 1, 1, true},
+                L["Use Baseline Alpha Fallback"],
+                {L["Instead of fully hiding, show the button dimmed at the group's baseline alpha. The button keeps its layout position."], 1, 1, 1, true},
             }, infoButtons)
         end
     end
@@ -675,7 +676,7 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
         else showFallbackZeroCharges = buttonData.hideWhileZeroCharges end
         if showFallbackZeroCharges then
             local fallbackZeroChargesCb = AceGUI:Create("CheckBox")
-            fallbackZeroChargesCb:SetLabel("Use Baseline Alpha Fallback")
+            fallbackZeroChargesCb:SetLabel(L["Use Baseline Alpha Fallback"])
             SetCheckboxValue(fallbackZeroChargesCb, "useBaselineAlphaFallbackZeroCharges", FilterChargeCapable)
             fallbackZeroChargesCb:SetFullWidth(true)
             ApplyCheckboxIndent(fallbackZeroChargesCb, 20)
@@ -686,14 +687,14 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
 
             -- (?) tooltip
             CreateInfoButton(fallbackZeroChargesCb.frame, fallbackZeroChargesCb.checkbg, "LEFT", "RIGHT", fallbackZeroChargesCb.text:GetStringWidth() + 4, 0, {
-                "Use Baseline Alpha Fallback",
-                {"Instead of fully hiding, show the button dimmed at the group's baseline alpha. The button keeps its layout position.", 1, 1, 1, true},
+                L["Use Baseline Alpha Fallback"],
+                {L["Instead of fully hiding, show the button dimmed at the group's baseline alpha. The button keeps its layout position."], 1, 1, 1, true},
             }, infoButtons)
         end
 
         -- Desaturate While At Zero Charges
         local desatZeroChargesCb = AceGUI:Create("CheckBox")
-        desatZeroChargesCb:SetLabel("Desaturate While At Zero Charges")
+        desatZeroChargesCb:SetLabel(L["Desaturate While At Zero Charges"])
         SetCheckboxValue(desatZeroChargesCb, "desaturateWhileZeroCharges", FilterChargeCapable)
         desatZeroChargesCb:SetFullWidth(true)
         WrapBatchCallback(desatZeroChargesCb, function(widget, event, val)
@@ -720,7 +721,7 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
         if hasStacks then
             -- Hide While At Zero Stacks
             local hideZeroStacksCb = AceGUI:Create("CheckBox")
-            hideZeroStacksCb:SetLabel("Hide While At Zero Stacks")
+            hideZeroStacksCb:SetLabel(L["Hide While At Zero Stacks"])
             SetCheckboxValue(hideZeroStacksCb, "hideWhileZeroStacks", FilterNonEquippable)
             hideZeroStacksCb:SetFullWidth(true)
             WrapBatchCallback(hideZeroStacksCb, function(widget, event, val)
@@ -740,7 +741,7 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
             else showFallbackZeroStacks = buttonData.hideWhileZeroStacks end
             if showFallbackZeroStacks then
                 local fallbackZeroStacksCb = AceGUI:Create("CheckBox")
-                fallbackZeroStacksCb:SetLabel("Use Baseline Alpha Fallback")
+                fallbackZeroStacksCb:SetLabel(L["Use Baseline Alpha Fallback"])
                 SetCheckboxValue(fallbackZeroStacksCb, "useBaselineAlphaFallbackZeroStacks", FilterNonEquippable)
                 fallbackZeroStacksCb:SetFullWidth(true)
                 ApplyCheckboxIndent(fallbackZeroStacksCb, 20)
@@ -751,14 +752,14 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
 
                 -- (?) tooltip
                 CreateInfoButton(fallbackZeroStacksCb.frame, fallbackZeroStacksCb.checkbg, "LEFT", "RIGHT", fallbackZeroStacksCb.text:GetStringWidth() + 4, 0, {
-                    "Use Baseline Alpha Fallback",
-                    {"Instead of fully hiding, show the button dimmed at the group's baseline alpha. The button keeps its layout position.", 1, 1, 1, true},
+                    L["Use Baseline Alpha Fallback"],
+                    {L["Instead of fully hiding, show the button dimmed at the group's baseline alpha. The button keeps its layout position."], 1, 1, 1, true},
                 }, infoButtons)
             end
 
             -- Desaturate While At Zero Stacks
             local desatZeroStacksCb = AceGUI:Create("CheckBox")
-            desatZeroStacksCb:SetLabel("Desaturate While At Zero Stacks")
+            desatZeroStacksCb:SetLabel(L["Desaturate While At Zero Stacks"])
             SetCheckboxValue(desatZeroStacksCb, "desaturateWhileZeroStacks", FilterNonEquippable)
             desatZeroStacksCb:SetFullWidth(true)
             WrapBatchCallback(desatZeroStacksCb, function(widget, event, val)
@@ -780,7 +781,7 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
     else showEquipSection = isItem and CooldownCompanion.IsItemEquippable(buttonData) end
     if showEquipSection then
         local hideNotEquippedCb = AceGUI:Create("CheckBox")
-        hideNotEquippedCb:SetLabel("Hide While Not Equipped")
+        hideNotEquippedCb:SetLabel(L["Hide While Not Equipped"])
         SetCheckboxValue(hideNotEquippedCb, "hideWhileNotEquipped", FilterEquippable)
         hideNotEquippedCb:SetFullWidth(true)
         WrapBatchCallback(hideNotEquippedCb, function(widget, event, val)
@@ -798,7 +799,7 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
         else showFallbackEquip = buttonData.hideWhileNotEquipped end
         if showFallbackEquip then
             local fallbackNotEquippedCb = AceGUI:Create("CheckBox")
-            fallbackNotEquippedCb:SetLabel("Use Baseline Alpha Fallback")
+            fallbackNotEquippedCb:SetLabel(L["Use Baseline Alpha Fallback"])
             SetCheckboxValue(fallbackNotEquippedCb, "useBaselineAlphaFallbackNotEquipped", FilterEquippable)
             fallbackNotEquippedCb:SetFullWidth(true)
             ApplyCheckboxIndent(fallbackNotEquippedCb, 20)
@@ -809,8 +810,8 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
 
             -- (?) tooltip
             CreateInfoButton(fallbackNotEquippedCb.frame, fallbackNotEquippedCb.checkbg, "LEFT", "RIGHT", fallbackNotEquippedCb.text:GetStringWidth() + 4, 0, {
-                "Use Baseline Alpha Fallback",
-                {"Instead of fully hiding, show the button dimmed at the group's baseline alpha. The button keeps its layout position.", 1, 1, 1, true},
+                L["Use Baseline Alpha Fallback"],
+                {L["Instead of fully hiding, show the button dimmed at the group's baseline alpha. The button keeps its layout position."], 1, 1, 1, true},
             }, infoButtons)
         end
     end
@@ -825,7 +826,7 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
     if isBatch then hideAuraVal = GetBatchFieldValue(group, "hideWhileAuraActive")
     else hideAuraVal = buttonData.hideWhileAuraActive end
     local hideAuraCb = AceGUI:Create("CheckBox")
-    hideAuraCb:SetLabel("Hide While Aura Active")
+    hideAuraCb:SetLabel(L["Hide While Aura Active"])
     -- When auraDisabled in batch: use unfiltered reads so stale data is visible
     if isBatch and auraDisabled then
         SetCheckboxValue(hideAuraCb, "hideWhileAuraActive")
@@ -860,8 +861,8 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
 
     -- (?) tooltip
     CreateInfoButton(hideAuraCb.frame, hideAuraCb.checkbg, "LEFT", "RIGHT", hideAuraCb.text:GetStringWidth() + 4, 0, {
-        "Hide While Aura Active",
-        {"Requires Aura Tracking to be enabled above.", 1, 1, 1, true},
+        L["Hide While Aura Active"],
+        {L["Requires Aura Tracking to be enabled above."], 1, 1, 1, true},
     }, infoButtons)
 
     -- Shared: is hideWhileAuraActive enabled? (used by pandemic + fallback sub-options)
@@ -885,7 +886,7 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
     end
     if isTargetAura then
         local pandemicCb = AceGUI:Create("CheckBox")
-        pandemicCb:SetLabel("Except in Pandemic")
+        pandemicCb:SetLabel(L["Except in Pandemic"])
         SetCheckboxValue(pandemicCb, "hideAuraActiveExceptPandemic", FilterTargetAuraTracking)
         pandemicCb:SetFullWidth(true)
         ApplyCheckboxIndent(pandemicCb, 20)
@@ -899,15 +900,15 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
 
         -- (?) tooltip
         CreateInfoButton(pandemicCb.frame, pandemicCb.checkbg, "LEFT", "RIGHT", pandemicCb.text:GetStringWidth() + 4, 0, {
-            "Except in Pandemic",
-            {"Shows the button during the pandemic window (last ~30% of the debuff duration) so you know when to reapply.", 1, 1, 1, true},
+            L["Except in Pandemic"],
+            {L["Shows the button during the pandemic window (last ~30% of the debuff duration) so you know when to reapply."], 1, 1, 1, true},
         }, infoButtons)
     end
 
     -- Baseline Alpha Fallback (only shown when hideWhileAuraActive is checked)
     if showFallbackAuraActive then
         local fallbackAuraCb = AceGUI:Create("CheckBox")
-        fallbackAuraCb:SetLabel("Use Baseline Alpha Fallback")
+        fallbackAuraCb:SetLabel(L["Use Baseline Alpha Fallback"])
         SetCheckboxValue(fallbackAuraCb, "useBaselineAlphaFallbackAuraActive", FilterAuraTracking)
         fallbackAuraCb:SetFullWidth(true)
         ApplyCheckboxIndent(fallbackAuraCb, 20)
@@ -918,8 +919,8 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
 
         -- (?) tooltip
         CreateInfoButton(fallbackAuraCb.frame, fallbackAuraCb.checkbg, "LEFT", "RIGHT", fallbackAuraCb.text:GetStringWidth() + 4, 0, {
-            "Use Baseline Alpha Fallback",
-            {"Instead of fully hiding, show the button dimmed at the group's baseline alpha. The button keeps its layout position.", 1, 1, 1, true},
+            L["Use Baseline Alpha Fallback"],
+            {L["Instead of fully hiding, show the button dimmed at the group's baseline alpha. The button keeps its layout position."], 1, 1, 1, true},
         }, infoButtons)
     end
 
@@ -928,7 +929,7 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
     if isBatch then hideNoAuraVal = GetBatchFieldValue(group, "hideWhileAuraNotActive")
     else hideNoAuraVal = buttonData.hideWhileAuraNotActive end
     local hideNoAuraCb = AceGUI:Create("CheckBox")
-    hideNoAuraCb:SetLabel("Hide While Aura Not Active")
+    hideNoAuraCb:SetLabel(L["Hide While Aura Not Active"])
     if isBatch and auraDisabled then
         SetCheckboxValue(hideNoAuraCb, "hideWhileAuraNotActive")
     else
@@ -961,8 +962,8 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
 
     -- (?) tooltip
     CreateInfoButton(hideNoAuraCb.frame, hideNoAuraCb.checkbg, "LEFT", "RIGHT", hideNoAuraCb.text:GetStringWidth() + 4, 0, {
-        "Hide While Aura Not Active",
-        {"Requires Aura Tracking to be enabled above.", 1, 1, 1, true},
+        L["Hide While Aura Not Active"],
+        {L["Requires Aura Tracking to be enabled above."], 1, 1, 1, true},
     }, infoButtons)
 
     -- Baseline Alpha Fallback (only shown when hideWhileAuraNotActive is checked)
@@ -971,7 +972,7 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
     else showFallbackAuraNotActive = buttonData.hideWhileAuraNotActive end
     if showFallbackAuraNotActive then
         local fallbackCb = AceGUI:Create("CheckBox")
-        fallbackCb:SetLabel("Use Baseline Alpha Fallback")
+        fallbackCb:SetLabel(L["Use Baseline Alpha Fallback"])
         SetCheckboxValue(fallbackCb, "useBaselineAlphaFallback", FilterAuraTracking)
         fallbackCb:SetFullWidth(true)
         ApplyCheckboxIndent(fallbackCb, 20)
@@ -982,8 +983,8 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
 
         -- (?) tooltip
         CreateInfoButton(fallbackCb.frame, fallbackCb.checkbg, "LEFT", "RIGHT", fallbackCb.text:GetStringWidth() + 4, 0, {
-            "Use Baseline Alpha Fallback",
-            {"Instead of fully hiding, show the button dimmed at the group's baseline alpha. The button keeps its layout position.", 1, 1, 1, true},
+            L["Use Baseline Alpha Fallback"],
+            {L["Instead of fully hiding, show the button dimmed at the group's baseline alpha. The button keeps its layout position."], 1, 1, 1, true},
         }, infoButtons)
     end
 
@@ -993,7 +994,7 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
     else anyPassiveAura = buttonData.isPassive end
     if anyPassiveAura then
         local satNoAuraCb = AceGUI:Create("CheckBox")
-        satNoAuraCb:SetLabel("Saturate While Aura Not Active")
+        satNoAuraCb:SetLabel(L["Saturate While Aura Not Active"])
         SetCheckboxValue(satNoAuraCb, "saturateWhileAuraNotActive", FilterAuraTracking)
         satNoAuraCb:SetFullWidth(true)
         WrapBatchCallback(satNoAuraCb, function(widget, event, val)
@@ -1003,8 +1004,8 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
 
         -- (?) tooltip
         CreateInfoButton(satNoAuraCb.frame, satNoAuraCb.checkbg, "LEFT", "RIGHT", satNoAuraCb.text:GetStringWidth() + 4, 0, {
-            "Saturate While Aura Not Active",
-            {"Keep the icon at full color even when the tracked aura is missing.", 1, 1, 1, true},
+            L["Saturate While Aura Not Active"],
+            {L["Keep the icon at full color even when the tracked aura is missing."], 1, 1, 1, true},
         }, infoButtons)
     end
 
@@ -1017,7 +1018,7 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
         if isBatch then desatNoAuraVal = GetBatchFieldValue(group, "desaturateWhileAuraNotActive")
         else desatNoAuraVal = buttonData.desaturateWhileAuraNotActive end
         local desatNoAuraCb = AceGUI:Create("CheckBox")
-        desatNoAuraCb:SetLabel("Desaturate While Aura Not Active")
+        desatNoAuraCb:SetLabel(L["Desaturate While Aura Not Active"])
         if isBatch and auraDisabled then
             SetCheckboxValue(desatNoAuraCb, "desaturateWhileAuraNotActive")
         else
@@ -1043,8 +1044,8 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
 
         -- (?) tooltip
         CreateInfoButton(desatNoAuraCb.frame, desatNoAuraCb.checkbg, "LEFT", "RIGHT", desatNoAuraCb.text:GetStringWidth() + 4, 0, {
-            "Desaturate While Aura Not Active",
-            {"Requires Aura Tracking to be enabled above.", 1, 1, 1, true},
+            L["Desaturate While Aura Not Active"],
+            {L["Requires Aura Tracking to be enabled above."], 1, 1, 1, true},
         }, infoButtons)
     end
 
@@ -1064,7 +1065,7 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
         scroll:AddChild(warnSpacer)
 
         local warnLabel = AceGUI:Create("Label")
-        warnLabel:SetText("|cffff8800Warning: Aura Tracking is not enabled. Enable it above for aura-based visibility to take effect.|r")
+        warnLabel:SetText(L["|cffff8800Warning: Aura Tracking is not enabled. Enable it above for aura-based visibility to take effect.|r"])
         warnLabel:SetFullWidth(true)
         scroll:AddChild(warnLabel)
     end
@@ -1077,7 +1078,7 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
     ------------------------------------------------------------------------
 
     local talentHeading = AceGUI:Create("Heading")
-    talentHeading:SetText("Talent Conditions")
+    talentHeading:SetText(L["Talent Conditions"])
     ColorHeading(talentHeading)
     talentHeading:SetFullWidth(true)
     scroll:AddChild(talentHeading)
@@ -1092,8 +1093,8 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
     end)
 
     local talentInfoBtn = CreateInfoButton(talentHeading.frame, talentCollapseBtn, "LEFT", "RIGHT", 2, 0, {
-        "Talent Conditions",
-        {"Show or hide this button based on which talents you have selected. If you add multiple conditions, all of them must pass.", 1, 1, 1, true},
+        L["Talent Conditions"],
+        {L["Show or hide this button based on which talents you have selected. If you add multiple conditions, all of them must pass."], 1, 1, 1, true},
     }, infoButtons)
     talentHeading.right:ClearAllPoints()
     talentHeading.right:SetPoint("RIGHT", talentHeading.frame, "RIGHT", -3, 0)
@@ -1112,7 +1113,7 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
     if talentCollapsed then
         local summaryLabel = AceGUI:Create("Label")
         if isBatch and hasTalent == nil then
-            summaryLabel:SetText("|cff888888Multiple conditions|r")
+            summaryLabel:SetText(L["|cff888888Multiple conditions|r"])
         elseif hasTalent and condCount > 0 then
             local firstCond = conditions[1]
             local displayIcon = firstCond.spellID and C_Spell.GetSpellTexture(firstCond.spellID)
@@ -1138,7 +1139,7 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
     -- Condition list display
     if isBatch and hasTalent == nil then
         local mixedLabel = AceGUI:Create("Label")
-        mixedLabel:SetText("|cff888888Multiple conditions — pick or clear to unify.|r")
+        mixedLabel:SetText(L["|cff888888Multiple conditions — pick or clear to unify.|r"])
         mixedLabel:SetFullWidth(true)
         scroll:AddChild(mixedLabel)
     elseif condCount > 0 then
@@ -1168,14 +1169,14 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
                 and (not cond.heroSubTreeID or cond.heroSubTreeID == currentHeroSubTreeID)
             if not isBatch and matchesCurrentScope and cache and not cache[cond.nodeID] then
                 local warnLabel = AceGUI:Create("Label")
-                warnLabel:SetText("|cffff8800  This talent is not in your current active tree, so it behaves as not taken right now.|r")
+                warnLabel:SetText(L["|cffff8800  This talent is not in your current active tree, so it behaves as not taken right now.|r"])
                 warnLabel:SetFullWidth(true)
                 scroll:AddChild(warnLabel)
             end
         end
     else
         local emptyLabel = AceGUI:Create("Label")
-        emptyLabel:SetText("|cff888888No talent conditions set.|r")
+        emptyLabel:SetText(L["|cff888888No talent conditions set.|r"])
         emptyLabel:SetFullWidth(true)
         scroll:AddChild(emptyLabel)
     end
@@ -1186,7 +1187,7 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
     talentBtnRow:SetLayout("Flow")
 
     local pickBtn = AceGUI:Create("Button")
-    pickBtn:SetText(condCount > 0 and "Edit" or "Pick Talents")
+    pickBtn:SetText(condCount > 0 and L["Edit"] or L["Pick Talents"])
     pickBtn:SetRelativeWidth(hasTalent and 0.5 or 1)
     pickBtn:SetCallback("OnClick", function()
         local initialConditions = not isBatch and buttonData.talentConditions or nil
@@ -1358,7 +1359,7 @@ local function BuildLoadConditionsTab(container)
     end
 
     local heading = AceGUI:Create("Heading")
-    heading:SetText("Do Not Load When In")
+    heading:SetText(L["Do Not Load When In"])
     ColorHeading(heading)
     heading:SetFullWidth(true)
     container:AddChild(heading)
@@ -1371,15 +1372,15 @@ local function BuildLoadConditionsTab(container)
 
     if not instanceCollapsed then
     local conditions = {
-        { key = "raid",          label = "Raid" },
-        { key = "dungeon",       label = "Dungeon" },
-        { key = "delve",         label = "Delve" },
-        { key = "battleground",  label = "Battleground" },
-        { key = "arena",         label = "Arena" },
-        { key = "openWorld",     label = "Open World" },
-        { key = "rested",        label = "Rested Area" },
-        { key = "petBattle",     label = "Pet Battle", default = true },
-        { key = "vehicleUI",    label = "Vehicle / Override UI", default = true },
+        { key = "raid",          label = L["Raid"] },
+        { key = "dungeon",       label = L["Dungeon"] },
+        { key = "delve",         label = L["Delve"] },
+        { key = "battleground",  label = L["Battleground"] },
+        { key = "arena",         label = L["Arena"] },
+        { key = "openWorld",     label = L["Open World"] },
+        { key = "rested",        label = L["Rested Area"] },
+        { key = "petBattle",     label = L["Pet Battle"], default = true },
+        { key = "vehicleUI",    label = L["Vehicle / Override UI"], default = true },
     }
 
     if containerLc then
@@ -1392,7 +1393,7 @@ local function BuildLoadConditionsTab(container)
         end
         if anyInherited then
             local inheritedLabel = AceGUI:Create("Label")
-            inheritedLabel:SetText("|cff888888Some conditions inherited from group settings.|r")
+            inheritedLabel:SetText(L["|cff888888Some conditions inherited from group settings.|r"])
             inheritedLabel:SetFullWidth(true)
             container:AddChild(inheritedLabel)
         end
@@ -1405,7 +1406,7 @@ local function BuildLoadConditionsTab(container)
 
     -- Specialization heading
     local specHeading = AceGUI:Create("Heading")
-    specHeading:SetText("Specialization Filter")
+    specHeading:SetText(L["Specialization Filter"])
     ColorHeading(specHeading)
     specHeading:SetFullWidth(true)
     container:AddChild(specHeading)
@@ -1419,7 +1420,7 @@ local function BuildLoadConditionsTab(container)
     if not specCollapsed then
     if inheritedSpecFilter or inheritedHeroFilter then
         local inheritedLabel = AceGUI:Create("Label")
-        inheritedLabel:SetText("|cff888888Some filters inherited from group settings.|r")
+        inheritedLabel:SetText(L["|cff888888Some filters inherited from group settings.|r"])
         inheritedLabel:SetFullWidth(true)
         container:AddChild(inheritedLabel)
     end

@@ -1,5 +1,6 @@
 local ADDON_NAME, ST = ...
 local CooldownCompanion = ST.Addon
+local L = LibStub("AceLocale-3.0"):GetLocale("CooldownCompanion", true) or {}
 local AceGUI = LibStub("AceGUI-3.0")
 local CS = ST._configState
 
@@ -23,7 +24,7 @@ local function BuildCastBarAnchoringPanel(container)
 
     -- Enable Anchoring
     local enableCb = AceGUI:Create("CheckBox")
-    enableCb:SetLabel("Enable Cast Bar Anchoring")
+    enableCb:SetLabel(L["Enable Cast Bar Anchoring"])
     enableCb:SetValue(settings.enabled)
     enableCb:SetFullWidth(true)
     enableCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -33,7 +34,7 @@ local function BuildCastBarAnchoringPanel(container)
     end)
     container:AddChild(enableCb)
 
-    CreateCharacterCopyButton(enableCb, "castBar", "Cast Bar", function()
+    CreateCharacterCopyButton(enableCb, "castBar", L["Cast Bar"], function()
         CooldownCompanion:EvaluateCastBar()
         CooldownCompanion:UpdateAnchorStacking()
         CooldownCompanion:RefreshConfigPanel()
@@ -45,10 +46,10 @@ local function BuildCastBarAnchoringPanel(container)
 
     -- Anchoring Mode dropdown
     local anchorModeDrop = AceGUI:Create("Dropdown")
-    anchorModeDrop:SetLabel("Anchoring Mode")
+    anchorModeDrop:SetLabel(L["Anchoring Mode"])
     anchorModeDrop:SetList({
-        attached = "Attached to Panel",
-        independent = "Independent",
+        attached = L["Attached to Panel"],
+        independent = L["Independent"],
     }, { "attached", "independent" })
     anchorModeDrop:SetValue(isIndependent and "independent" or "attached")
     anchorModeDrop:SetFullWidth(true)
@@ -62,7 +63,7 @@ local function BuildCastBarAnchoringPanel(container)
 
     -- Preview toggle (ephemeral — not saved to DB)
     local previewCb = AceGUI:Create("CheckBox")
-    previewCb:SetLabel("Preview Cast Bar")
+    previewCb:SetLabel(L["Preview Cast Bar"])
     previewCb:SetValue(CooldownCompanion:IsCastBarPreviewActive())
     previewCb:SetFullWidth(true)
     previewCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -76,7 +77,7 @@ local function BuildCastBarAnchoringPanel(container)
 
     -- Cast Effects
     local sparkTrailCb = AceGUI:Create("CheckBox")
-    sparkTrailCb:SetLabel("Show Spark Trail")
+    sparkTrailCb:SetLabel(L["Show Spark Trail"])
     sparkTrailCb:SetValue(settings.showSparkTrail ~= false)
     sparkTrailCb:SetFullWidth(true)
     sparkTrailCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -86,7 +87,7 @@ local function BuildCastBarAnchoringPanel(container)
     container:AddChild(sparkTrailCb)
 
     local intShakeCb = AceGUI:Create("CheckBox")
-    intShakeCb:SetLabel("Show Interrupt Shake")
+    intShakeCb:SetLabel(L["Show Interrupt Shake"])
     intShakeCb:SetValue(settings.showInterruptShake ~= false)
     intShakeCb:SetFullWidth(true)
     intShakeCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -96,7 +97,7 @@ local function BuildCastBarAnchoringPanel(container)
     container:AddChild(intShakeCb)
 
     local intGlowCb = AceGUI:Create("CheckBox")
-    intGlowCb:SetLabel("Show Interrupt Glow")
+    intGlowCb:SetLabel(L["Show Interrupt Glow"])
     intGlowCb:SetValue(settings.showInterruptGlow ~= false)
     intGlowCb:SetFullWidth(true)
     intGlowCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -106,7 +107,7 @@ local function BuildCastBarAnchoringPanel(container)
     container:AddChild(intGlowCb)
 
     local castFinishCb = AceGUI:Create("CheckBox")
-    castFinishCb:SetLabel("Show Cast Finish FX")
+    castFinishCb:SetLabel(L["Show Cast Finish FX"])
     castFinishCb:SetValue(settings.showCastFinishFX ~= false)
     castFinishCb:SetFullWidth(true)
     castFinishCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -122,7 +123,7 @@ local function BuildCastBarPositioningPanel(container)
 
     if not settings.enabled then
         local label = AceGUI:Create("Label")
-        label:SetText("Enable Cast Bar Anchoring to configure positioning.")
+        label:SetText(L["Enable Cast Bar Anchoring to configure positioning."])
         label:SetFullWidth(true)
         container:AddChild(label)
         return
@@ -131,7 +132,7 @@ local function BuildCastBarPositioningPanel(container)
     if not settings.independentAnchorEnabled then
         local rbSettings = CooldownCompanion:GetResourceBarSettings()
         local ySlider = AceGUI:Create("Slider")
-        ySlider:SetLabel("Y Offset")
+        ySlider:SetLabel(L["Y Offset"])
         ySlider:SetSliderValues(0, 50, 0.1)
         ySlider:SetValue(rbSettings and rbSettings.yOffset or 3)
         ySlider:SetFullWidth(true)
@@ -146,7 +147,7 @@ local function BuildCastBarPositioningPanel(container)
 
     -- Anchor Settings
     local castPosHeading = AceGUI:Create("Heading")
-    castPosHeading:SetText("Anchor Settings")
+    castPosHeading:SetText(L["Anchor Settings"])
     ColorHeading(castPosHeading)
     castPosHeading:SetFullWidth(true)
     container:AddChild(castPosHeading)
@@ -157,7 +158,7 @@ local function BuildCastBarPositioningPanel(container)
     local anchor = settings.independentAnchor
 
     local unlockCb = AceGUI:Create("CheckBox")
-    unlockCb:SetLabel("Unlock Placement")
+    unlockCb:SetLabel(L["Unlock Placement"])
     unlockCb:SetValue(not settings.independentAnchorLocked)
     unlockCb:SetFullWidth(true)
     unlockCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -167,7 +168,7 @@ local function BuildCastBarPositioningPanel(container)
     container:AddChild(unlockCb)
 
     local widthSlider = AceGUI:Create("Slider")
-    widthSlider:SetLabel("Cast Bar Width")
+    widthSlider:SetLabel(L["Cast Bar Width"])
     widthSlider:SetSliderValues(20, 600, 1)
     widthSlider:SetValue(settings.independentWidth or 200)
     widthSlider:SetFullWidth(true)
@@ -184,7 +185,7 @@ local function BuildCastBarPositioningPanel(container)
 
     local anchorBox = AceGUI:Create("EditBox")
     if anchorBox.editbox.Instructions then anchorBox.editbox.Instructions:Hide() end
-    anchorBox:SetLabel("Anchor to Frame")
+    anchorBox:SetLabel(L["Anchor to Frame"])
     local currentRelativeTo = anchor.relativeTo
     if not currentRelativeTo or currentRelativeTo == "UIParent" then currentRelativeTo = "" end
     anchorBox:SetText(currentRelativeTo)
@@ -216,7 +217,7 @@ local function BuildCastBarPositioningPanel(container)
     anchorRow:AddChild(anchorBox)
 
     local pickBtn = AceGUI:Create("Button")
-    pickBtn:SetText("Pick")
+    pickBtn:SetText(L["Pick"])
     pickBtn:SetRelativeWidth(0.24)
     pickBtn:SetCallback("OnClick", function()
         CS.StartPickFrame(function(name)
@@ -249,11 +250,11 @@ local function BuildCastBarPositioningPanel(container)
         CooldownCompanion:ApplyCastBarSettings()
     end
 
-    AddAnchorDropdown(container, anchor, "point", "CENTER", refreshCastBarAnchor, "Anchor Point")
-    AddAnchorDropdown(container, anchor, "relativePoint", "CENTER", refreshCastBarAnchor, "Relative Point")
+    AddAnchorDropdown(container, anchor, "point", "CENTER", refreshCastBarAnchor, L["Anchor Point"])
+    AddAnchorDropdown(container, anchor, "relativePoint", "CENTER", refreshCastBarAnchor, L["Relative Point"])
 
     local xSlider = AceGUI:Create("Slider")
-    xSlider:SetLabel("X Offset")
+    xSlider:SetLabel(L["X Offset"])
     xSlider:SetSliderValues(-2000, 2000, 0.1)
     xSlider:SetValue(anchor.x or 0)
     xSlider:SetFullWidth(true)
@@ -265,7 +266,7 @@ local function BuildCastBarPositioningPanel(container)
     container:AddChild(xSlider)
 
     local ySlider = AceGUI:Create("Slider")
-    ySlider:SetLabel("Y Offset")
+    ySlider:SetLabel(L["Y Offset"])
     ySlider:SetSliderValues(-2000, 2000, 0.1)
     ySlider:SetValue(anchor.y or 0)
     ySlider:SetFullWidth(true)
@@ -283,7 +284,7 @@ local function BuildCastBarStylingPanel(container)
 
     -- Enable Styling checkbox — always visible, but grayed out when anchoring is off
     local styleCb = AceGUI:Create("CheckBox")
-    styleCb:SetLabel("Enable Cast Bar Styling")
+    styleCb:SetLabel(L["Enable Cast Bar Styling"])
     styleCb:SetValue(settings.stylingEnabled ~= false)
     styleCb:SetFullWidth(true)
     styleCb:SetDisabled(not settings.enabled)
@@ -303,7 +304,7 @@ local function BuildCastBarStylingPanel(container)
 
     -- Bar Texture
     local texDrop = AceGUI:Create("Dropdown")
-    texDrop:SetLabel("Bar Texture")
+    texDrop:SetLabel(L["Bar Texture"])
     texDrop:SetList(GetBarTextureOptions())
     texDrop:SetValue(settings.barTexture or "Solid")
     texDrop:SetFullWidth(true)
@@ -314,16 +315,16 @@ local function BuildCastBarStylingPanel(container)
     container:AddChild(texDrop)
 
     -- Bar Color
-    AddColorPicker(container, settings, "barColor", "Bar Color", {1.0, 0.7, 0.0, 1.0}, true, applyCastBar)
+    AddColorPicker(container, settings, "barColor", L["Bar Color"], {1.0, 0.7, 0.0, 1.0}, true, applyCastBar)
 
     -- Background Color
-    AddColorPicker(container, settings, "backgroundColor", "Background Color", {0, 0, 0, 0.5}, true, applyCastBar)
+    AddColorPicker(container, settings, "backgroundColor", L["Background Color"], {0, 0, 0, 0.5}, true, applyCastBar)
 
     -- ============ Border ============
 
     -- Border Style
     local borderDrop = AceGUI:Create("Dropdown")
-    borderDrop:SetLabel("Border Style")
+    borderDrop:SetLabel(L["Border Style"])
     borderDrop:SetList({
         blizzard = "Blizzard",
         pixel = "Pixel",
@@ -340,10 +341,10 @@ local function BuildCastBarStylingPanel(container)
 
     -- Border Color and Size (only when pixel)
     if settings.borderStyle == "pixel" then
-        AddColorPicker(container, settings, "borderColor", "Border Color", {0, 0, 0, 1}, true, applyCastBar)
+        AddColorPicker(container, settings, "borderColor", L["Border Color"], {0, 0, 0, 1}, true, applyCastBar)
 
         local borderSizeSlider = AceGUI:Create("Slider")
-        borderSizeSlider:SetLabel("Border Size")
+        borderSizeSlider:SetLabel(L["Border Size"])
         borderSizeSlider:SetSliderValues(0, 5, 0.1)
         borderSizeSlider:SetValue(settings.borderSize or 1)
         borderSizeSlider:SetFullWidth(true)
@@ -358,7 +359,7 @@ local function BuildCastBarStylingPanel(container)
 
     -- Height
     local hSlider = AceGUI:Create("Slider")
-    hSlider:SetLabel("Height")
+    hSlider:SetLabel(L["Height"])
     hSlider:SetSliderValues(4, 40, 0.1)
     hSlider:SetValue(settings.height or 15)
     hSlider:SetFullWidth(true)
@@ -372,7 +373,7 @@ local function BuildCastBarStylingPanel(container)
 
     -- Show Spell Icon
     local iconCb = AceGUI:Create("CheckBox")
-    iconCb:SetLabel("Show Spell Icon")
+    iconCb:SetLabel(L["Show Spell Icon"])
     iconCb:SetValue(settings.showIcon ~= false)
     iconCb:SetFullWidth(true)
     iconCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -387,7 +388,7 @@ local function BuildCastBarStylingPanel(container)
     if iconAdvExpanded and settings.showIcon ~= false then
         -- Icon on Right Side
         local iconFlipCb = AceGUI:Create("CheckBox")
-        iconFlipCb:SetLabel("Icon on Right Side")
+        iconFlipCb:SetLabel(L["Icon on Right Side"])
         iconFlipCb:SetValue(settings.iconFlipSide or false)
         iconFlipCb:SetFullWidth(true)
         iconFlipCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -398,7 +399,7 @@ local function BuildCastBarStylingPanel(container)
 
         -- Icon Offset toggle
         local iconOffsetCb = AceGUI:Create("CheckBox")
-        iconOffsetCb:SetLabel("Icon Offset")
+        iconOffsetCb:SetLabel(L["Icon Offset"])
         iconOffsetCb:SetValue(settings.iconOffset or false)
         iconOffsetCb:SetFullWidth(true)
         iconOffsetCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -413,7 +414,7 @@ local function BuildCastBarStylingPanel(container)
         if iconOffsetAdvExpanded and settings.iconOffset then
             -- Icon Size slider (offset mode only)
             local iconSizeSlider = AceGUI:Create("Slider")
-            iconSizeSlider:SetLabel("Icon Size")
+            iconSizeSlider:SetLabel(L["Icon Size"])
             iconSizeSlider:SetSliderValues(8, 64, 0.1)
             iconSizeSlider:SetValue(settings.iconSize or 16)
             iconSizeSlider:SetFullWidth(true)
@@ -425,7 +426,7 @@ local function BuildCastBarStylingPanel(container)
 
             -- Icon X Offset slider
             local iconXSlider = AceGUI:Create("Slider")
-            iconXSlider:SetLabel("Icon X Offset")
+            iconXSlider:SetLabel(L["Icon X Offset"])
             iconXSlider:SetSliderValues(-50, 50, 0.1)
             iconXSlider:SetValue(settings.iconOffsetX or 0)
             iconXSlider:SetFullWidth(true)
@@ -437,7 +438,7 @@ local function BuildCastBarStylingPanel(container)
 
             -- Icon Y Offset slider
             local iconYSlider = AceGUI:Create("Slider")
-            iconYSlider:SetLabel("Icon Y Offset")
+            iconYSlider:SetLabel(L["Icon Y Offset"])
             iconYSlider:SetSliderValues(-50, 50, 0.1)
             iconYSlider:SetValue(settings.iconOffsetY or 0)
             iconYSlider:SetFullWidth(true)
@@ -449,7 +450,7 @@ local function BuildCastBarStylingPanel(container)
 
             -- Icon Border Size slider (offset mode only)
             local iconBorderSlider = AceGUI:Create("Slider")
-            iconBorderSlider:SetLabel("Icon Border Size")
+            iconBorderSlider:SetLabel(L["Icon Border Size"])
             iconBorderSlider:SetSliderValues(0, 4, 0.1)
             iconBorderSlider:SetValue(settings.iconBorderSize or 1)
             iconBorderSlider:SetFullWidth(true)
@@ -463,7 +464,7 @@ local function BuildCastBarStylingPanel(container)
 
     -- Show Spark
     local sparkCb = AceGUI:Create("CheckBox")
-    sparkCb:SetLabel("Show Spark")
+    sparkCb:SetLabel(L["Show Spark"])
     sparkCb:SetValue(settings.showSpark ~= false)
     sparkCb:SetFullWidth(true)
     sparkCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -474,7 +475,7 @@ local function BuildCastBarStylingPanel(container)
 
     -- Show Spell Name
     local nameCb = AceGUI:Create("CheckBox")
-    nameCb:SetLabel("Show Spell Name")
+    nameCb:SetLabel(L["Show Spell Name"])
     nameCb:SetValue(settings.showNameText ~= false)
     nameCb:SetFullWidth(true)
     nameCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -489,7 +490,7 @@ local function BuildCastBarStylingPanel(container)
     if nameAdvExpanded and settings.showNameText ~= false then
         -- Font
         local nameFontDrop = AceGUI:Create("Dropdown")
-        nameFontDrop:SetLabel("Font")
+        nameFontDrop:SetLabel(L["Font"])
         CS.SetupFontDropdown(nameFontDrop)
         nameFontDrop:SetValue(settings.nameFont or "Friz Quadrata TT")
         nameFontDrop:SetFullWidth(true)
@@ -501,7 +502,7 @@ local function BuildCastBarStylingPanel(container)
 
         -- Size
         local nameSizeSlider = AceGUI:Create("Slider")
-        nameSizeSlider:SetLabel("Font Size")
+        nameSizeSlider:SetLabel(L["Font Size"])
         nameSizeSlider:SetSliderValues(6, 24, 0.1)
         nameSizeSlider:SetValue(settings.nameFontSize or 10)
         nameSizeSlider:SetFullWidth(true)
@@ -513,7 +514,7 @@ local function BuildCastBarStylingPanel(container)
 
         -- Outline
         local nameOutlineDrop = AceGUI:Create("Dropdown")
-        nameOutlineDrop:SetLabel("Outline")
+        nameOutlineDrop:SetLabel(L["Outline"])
         nameOutlineDrop:SetList(CS.outlineOptions)
         nameOutlineDrop:SetValue(settings.nameFontOutline or "OUTLINE")
         nameOutlineDrop:SetFullWidth(true)
@@ -524,12 +525,12 @@ local function BuildCastBarStylingPanel(container)
         container:AddChild(nameOutlineDrop)
 
         -- Color
-        AddColorPicker(container, settings, "nameFontColor", "Font Color", {1, 1, 1, 1}, true, applyCastBar)
+        AddColorPicker(container, settings, "nameFontColor", L["Font Color"], {1, 1, 1, 1}, true, applyCastBar)
     end
 
     -- Show Cast Time
     local ctCb = AceGUI:Create("CheckBox")
-    ctCb:SetLabel("Show Cast Time")
+    ctCb:SetLabel(L["Show Cast Time"])
     ctCb:SetValue(settings.showCastTimeText ~= false)
     ctCb:SetFullWidth(true)
     ctCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -544,7 +545,7 @@ local function BuildCastBarStylingPanel(container)
     if ctAdvExpanded and settings.showCastTimeText ~= false then
         -- Font
         local ctFontDrop = AceGUI:Create("Dropdown")
-        ctFontDrop:SetLabel("Font")
+        ctFontDrop:SetLabel(L["Font"])
         CS.SetupFontDropdown(ctFontDrop)
         ctFontDrop:SetValue(settings.castTimeFont or "Friz Quadrata TT")
         ctFontDrop:SetFullWidth(true)
@@ -556,7 +557,7 @@ local function BuildCastBarStylingPanel(container)
 
         -- Size
         local ctSizeSlider = AceGUI:Create("Slider")
-        ctSizeSlider:SetLabel("Font Size")
+        ctSizeSlider:SetLabel(L["Font Size"])
         ctSizeSlider:SetSliderValues(6, 24, 0.1)
         ctSizeSlider:SetValue(settings.castTimeFontSize or 10)
         ctSizeSlider:SetFullWidth(true)
@@ -568,7 +569,7 @@ local function BuildCastBarStylingPanel(container)
 
         -- Outline
         local ctOutlineDrop = AceGUI:Create("Dropdown")
-        ctOutlineDrop:SetLabel("Outline")
+        ctOutlineDrop:SetLabel(L["Outline"])
         ctOutlineDrop:SetList(CS.outlineOptions)
         ctOutlineDrop:SetValue(settings.castTimeFontOutline or "OUTLINE")
         ctOutlineDrop:SetFullWidth(true)
@@ -583,7 +584,7 @@ local function BuildCastBarStylingPanel(container)
 
         -- X Offset
         local ctXSlider = AceGUI:Create("Slider")
-        ctXSlider:SetLabel("X Offset")
+        ctXSlider:SetLabel(L["X Offset"])
         ctXSlider:SetSliderValues(-50, 50, 0.1)
         ctXSlider:SetValue(settings.castTimeXOffset or 0)
         ctXSlider:SetFullWidth(true)
@@ -595,7 +596,7 @@ local function BuildCastBarStylingPanel(container)
 
         -- Y Offset
         local ctYSlider = AceGUI:Create("Slider")
-        ctYSlider:SetLabel("Y Offset")
+        ctYSlider:SetLabel(L["Y Offset"])
         ctYSlider:SetSliderValues(-20, 20, 0.1)
         ctYSlider:SetValue(settings.castTimeYOffset or 0)
         ctYSlider:SetFullWidth(true)

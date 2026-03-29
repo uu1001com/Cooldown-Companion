@@ -6,7 +6,7 @@
 local ADDON_NAME, ST = ...
 local CooldownCompanion = ST.Addon
 local CS = ST._configState
-
+local L = LibStub("AceLocale-3.0"):GetLocale("CooldownCompanion", true) or {}
 local AceGUI = LibStub("AceGUI-3.0")
 
 -- Imports from earlier Config/ files
@@ -114,7 +114,7 @@ local function IsBuffViewerChild(frame)
     if not frame then return false end
     local parent = frame:GetParent()
     local parentName = parent and parent:GetName()
-    return parentName == "BuffIconCooldownViewer" or parentName == "BuffBarCooldownViewer"
+    return parentName == L["BuffIconCooldownViewer"] or parentName == L["BuffBarCooldownViewer"]
 end
 
 local function ResolveButtonAuraViewerFrame(buttonData)
@@ -232,11 +232,11 @@ local function RefreshColumn2()
         if not col2 then return end
 
         -- Update column title based on active bar panel tab
-        local col2Title = "Customization: Resources"
+        local col2Title = L["Customization: Resources"]
         if CS.barPanelTab == "castbar_anchoring" then
-            col2Title = "Customization: Cast Bar"
+            col2Title = L["Customization: Cast Bar"]
         elseif CS.barPanelTab == "frame_anchoring" then
-            col2Title = "Customization: Unit Frames"
+            col2Title = L["Customization: Unit Frames"]
         end
         CS.configFrame.col2:SetTitle(col2Title)
 
@@ -279,17 +279,17 @@ local function RefreshColumn2()
             end
 
             -- Build dynamic "Colors: SpecName" tab text (updates on spec change)
-            local colorsTabText = "Colors"
+            local colorsTabText = L["Colors"]
             local specIdx = C_SpecializationInfo.GetSpecialization()
             if specIdx then
                 local _, specName = C_SpecializationInfo.GetSpecializationInfo(specIdx)
                 if specName and specName ~= "" then
-                    colorsTabText = "Colors: " .. ST._GetClassColoredText(specName)
+                    colorsTabText = L["Colors: "] .. ST._GetClassColoredText(specName)
                 end
             end
             col2._resourceStylingTabGroup:SetTabs({
-                { value = "bar_text", text = "Styling" },
-                { value = "positioning", text = "Layout" },
+                { value = "bar_text", text = L["Styling"] },
+                { value = "positioning", text = L["Layout"] },
                 { value = "colors", text = colorsTabText },
             })
 
@@ -333,8 +333,8 @@ local function RefreshColumn2()
                 end
 
                 col2._castBarStylingTabGroup:SetTabs({
-                    { value = "styling", text = "Styling" },
-                    { value = "positioning", text = "Layout" },
+                    { value = "styling", text = L["Styling"] },
+                    { value = "positioning", text = L["Layout"] },
                 })
 
                 if CS.castBarStylingTab ~= "styling"
@@ -364,7 +364,7 @@ local function RefreshColumn2()
 
         if CS.barPanelTab == "frame_anchoring" then
             local label = AceGUI:Create("Label")
-            label:SetText("Unit Frame anchoring has no separate appearance settings.")
+            label:SetText(L["Unit Frame anchoring has no separate appearance settings."])
             label:SetFullWidth(true)
             col2._barsStylingScroll:AddChild(label)
         else
@@ -391,7 +391,7 @@ local function RefreshColumn2()
 
         if not CS.browseContainerId then
             local label = AceGUI:Create("Label")
-            label:SetText("|cff888888Select a group to preview its contents.|r")
+            label:SetText(L["|cff888888Select a group to preview its contents.|r"])
             label:SetFullWidth(true)
             CS.col2Scroll:AddChild(label)
             return
@@ -401,7 +401,7 @@ local function RefreshColumn2()
         if not db.groupContainers[CS.browseContainerId] then
             CS.browseContainerId = nil
             local label = AceGUI:Create("Label")
-            label:SetText("|cff888888Group no longer exists.|r")
+            label:SetText(L["|cff888888Group no longer exists.|r"])
             label:SetFullWidth(true)
             CS.col2Scroll:AddChild(label)
             return
@@ -422,7 +422,7 @@ local function RefreshColumn2()
             -- Class-colored accent separator between panels
             if panelIndex > 1 then
                 local spacer = AceGUI:Create("Label")
-                spacer:SetText(" ")
+                spacer:SetText(L[" "])
                 spacer:SetFullWidth(true)
                 spacer:SetHeight(2)
                 local bar = spacer.frame._cdcAccentBar
@@ -574,12 +574,12 @@ local function RefreshColumn2()
             btnRow:AddChild(leftPad)
 
             local copyPanelBtn = AceGUI:Create("Button")
-            copyPanelBtn:SetText("Copy Panel")
+            copyPanelBtn:SetText(L["Copy Panel"])
             copyPanelBtn:SetRelativeWidth(0.5)
             copyPanelBtn:SetCallback("OnClick", function()
                 -- Guard: source still exists
                 if not db.groups[panelGroupId] then
-                    CooldownCompanion:Print("Source panel no longer exists.")
+                    CooldownCompanion:Print(L["Source panel no longer exists."])
                     return
                 end
                 if not CS.browseContextMenu then
@@ -588,7 +588,7 @@ local function RefreshColumn2()
                 UIDropDownMenu_Initialize(CS.browseContextMenu, function(self, level)
                     -- "As New Group"
                     local info = UIDropDownMenu_CreateInfo()
-                    info.text = "As New Group"
+                    info.text = L["As New Group"]
                     info.notCheckable = true
                     info.func = function()
                         CloseDropDownMenus()
@@ -603,7 +603,7 @@ local function RefreshColumn2()
                             CS.selectedContainer = newCid
                             CS.selectedGroup = newGid
                             CooldownCompanion:RefreshConfigPanel()
-                            CooldownCompanion:Print("Panel copied as new group.")
+                            CooldownCompanion:Print(L["Panel copied as new group."])
                         end
                     end
                     UIDropDownMenu_AddButton(info, level)
@@ -641,7 +641,7 @@ local function RefreshColumn2()
                                 CS.selectedContainer = targetId
                                 CS.selectedGroup = newGid
                                 CooldownCompanion:RefreshConfigPanel()
-                                CooldownCompanion:Print("Panel copied into " .. target.name .. ".")
+                                CooldownCompanion:Print(L["Panel copied into "] .. target.name .. ".")
                             end
                         end
                         UIDropDownMenu_AddButton(info, level)
@@ -660,11 +660,11 @@ local function RefreshColumn2()
         CS.col2Scroll:AddChild(spacer)
 
         local copyAllBtn = AceGUI:Create("Button")
-        copyAllBtn:SetText("Copy Entire Group")
+        copyAllBtn:SetText(L["Copy Entire Group"])
         copyAllBtn:SetFullWidth(true)
         copyAllBtn:SetCallback("OnClick", function()
             if not db.groupContainers[CS.browseContainerId] then
-                CooldownCompanion:Print("Source group no longer exists.")
+                CooldownCompanion:Print(L["Source group no longer exists."])
                 return
             end
             local newId = CooldownCompanion:CopyContainerFromBrowse(CS.browseContainerId)
@@ -675,7 +675,7 @@ local function RefreshColumn2()
                 CS.selectedContainer = newId
                 CS.selectedGroup = nil
                 CooldownCompanion:RefreshConfigPanel()
-                CooldownCompanion:Print("Group copied successfully.")
+                CooldownCompanion:Print(L["Group copied successfully."])
             end
         end)
         CS.col2Scroll:AddChild(copyAllBtn)
@@ -703,7 +703,7 @@ local function RefreshColumn2()
         local containers = db.groupContainers or {}
 
         local heading = AceGUI:Create("Heading")
-        heading:SetText(multiGroupCount .. " Groups Selected")
+        heading:SetText(multiGroupCount .. L[" Groups Selected"])
         local cc = C_ClassColor.GetClassColor(select(2, UnitClass("player")))
         if cc then heading.label:SetTextColor(cc.r, cc.g, cc.b) end
         heading:SetFullWidth(true)
@@ -720,7 +720,7 @@ local function RefreshColumn2()
         end
 
         local lockBtn = AceGUI:Create("Button")
-        lockBtn:SetText(anyLocked and "Unlock All" or "Lock All")
+        lockBtn:SetText(anyLocked and L["Unlock All"] or L["Lock All"])
         lockBtn:SetFullWidth(true)
         lockBtn:SetCallback("OnClick", function()
             local newState = not anyLocked
@@ -745,7 +745,7 @@ local function RefreshColumn2()
 
         -- Move to Folder
         local moveBtn = AceGUI:Create("Button")
-        moveBtn:SetText("Move to Folder")
+        moveBtn:SetText(L["Move to Folder"])
         moveBtn:SetFullWidth(true)
         moveBtn:SetCallback("OnClick", function()
             if not CS.moveMenuFrame then
@@ -753,7 +753,7 @@ local function RefreshColumn2()
             end
             UIDropDownMenu_Initialize(CS.moveMenuFrame, function(self, level)
                 local info = UIDropDownMenu_CreateInfo()
-                info.text = "(No Folder)"
+                info.text = L["(No Folder)"]
                 info.notCheckable = true
                 info.func = function()
                     CloseDropDownMenus()
@@ -815,7 +815,7 @@ local function RefreshColumn2()
 
         -- Export Selected
         local exportBtn = AceGUI:Create("Button")
-        exportBtn:SetText("Export Selected")
+        exportBtn:SetText(L["Export Selected"])
         exportBtn:SetFullWidth(true)
         exportBtn:SetCallback("OnClick", function()
             local exportContainers = {}
@@ -848,7 +848,7 @@ local function RefreshColumn2()
 
         -- Delete Selected
         local delBtn = AceGUI:Create("Button")
-        delBtn:SetText("Delete Selected")
+        delBtn:SetText(L["Delete Selected"])
         delBtn:SetFullWidth(true)
         delBtn:SetCallback("OnClick", function()
             local popup = StaticPopup_Show("CDC_DELETE_SELECTED_GROUPS", #multiContainerIds)
@@ -868,7 +868,7 @@ local function RefreshColumn2()
         if not container then
             if CS.col2ButtonBar then CS.col2ButtonBar:Hide() end
             local label = AceGUI:Create("Label")
-            label:SetText("Container not found")
+            label:SetText(L["Container not found"])
             label:SetFullWidth(true)
             CS.col2Scroll:AddChild(label)
             return
@@ -881,7 +881,7 @@ local function RefreshColumn2()
             local thirdW = (barW - 6) / 3
 
             local iconPanelBtn = AceGUI:Create("Button")
-            iconPanelBtn:SetText("Icon Panel")
+            iconPanelBtn:SetText(L["Icon Panel"])
             iconPanelBtn:SetCallback("OnClick", function()
                 local newPanelId = CooldownCompanion:CreatePanel(CS.selectedContainer, "icons")
                 if newPanelId then
@@ -900,7 +900,7 @@ local function RefreshColumn2()
             table.insert(CS.col2BarWidgets, iconPanelBtn)
 
             local barPanelBtn = AceGUI:Create("Button")
-            barPanelBtn:SetText("Bar Panel")
+            barPanelBtn:SetText(L["Bar Panel"])
             barPanelBtn:SetCallback("OnClick", function()
                 local newPanelId = CooldownCompanion:CreatePanel(CS.selectedContainer, "bars")
                 if newPanelId then
@@ -927,7 +927,7 @@ local function RefreshColumn2()
             table.insert(CS.col2BarWidgets, barPanelBtn)
 
             local textPanelBtn = AceGUI:Create("Button")
-            textPanelBtn:SetText("Text Panel")
+            textPanelBtn:SetText(L["Text Panel"])
             textPanelBtn:SetCallback("OnClick", function()
                 local newPanelId = CooldownCompanion:CreatePanel(CS.selectedContainer, "text")
                 if newPanelId then
@@ -986,7 +986,7 @@ local function RefreshColumn2()
             CS.col2Scroll:AddChild(spacer)
 
             local msg = AceGUI:Create("Label")
-            msg:SetText("Click one of the buttons below to add your first panel.")
+            msg:SetText(L["Click one of the buttons below to add your first panel."])
             msg:SetFullWidth(true)
             msg:SetJustifyH("CENTER")
             msg:SetFont((GameFontNormal:GetFont()), 15, "")
@@ -1069,7 +1069,7 @@ local function RefreshColumn2()
                     pf._cdcDropOverlay = overlay
                 end
                 overlay:SetFrameLevel(pf:GetFrameLevel() + 10)
-                overlay._cdcText:SetText("|cffAADDFFDrop here|r")
+                overlay._cdcText:SetText(L["|cffAADDFFDrop here|r"])
                 overlay:Hide()
 
                 local dropPanelId = panelId
@@ -1093,7 +1093,7 @@ local function RefreshColumn2()
 
             -- Panel header
                 local btnCount = panel.buttons and #panel.buttons or 0
-                local headerText = (panel.name or ("Panel " .. panelId)) .. " |cff666666(" .. btnCount .. ")|r"
+                local headerText = (panel.name or (L["Panel "] .. panelId)) .. " |cff666666(" .. btnCount .. ")|r"
 
                 local header = AceGUI:Create("InteractiveLabel")
                 CleanRecycledEntry(header)
@@ -1325,10 +1325,10 @@ local function RefreshColumn2()
                         -- Toggle panel anchor lock
                         if panel.locked == false then
                             panel.locked = nil
-                            CooldownCompanion:Print(panel.name .. " locked.")
+                            CooldownCompanion:Print(panel.name .. L[" locked."])
                         else
                             panel.locked = false
-                            CooldownCompanion:Print(panel.name .. " unlocked. Drag to reposition.")
+                            CooldownCompanion:Print(panel.name .. L[" unlocked. Drag to reposition."])
                         end
                         CooldownCompanion:RefreshGroupFrame(panelId)
                         CooldownCompanion:RefreshConfigPanel()
@@ -1349,17 +1349,17 @@ local function RefreshColumn2()
                         level = level or 1
                         if level == 1 then
                             local info = UIDropDownMenu_CreateInfo()
-                            info.text = "Rename"
+                            info.text = L["Rename"]
                             info.notCheckable = true
                             info.func = function()
                                 CloseDropDownMenus()
-                                ShowPopupAboveConfig("CDC_RENAME_GROUP", ctxPanel.name or "Panel", { groupId = ctxPanelId })
+                                ShowPopupAboveConfig("CDC_RENAME_GROUP", ctxPanel.name or L["Panel"], { groupId = ctxPanelId })
                             end
                             UIDropDownMenu_AddButton(info, level)
 
                             -- Disable / Enable panel
                             info = UIDropDownMenu_CreateInfo()
-                            info.text = (ctxPanel.enabled ~= false) and "Disable" or "Enable"
+                            info.text = (ctxPanel.enabled ~= false) and L["Disable"] or L["Enable"]
                             info.notCheckable = true
                             info.func = function()
                                 CloseDropDownMenus()
@@ -1371,16 +1371,16 @@ local function RefreshColumn2()
 
                             -- Lock / Unlock panel anchor
                             info = UIDropDownMenu_CreateInfo()
-                            info.text = ctxPanel.locked == false and "Lock Anchor" or "Unlock Anchor"
+                            info.text = ctxPanel.locked == false and L["Lock Anchor"] or L["Unlock Anchor"]
                             info.notCheckable = true
                             info.func = function()
                                 CloseDropDownMenus()
                                 if ctxPanel.locked == false then
                                     ctxPanel.locked = nil
-                                    CooldownCompanion:Print(ctxPanel.name .. " locked.")
+                                    CooldownCompanion:Print(ctxPanel.name .. L[" locked."])
                                 else
                                     ctxPanel.locked = false
-                                    CooldownCompanion:Print(ctxPanel.name .. " unlocked. Drag to reposition.")
+                                    CooldownCompanion:Print(ctxPanel.name .. L[" unlocked. Drag to reposition."])
                                 end
                                 CooldownCompanion:RefreshGroupFrame(ctxPanelId)
                                 CooldownCompanion:RefreshConfigPanel()
@@ -1388,14 +1388,14 @@ local function RefreshColumn2()
                             UIDropDownMenu_AddButton(info, level)
 
                             local switchModes = {
-                                { mode = "icons", label = "Icons" },
-                                { mode = "bars", label = "Bars" },
-                                { mode = "text", label = "Text" },
+                                { mode = "icons", label = L["Icons"] },
+                                { mode = "bars", label = L["Bars"] },
+                                { mode = "text", label = L["Text"] },
                             }
                             for _, m in ipairs(switchModes) do
                                 if ctxPanel.displayMode ~= m.mode then
                                     info = UIDropDownMenu_CreateInfo()
-                                    info.text = "Switch to " .. m.label
+                                    info.text = L["Switch to "] .. m.label
                                     info.notCheckable = true
                                     local targetMode = m.mode
                                     info.func = function()
@@ -1415,7 +1415,7 @@ local function RefreshColumn2()
                             end
 
                             info = UIDropDownMenu_CreateInfo()
-                            info.text = "Duplicate"
+                            info.text = L["Duplicate"]
                             info.notCheckable = true
                             info.func = function()
                                 CloseDropDownMenus()
@@ -1453,7 +1453,7 @@ local function RefreshColumn2()
                             end
                             if hasOtherContainer then
                                 info = UIDropDownMenu_CreateInfo()
-                                info.text = "Move to Group"
+                                info.text = L["Move to Group"]
                                 info.notCheckable = true
                                 info.hasArrow = true
                                 info.menuList = "MOVE_TO_GROUP"
@@ -1461,11 +1461,11 @@ local function RefreshColumn2()
                             end
 
                             info = UIDropDownMenu_CreateInfo()
-                            info.text = "|cffff4444Delete|r"
+                            info.text = L["|cffff4444Delete|r"]
                             info.notCheckable = true
                             info.func = function()
                                 CloseDropDownMenus()
-                                ShowPopupAboveConfig("CDC_DELETE_PANEL", ctxPanel.name or "Panel", { containerId = ctxContainerId, panelId = ctxPanelId })
+                                ShowPopupAboveConfig("CDC_DELETE_PANEL", ctxPanel.name or L["Panel"], { containerId = ctxContainerId, panelId = ctxPanelId })
                             end
                             UIDropDownMenu_AddButton(info, level)
 
@@ -1475,7 +1475,7 @@ local function RefreshColumn2()
                             local folderContainers, looseContainers = {}, {}
                             for cid, ctr in pairs(containers) do
                                 if cid ~= ctxContainerId and CooldownCompanion:IsContainerVisibleToCurrentChar(cid) then
-                                    local cName = ctr.name or ("Group " .. cid)
+                                    local cName = ctr.name or (L["Group "] .. cid)
                                     local fid = ctr.folderId
                                     if fid and db.folders[fid] then
                                         folderContainers[fid] = folderContainers[fid] or {}
@@ -1488,7 +1488,7 @@ local function RefreshColumn2()
                             local sortedFolders = {}
                             for fid, folder in pairs(db.folders) do
                                 if folderContainers[fid] then
-                                    table.insert(sortedFolders, { id = fid, name = folder.name or ("Folder " .. fid), order = folder.order or fid })
+                                    table.insert(sortedFolders, { id = fid, name = folder.name or (L["Folder "] .. fid), order = folder.order or fid })
                                 end
                             end
                             table.sort(sortedFolders, function(a, b) return a.order < b.order end)
@@ -1521,7 +1521,7 @@ local function RefreshColumn2()
                             if #looseContainers > 0 then
                                 if hasFolders then
                                     local hdr = UIDropDownMenu_CreateInfo()
-                                    hdr.text = "No Folder"
+                                    hdr.text = L["No Folder"]
                                     hdr.isTitle = true
                                     hdr.notCheckable = true
                                     UIDropDownMenu_AddButton(hdr, level)
@@ -1669,7 +1669,7 @@ local function RefreshColumn2()
                     if not usable and buttonData.enabled ~= false then
                         warnBadge = EnsureRowBadge(rowFrame, "_cdcWarnBtn", "Ping_Marker_Icon_Warning")
                         warnBadge:SetFrameLevel(rowBadgeLevel)
-                        SetRowBadgeTooltip(warnBadge, "Spell/item unavailable", 1, 0.3, 0.3)
+                        SetRowBadgeTooltip(warnBadge, L["Spell/item unavailable"], 1, 0.3, 0.3)
                         warnBadge:Show()
                     end
 
@@ -1681,7 +1681,7 @@ local function RefreshColumn2()
                             OVERRIDE_BADGE_ICON_SIZE
                         )
                         overrideBadge:SetFrameLevel(rowBadgeLevel)
-                        SetRowBadgeTooltip(overrideBadge, "Has appearance overrides")
+                        SetRowBadgeTooltip(overrideBadge, L["Has appearance overrides"])
                         overrideBadge:Show()
                     end
 
@@ -1690,7 +1690,7 @@ local function RefreshColumn2()
                         if enabledSoundEvents then
                             soundBadge = EnsureRowBadge(rowFrame, "_cdcSoundBadge", "common-icon-sound")
                             soundBadge:SetFrameLevel(rowBadgeLevel)
-                            SetRowBadgeTooltip(soundBadge, "Sound alerts enabled")
+                            SetRowBadgeTooltip(soundBadge, L["Sound alerts enabled"])
                             soundBadge:Show()
                         end
 
@@ -1700,10 +1700,10 @@ local function RefreshColumn2()
                             local auraReady = IsAuraTrackingReady(buttonData, cdmEnabled)
                             if auraReady then
                                 auraBadge.icon:SetVertexColor(1, 1, 1, 1)
-                                SetRowBadgeTooltip(auraBadge, "Aura tracking: Active", 0.2, 1, 0.2)
+                                SetRowBadgeTooltip(auraBadge, L["Aura tracking: Active"], 0.2, 1, 0.2)
                             else
                                 auraBadge.icon:SetVertexColor(1, 0.2, 0.2, 1)
-                                SetRowBadgeTooltip(auraBadge, "Aura tracking: Inactive", 1, 0.2, 0.2)
+                                SetRowBadgeTooltip(auraBadge, L["Aura tracking: Inactive"], 1, 0.2, 0.2)
                             end
                             auraBadge:Show()
                         end
@@ -1712,7 +1712,7 @@ local function RefreshColumn2()
                     local talentBadge = EnsureRowBadge(rowFrame, "_cdcTalentBadge", "UI-HUD-MicroMenu-SpecTalents-Mouseover")
                     talentBadge:SetFrameLevel(rowBadgeLevel)
                     if buttonData.talentConditions and #buttonData.talentConditions > 0 then
-                        SetRowBadgeTooltip(talentBadge, "Has talent conditions")
+                        SetRowBadgeTooltip(talentBadge, L["Has talent conditions"])
                         talentBadge:Show()
                     end
 
@@ -1720,7 +1720,7 @@ local function RefreshColumn2()
                     if buttonData.enabled == false then
                         disabledBadge = EnsureRowBadge(rowFrame, "_cdcDisabledBadge", "GM-icon-visibleDis-pressed")
                         disabledBadge:SetFrameLevel(rowBadgeLevel)
-                        SetRowBadgeTooltip(disabledBadge, "Disabled", 0.6, 0.6, 0.6)
+                        SetRowBadgeTooltip(disabledBadge, L["Disabled"], 0.6, 0.6, 0.6)
                         disabledBadge:Show()
                     end
 
@@ -1806,7 +1806,7 @@ local function RefreshColumn2()
                                 if level == 1 then
                                     -- Disable / Enable button
                                     local toggleInfo = UIDropDownMenu_CreateInfo()
-                                    toggleInfo.text = (entryData.enabled ~= false) and "Disable" or "Enable"
+                                    toggleInfo.text = (entryData.enabled ~= false) and L["Disable"] or L["Enable"]
                                     toggleInfo.notCheckable = true
                                     toggleInfo.func = function()
                                         CloseDropDownMenus()
@@ -1817,7 +1817,7 @@ local function RefreshColumn2()
                                     UIDropDownMenu_AddButton(toggleInfo, level)
 
                                     local dupInfo = UIDropDownMenu_CreateInfo()
-                                    dupInfo.text = "Duplicate"
+                                    dupInfo.text = L["Duplicate"]
                                     dupInfo.notCheckable = true
                                     dupInfo.func = function()
                                         local copy = CopyTable(entryData)
@@ -1829,10 +1829,10 @@ local function RefreshColumn2()
                                     UIDropDownMenu_AddButton(dupInfo, level)
 
                                     local iconInfo = UIDropDownMenu_CreateInfo()
-                                    iconInfo.text = "Override Icon..."
+                                    iconInfo.text = L["Override Icon..."]
                                     iconInfo.notCheckable = true
-                                    iconInfo.tooltipTitle = "|cffffd100Override Icon|r"
-                                    iconInfo.tooltipText = "|cffffffffReplaces the default spell or item icon. If aura tracking with Show Aura Icon is active, the aura icon still takes priority while the aura is up.|r"
+                                    iconInfo.tooltipTitle = L["|cffffd100Override Icon|r"]
+                                    iconInfo.tooltipText = L["|cffffffffReplaces the default spell or item icon. If aura tracking with Show Aura Icon is active, the aura icon still takes priority while the aura is up.|r"]
                                     iconInfo.tooltipOnButton = true
                                     iconInfo.func = function()
                                         CloseDropDownMenus()
@@ -1842,7 +1842,7 @@ local function RefreshColumn2()
 
                                     if ST._IsValidIconTexture(entryData.manualIcon) then
                                         local resetIconInfo = UIDropDownMenu_CreateInfo()
-                                        resetIconInfo.text = "Reset Icon"
+                                        resetIconInfo.text = L["Reset Icon"]
                                         resetIconInfo.notCheckable = true
                                         resetIconInfo.func = function()
                                             CloseDropDownMenus()
@@ -1854,14 +1854,14 @@ local function RefreshColumn2()
                                     end
 
                                     local moveInfo = UIDropDownMenu_CreateInfo()
-                                    moveInfo.text = "Move to..."
+                                    moveInfo.text = L["Move to..."]
                                     moveInfo.notCheckable = true
                                     moveInfo.hasArrow = true
                                     moveInfo.menuList = "MOVE_TO_GROUP"
                                     UIDropDownMenu_AddButton(moveInfo, level)
 
                                     local removeInfo = UIDropDownMenu_CreateInfo()
-                                    removeInfo.text = "Remove"
+                                    removeInfo.text = L["Remove"]
                                     removeInfo.notCheckable = true
                                     removeInfo.func = function()
                                         CloseDropDownMenus()
@@ -1875,7 +1875,7 @@ local function RefreshColumn2()
                                     local folderGroups, looseGroups = {}, {}
                                     for id, group in pairs(db.groups) do
                                         if id ~= sourceGroupId and CooldownCompanion:IsGroupVisibleToCurrentChar(id) then
-                                            local gName = group.name or ("Group " .. id)
+                                            local gName = group.name or (L["Group "] .. id)
                                             local cid = group.parentContainerId
                                             local ctr = cid and containers[cid]
                                             local fid = ctr and ctr.folderId
@@ -1922,7 +1922,7 @@ local function RefreshColumn2()
                                     if #looseGroups > 0 then
                                         if hasFolders then
                                             local hdr = UIDropDownMenu_CreateInfo()
-                                            hdr.text = "No Folder"
+                                            hdr.text = L["No Folder"]
                                             hdr.isTitle = true
                                             hdr.notCheckable = true
                                             UIDropDownMenu_AddButton(hdr, level)
@@ -1967,7 +1967,7 @@ local function RefreshColumn2()
                                 local folderGroups, looseGroups = {}, {}
                                 for id, group in pairs(db.groups) do
                                     if id ~= sourceGroupId and CooldownCompanion:IsGroupVisibleToCurrentChar(id) then
-                                        local gName = group.name or ("Group " .. id)
+                                        local gName = group.name or (L["Group "] .. id)
                                         local cid = group.parentContainerId
                                         local ctr = cid and containers[cid]
                                         local fid = ctr and ctr.folderId
@@ -2013,7 +2013,7 @@ local function RefreshColumn2()
                                 if #looseGroups > 0 then
                                     if hasFolders then
                                         local hdr = UIDropDownMenu_CreateInfo()
-                                        hdr.text = "No Folder"
+                                        hdr.text = L["No Folder"]
                                         hdr.isTitle = true
                                         hdr.notCheckable = true
                                         UIDropDownMenu_AddButton(hdr, level)
@@ -2099,7 +2099,7 @@ local function RefreshColumn2()
                     addRow:SetLayout("Flow")
 
                     local manualAddBtn = AceGUI:Create("Button")
-                    manualAddBtn:SetText("Manual Add")
+                    manualAddBtn:SetText(L["Manual Add"])
                     manualAddBtn:SetRelativeWidth(0.49)
                     manualAddBtn:SetCallback("OnClick", function()
                         if CS.newInput ~= "" and CS.addingToPanelId then
@@ -2114,7 +2114,7 @@ local function RefreshColumn2()
                     addRow:AddChild(manualAddBtn)
 
                     local autoAddBtn = AceGUI:Create("Button")
-                    autoAddBtn:SetText("Auto Add")
+                    autoAddBtn:SetText(L["Auto Add"])
                     autoAddBtn:SetRelativeWidth(0.49)
                     autoAddBtn:SetCallback("OnClick", function()
                         CS.selectedGroup = CS.addingToPanelId
@@ -2122,8 +2122,8 @@ local function RefreshColumn2()
                     end)
                     autoAddBtn:SetCallback("OnEnter", function(widget)
                         GameTooltip:SetOwner(widget.frame, "ANCHOR_TOP")
-                        GameTooltip:AddLine("Auto Add")
-                        GameTooltip:AddLine("Auto-add from Action Bars, Spellbook, or CDM Auras.", 1, 1, 1, true)
+                        GameTooltip:AddLine(L["Auto Add"])
+                        GameTooltip:AddLine(L["Auto-add from Action Bars, Spellbook, or CDM Auras."], 1, 1, 1, true)
                         GameTooltip:Show()
                     end)
                     autoAddBtn:SetCallback("OnLeave", function()
@@ -2147,7 +2147,7 @@ local function RefreshColumn2()
     if CS.col2ButtonBar then CS.col2ButtonBar:Hide() end
     if not CS.selectedContainer then
         local label = AceGUI:Create("Label")
-        label:SetText("Select a group first")
+        label:SetText(L["Select a group first"])
         label:SetFullWidth(true)
         CS.col2Scroll:AddChild(label)
         return

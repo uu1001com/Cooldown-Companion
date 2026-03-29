@@ -6,7 +6,7 @@
 local ADDON_NAME, ST = ...
 local CooldownCompanion = ST.Addon
 local CS = ST._configState
-
+local L = LibStub("AceLocale-3.0"):GetLocale("CooldownCompanion", true) or {}
 local AceGUI = LibStub("AceGUI-3.0")
 
 -- Imports from earlier Config/ files
@@ -66,7 +66,7 @@ local function RefreshColumn4(container)
             container.placeholderLabel = container:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             container.placeholderLabel:SetPoint("TOPLEFT", -1, 0)
         end
-        container.placeholderLabel:SetText("Select a single group to configure")
+        container.placeholderLabel:SetText(L["Select a single group to configure"])
         container.placeholderLabel:Show()
         if container.tabGroup then
             container.tabGroup.frame:Hide()
@@ -85,7 +85,7 @@ local function RefreshColumn4(container)
             container.placeholderLabel = container:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             container.placeholderLabel:SetPoint("TOPLEFT", -1, 0)
         end
-        container.placeholderLabel:SetText("Select a single panel to configure")
+        container.placeholderLabel:SetText(L["Select a single panel to configure"])
         container.placeholderLabel:Show()
         if container.tabGroup then
             container.tabGroup.frame:Hide()
@@ -139,8 +139,8 @@ local function RefreshColumn4(container)
         end
 
         container.containerTabGroup:SetTabs({
-            { value = "general",         text = "General" },
-            { value = "loadconditions",  text = "Load Conditions" },
+            { value = "general",         text = L["General"] },
+            { value = "loadconditions",  text = L["Load Conditions"] },
         })
         container.containerTabGroup.frame:Show()
         local containerTab = CS.selectedContainerTab
@@ -162,7 +162,7 @@ local function RefreshColumn4(container)
             container.placeholderLabel = container:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             container.placeholderLabel:SetPoint("TOPLEFT", -1, 0)
         end
-        container.placeholderLabel:SetText("Select a group to configure")
+        container.placeholderLabel:SetText(L["Select a group to configure"])
         container.placeholderLabel:Show()
         if container.tabGroup then
             container.tabGroup.frame:Hide()
@@ -227,13 +227,13 @@ local function RefreshColumn4(container)
     local group = CooldownCompanion.db.profile.groups[CS.selectedGroup]
     local isTextMode = group and group.displayMode == "text"
     local tabs = {
-        { value = "appearance",      text = "Appearance" },
+        { value = "appearance",      text = L["Appearance"] },
     }
     if not isTextMode then
-        tabs[#tabs + 1] = { value = "effects", text = "Indicators" }
+        tabs[#tabs + 1] = { value = "effects", text = L["Indicators"] }
     end
-    tabs[#tabs + 1] = { value = "layout",          text = "Layout" }
-    tabs[#tabs + 1] = { value = "loadconditions",  text = "Load Conditions" }
+    tabs[#tabs + 1] = { value = "layout",          text = L["Layout"] }
+    tabs[#tabs + 1] = { value = "loadconditions",  text = L["Load Conditions"] }
     container.tabGroup:SetTabs(tabs)
 
     -- Save AceGUI scroll state before tab re-select (old col4Scroll will be released)
@@ -337,19 +337,19 @@ local function RefreshProfileBar(bar)
         return btn
     end
 
-    AddBarButton("New", function()
+    AddBarButton(L["New"], function()
         ShowPopupAboveConfig("CDC_NEW_PROFILE")
     end)
 
-    AddBarButton("Rename", function()
+    AddBarButton(L["Rename"], function()
         ShowPopupAboveConfig("CDC_RENAME_PROFILE", currentProfile, { oldName = currentProfile })
     end)
 
-    AddBarButton("Duplicate", function()
+    AddBarButton(L["Duplicate"], function()
         ShowPopupAboveConfig("CDC_DUPLICATE_PROFILE", nil, { source = currentProfile })
     end)
 
-    AddBarButton("Delete", function()
+    AddBarButton(L["Delete"], function()
         local allProfiles = db:GetProfiles()
         local isOnly = #allProfiles <= 1
         if isOnly then
@@ -359,11 +359,11 @@ local function RefreshProfileBar(bar)
         end
     end)
 
-    AddBarButton("Export", function()
+    AddBarButton(L["Export"], function()
         ShowPopupAboveConfig("CDC_EXPORT_PROFILE")
     end)
 
-    AddBarButton("Import", function()
+    AddBarButton(L["Import"], function()
         ShowPopupAboveConfig("CDC_IMPORT_PROFILE")
     end)
 
