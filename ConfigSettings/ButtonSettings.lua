@@ -788,7 +788,7 @@ local function RefreshButtonSettingsMultiSelect(scroll, multiCount, multiIndices
             local sortedFolders = {}
             for fid, folder in pairs(db.folders) do
                 if folderGroups[fid] then
-                    table.insert(sortedFolders, { id = fid, name = folder.name or (L["Folder "] .. fid), order = folder.order or fid })
+                    table.insert(sortedFolders, { id = fid, name = folder.name or (L["Folder "] .. fid), order = CooldownCompanion:GetOrderForSpec(folder, CooldownCompanion._currentSpecId, fid) })
                 end
             end
             table.sort(sortedFolders, function(a, b) return a.order < b.order end)
@@ -1023,16 +1023,16 @@ local function RefreshPanelMultiSelect(scroll, multiCount, multiPanelIds)
                         local fid = ctr.folderId
                         if fid and db.folders[fid] then
                             folderContainers[fid] = folderContainers[fid] or {}
-                            table.insert(folderContainers[fid], { id = cid, name = cName, order = ctr.order or cid })
+                            table.insert(folderContainers[fid], { id = cid, name = cName, order = CooldownCompanion:GetOrderForSpec(ctr, CooldownCompanion._currentSpecId, cid) })
                         else
-                            table.insert(looseContainers, { id = cid, name = cName, order = ctr.order or cid })
+                            table.insert(looseContainers, { id = cid, name = cName, order = CooldownCompanion:GetOrderForSpec(ctr, CooldownCompanion._currentSpecId, cid) })
                         end
                     end
                 end
                 local sortedFolders = {}
                 for fid, folder in pairs(db.folders) do
                     if folderContainers[fid] then
-                        table.insert(sortedFolders, { id = fid, name = folder.name or (L["Folder "] .. fid), order = folder.order or fid })
+                        table.insert(sortedFolders, { id = fid, name = folder.name or (L["Folder "] .. fid), order = CooldownCompanion:GetOrderForSpec(folder, CooldownCompanion._currentSpecId, fid) })
                     end
                 end
                 table.sort(sortedFolders, function(a, b) return a.order < b.order end)
