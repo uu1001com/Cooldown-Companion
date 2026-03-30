@@ -6,7 +6,7 @@
 local ADDON_NAME, ST = ...
 local CooldownCompanion = ST.Addon
 local CS = ST._configState
-
+local L = LibStub("AceLocale-3.0"):GetLocale("CooldownCompanion", true) or {}
 local AceGUI = LibStub("AceGUI-3.0")
 
 -- Imports from earlier Config/ files
@@ -166,7 +166,7 @@ local function TryAddEntry(result, seen, bucketKey, entry, sourceLabel)
     end
 
     if seen[dedupeKey] then
-        AddSkipped(result, sourceLabel, "Duplicate entry in this import selection.", entry.name)
+        AddSkipped(result, sourceLabel, L["Duplicate entry in this import selection."], entry.name)
         return
     end
 
@@ -196,7 +196,7 @@ local function BuildActionBarPreview(selectedBars)
                         local itemID = tonumber(id)
                         if actionType ~= "item" or not itemID then
                             local shownType = actionType or "unknown"
-                            AddSkipped(result, sourceLabel, "Unsupported action type: " .. shownType .. ".", "Unknown")
+                            AddSkipped(result, sourceLabel, L["Unsupported action type: "] .. shownType .. ".", "Unknown")
                         else
                             local itemName = C_Item.GetItemNameByID(itemID) or ("Item " .. itemID)
                             if not C_Item.GetItemSpell(itemID) then
@@ -219,13 +219,13 @@ local function BuildActionBarPreview(selectedBars)
                             local spellInfo = C_Spell.GetSpellInfo(spellID)
                             local spellName = spellInfo and spellInfo.name
                             if not spellName then
-                                AddSkipped(result, sourceLabel, "Spell data is unavailable.", "Spell " .. spellID)
+                                AddSkipped(result, sourceLabel, L["Spell data is unavailable."], "Spell " .. spellID)
                             elseif IsNeverTrackableSpell(spellID) then
                                 -- Omit known non-trackable spells from preview.
                             else
                                 local isAura = IsPassiveOrProc(spellID)
                                 if isAura and not IsSpellInCDMBuffBar(spellID) then
-                                    AddSkipped(result, sourceLabel, "Passive/proc spell is not tracked in CDM.", spellName)
+                                    AddSkipped(result, sourceLabel, L["Passive/proc spell is not tracked in CDM."], spellName)
                                 else
                                     local bucketKey = isAura and "auras" or "spells"
                                     TryAddEntry(result, seen, bucketKey, {
@@ -242,7 +242,7 @@ local function BuildActionBarPreview(selectedBars)
                         else
                             local actionType = GetActionInfo(slot)
                             local shownType = actionType or "unknown"
-                            AddSkipped(result, sourceLabel, "Unsupported action type: " .. shownType .. ".", "Unknown")
+                            AddSkipped(result, sourceLabel, L["Unsupported action type: "] .. shownType .. ".", "Unknown")
                         end
                     end
                 end
@@ -323,8 +323,8 @@ local function BuildSpellbookPreview()
 end
 
 local CDM_AURA_CATEGORY_INFO = {
-    { category = Enum.CooldownViewerCategory.TrackedBuff, label = "CDM Tracked Buff" },
-    { category = Enum.CooldownViewerCategory.TrackedBar, label = "CDM Tracked Bar" },
+    { category = Enum.CooldownViewerCategory.TrackedBuff, label = L["CDM Tracked Buff"] },
+    { category = Enum.CooldownViewerCategory.TrackedBar, label = L["CDM Tracked Bar"] },
 }
 
 local function BuildCDMAuraPreview()
@@ -751,7 +751,7 @@ end
 
 local function RenderStep1(container, state)
     local heading = AceGUI:Create("Heading")
-    heading:SetText("Step 1: Choose Source")
+    heading:SetText(L["Step 1: Choose Source"])
     heading:SetFullWidth(true)
     container:AddChild(heading)
 
@@ -774,7 +774,7 @@ local function RenderStep1(container, state)
     end
 
     local actionBtn = AceGUI:Create("Button")
-    actionBtn:SetText("Action Bars")
+    actionBtn:SetText(L["Action Bars"])
     actionBtn:SetRelativeWidth(0.33)
     actionBtn:SetCallback("OnClick", function()
         SetSourceAndAdvance(SOURCE_ACTION_BARS)
@@ -782,7 +782,7 @@ local function RenderStep1(container, state)
     sourceRow:AddChild(actionBtn)
 
     local spellbookBtn = AceGUI:Create("Button")
-    spellbookBtn:SetText("Spellbook")
+    spellbookBtn:SetText(L["Spellbook"])
     spellbookBtn:SetRelativeWidth(0.33)
     spellbookBtn:SetCallback("OnClick", function()
         SetSourceAndAdvance(SOURCE_SPELLBOOK)
@@ -790,7 +790,7 @@ local function RenderStep1(container, state)
     sourceRow:AddChild(spellbookBtn)
 
     local cdmBtn = AceGUI:Create("Button")
-    cdmBtn:SetText("CDM Auras")
+    cdmBtn:SetText(L["CDM Auras"])
     cdmBtn:SetRelativeWidth(0.33)
     cdmBtn:SetCallback("OnClick", function()
         SetSourceAndAdvance(SOURCE_CDM_AURAS)
@@ -805,7 +805,7 @@ local function RenderStep1(container, state)
     container:AddChild(spacer)
 
     local cancelBtn = AceGUI:Create("Button")
-    cancelBtn:SetText("Cancel")
+    cancelBtn:SetText(L["Cancel"])
     cancelBtn:SetFullWidth(true)
     cancelBtn:SetCallback("OnClick", function()
         CancelAutoAddFlow()
@@ -816,12 +816,12 @@ end
 
 local function RenderStep2(container, state)
     local heading = AceGUI:Create("Heading")
-    heading:SetText("Step 2: Choose Action Bars")
+    heading:SetText(L["Step 2: Choose Action Bars"])
     heading:SetFullWidth(true)
     container:AddChild(heading)
 
     local info = AceGUI:Create("Label")
-    info:SetText("Adjust bars to import, then click Next.")
+    info:SetText(L["Adjust bars to import, then click Next."])
     info:SetFullWidth(true)
     container:AddChild(info)
 
@@ -836,8 +836,8 @@ local function RenderStep2(container, state)
     barsRow:SetLayout("Flow")
     for barIndex = 1, ACTION_BAR_COUNT do
         local cb = AceGUI:Create("CheckBox")
-        cb:SetLabel("Bar " .. barIndex)
-        cb:SetWidth(65)
+        cb:SetLabel(L["Bar "] .. barIndex)
+        cb:SetWidth(90)
         cb:SetValue(state.selectedBars[barIndex] == true)
         cb:SetCallback("OnValueChanged", function(_, _, value)
             state.selectedBars[barIndex] = value and true or false
@@ -852,7 +852,7 @@ local function RenderStep2(container, state)
     actionsRow:SetLayout("Flow")
 
     local allBtn = AceGUI:Create("Button")
-    allBtn:SetText("All")
+    allBtn:SetText(L["All"])
     allBtn:SetRelativeWidth(0.5)
     allBtn:SetCallback("OnClick", function()
         for i = 1, ACTION_BAR_COUNT do
@@ -863,7 +863,7 @@ local function RenderStep2(container, state)
     actionsRow:AddChild(allBtn)
 
     local noneBtn = AceGUI:Create("Button")
-    noneBtn:SetText("None")
+    noneBtn:SetText(L["None"])
     noneBtn:SetRelativeWidth(0.5)
     noneBtn:SetCallback("OnClick", function()
         for i = 1, ACTION_BAR_COUNT do
@@ -877,7 +877,7 @@ local function RenderStep2(container, state)
 
     if CountSelectedBars(state.selectedBars) == 0 then
         local warn = AceGUI:Create("Label")
-        warn:SetText("|cffff5555Select at least one bar to continue.|r")
+        warn:SetText(L["|cffff5555Select at least one bar to continue.|r"])
         warn:SetFullWidth(true)
         container:AddChild(warn)
     end
@@ -887,7 +887,7 @@ local function RenderStep2(container, state)
     navRow:SetLayout("Flow")
 
     local backBtn = AceGUI:Create("Button")
-    backBtn:SetText("Back")
+    backBtn:SetText(L["Back"])
     backBtn:SetRelativeWidth(0.33)
     backBtn:SetCallback("OnClick", function()
         state.step = AUTO_ADD_STEP_SOURCE
@@ -896,7 +896,7 @@ local function RenderStep2(container, state)
     navRow:AddChild(backBtn)
 
     local nextBtn = AceGUI:Create("Button")
-    nextBtn:SetText("Next")
+    nextBtn:SetText(L["Next"])
     nextBtn:SetRelativeWidth(0.34)
     nextBtn:SetCallback("OnClick", function()
         if CountSelectedBars(state.selectedBars) == 0 then
@@ -908,7 +908,7 @@ local function RenderStep2(container, state)
     navRow:AddChild(nextBtn)
 
     local cancelBtn = AceGUI:Create("Button")
-    cancelBtn:SetText("Cancel")
+    cancelBtn:SetText(L["Cancel"])
     cancelBtn:SetRelativeWidth(0.33)
     cancelBtn:SetCallback("OnClick", function()
         CancelAutoAddFlow()
@@ -922,9 +922,9 @@ end
 local function RenderStep3(container, state)
     local heading = AceGUI:Create("Heading")
     if state.source == SOURCE_ACTION_BARS then
-        heading:SetText("Step 3: Review and Add")
+        heading:SetText(L["Step 3: Review and Add"])
     else
-        heading:SetText("Step 2: Review and Add")
+        heading:SetText(L["Step 2: Review and Add"])
     end
     heading:SetFullWidth(true)
     container:AddChild(heading)
@@ -937,7 +937,7 @@ local function RenderStep3(container, state)
     selectRow:SetLayout("Flow")
 
     local selectAllBtn = AceGUI:Create("Button")
-    selectAllBtn:SetText("Select All")
+    selectAllBtn:SetText(L["Select All"])
     selectAllBtn:SetRelativeWidth(0.5)
     selectAllBtn:SetCallback("OnClick", function()
         SetAllEntriesSelected(preview, state.selectedEntries, true)
@@ -946,7 +946,7 @@ local function RenderStep3(container, state)
     selectRow:AddChild(selectAllBtn)
 
     local selectNoneBtn = AceGUI:Create("Button")
-    selectNoneBtn:SetText("Select None")
+    selectNoneBtn:SetText(L["Select None"])
     selectNoneBtn:SetRelativeWidth(0.5)
     selectNoneBtn:SetCallback("OnClick", function()
         SetAllEntriesSelected(preview, state.selectedEntries, false)
@@ -956,17 +956,17 @@ local function RenderStep3(container, state)
 
     container:AddChild(selectRow)
 
-    AddGroupedEntrySection(state, container, "Spells", preview.spells, RefreshFlowUI)
-    AddGroupedEntrySection(state, container, "Auras", preview.auras, RefreshFlowUI)
-    AddGroupedEntrySection(state, container, "Items", preview.items, RefreshFlowUI)
+    AddGroupedEntrySection(state, container, L["Spells"], preview.spells, RefreshFlowUI)
+    AddGroupedEntrySection(state, container, L["Auras"], preview.auras, RefreshFlowUI)
+    AddGroupedEntrySection(state, container, L["Items"], preview.items, RefreshFlowUI)
 
     if totalCount == 0 then
-        AddEmptyRow(container, "No entries are currently addable from this source.")
+        AddEmptyRow(container, L["No entries are currently addable from this source."])
     end
 
     if #preview.skipped > 0 then
         local showSkippedCb = AceGUI:Create("CheckBox")
-        showSkippedCb:SetLabel("Show Skipped Details (" .. #preview.skipped .. ")")
+        showSkippedCb:SetLabel(L["Show Skipped Details ("] .. #preview.skipped .. ")")
         showSkippedCb:SetValue(state.showSkipped == true)
         showSkippedCb:SetFullWidth(true)
         showSkippedCb:SetCallback("OnValueChanged", function(_, _, value)
@@ -977,7 +977,7 @@ local function RenderStep3(container, state)
         container:AddChild(showSkippedCb)
 
         if state.showSkipped then
-            AddSectionHeading(container, "Skipped")
+            AddSectionHeading(container, L["Skipped"])
             for _, skipped in ipairs(preview.skipped) do
                 AddSkippedRow(container, skipped)
             end
@@ -989,7 +989,7 @@ local function RenderStep3(container, state)
     navRow:SetLayout("Flow")
 
     local backBtn = AceGUI:Create("Button")
-    backBtn:SetText("Back")
+    backBtn:SetText(L["Back"])
     backBtn:SetRelativeWidth(0.33)
     backBtn:SetCallback("OnClick", function()
         if state.source == SOURCE_ACTION_BARS then
@@ -1002,7 +1002,7 @@ local function RenderStep3(container, state)
     navRow:AddChild(backBtn)
 
     local cancelBtn = AceGUI:Create("Button")
-    cancelBtn:SetText("Cancel")
+    cancelBtn:SetText(L["Cancel"])
     cancelBtn:SetRelativeWidth(0.33)
     cancelBtn:SetCallback("OnClick", function()
         PersistAutoAddPrefs(state)
@@ -1012,12 +1012,12 @@ local function RenderStep3(container, state)
     navRow:AddChild(cancelBtn)
 
     local confirmBtn = AceGUI:Create("Button")
-    confirmBtn:SetText("Add")
+    confirmBtn:SetText(L["Add"])
     confirmBtn:SetRelativeWidth(0.34)
     confirmBtn:SetCallback("OnClick", function()
         local _, _, _, selectedCount = CountSelectedEntries(preview, state.selectedEntries)
         if selectedCount == 0 then
-            CooldownCompanion:Print("No selected entries to add from this preview.")
+            CooldownCompanion:Print(L["No selected entries to add from this preview."])
             return
         end
 
@@ -1050,7 +1050,7 @@ end
 local function OpenAutoAddFlow()
     local groupID = CS.selectedGroup
     if not groupID or not CooldownCompanion.db.profile.groups[groupID] then
-        CooldownCompanion:Print("Select a group first.")
+        CooldownCompanion:Print(L["Select a group first."])
         return
     end
 

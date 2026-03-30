@@ -240,7 +240,7 @@ local function BuildShowOutOfRangeControls(container, styleTable, refreshCallbac
 end
 
 local function BuildIconTintControls(container, styleTable, refreshCallback)
-    AddColorPicker(container, styleTable, "iconTintColor", "Base Icon Color", {1, 1, 1, 1}, true, refreshCallback, refreshCallback)
+    AddColorPicker(container, styleTable, "iconTintColor", L["Base Icon Color"], {1, 1, 1, 1}, true, refreshCallback, refreshCallback)
 
     local cdTintCb = AceGUI:Create("CheckBox")
     cdTintCb:SetLabel(L["Use Separate Cooldown Tint"])

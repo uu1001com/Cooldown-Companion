@@ -454,7 +454,7 @@ local function RefreshColumn2()
             CS.col2Scroll:AddChild(panelContainer)
 
             -- Panel header (same badge pattern as normal Column 2 panel headers)
-            local headerText = panel.name or "Panel"
+            local headerText = panel.name or L["Panel"]
             local buttonCount = panel.buttons and #panel.buttons or 0
             headerText = headerText .. " |cff888888(" .. buttonCount .. ")|r"
 
@@ -989,7 +989,7 @@ local function RefreshColumn2()
             CS.col2Scroll:AddChild(spacer)
 
             local header = AceGUI:Create("Label")
-            header:SetText("Every entry needs a panel.")
+            header:SetText(L["Every entry needs a panel."])
             header:SetFullWidth(true)
             header:SetJustifyH("CENTER")
             header:SetFont((GameFontNormal:GetFont()), 15, "")
@@ -1002,7 +1002,7 @@ local function RefreshColumn2()
             CS.col2Scroll:AddChild(descSpacer)
 
             local desc = AceGUI:Create("Label")
-            desc:SetText("A panel controls dimensions, display mode, and layout for all entries inside it. Use the buttons below to create your first panel.")
+            desc:SetText(L["A panel controls dimensions, display mode, and layout for all entries inside it. Use the buttons below to create your first panel."])
             desc:SetFullWidth(true)
             desc:SetJustifyH("CENTER")
             desc:SetFont((GameFontNormal:GetFont()), 12, "")
@@ -1447,13 +1447,13 @@ local function RefreshColumn2()
 
                             -- Export single panel
                             info = UIDropDownMenu_CreateInfo()
-                            info.text = "Export"
+                            info.text = L["Export"]
                             info.notCheckable = true
                             info.func = function()
                                 CloseDropDownMenus()
                                 local db = CooldownCompanion.db.profile
                                 local containerData = BuildContainerExportData(db.groupContainers[ctxContainerId])
-                                containerData.name = ctxPanel.name or "Panel"
+                                containerData.name = ctxPanel.name or L["Panel"]
                                 local payload = { type = "container", version = 1, container = containerData, panels = { BuildGroupExportData(ctxPanel) } }
                                 local exportString = EncodeExportData(payload)
                                 ShowPopupAboveConfig("CDC_EXPORT_GROUP", nil, { exportString = exportString })

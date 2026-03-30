@@ -280,7 +280,7 @@ L["Ready Text Color"]
 L["Cooldown Color"]
 L["Ready Color"]
 L["Aura Color"]
-
+L["Base Icon Color"]
 --==========================================
 -- BarModeTabs
 --==========================================
@@ -589,7 +589,7 @@ L["Container Frame Strata"]
 L["Do Not Load When In"]
 L["|cff888888Specs set by the parent folder cannot be changed here.|r"]
 L["Clear All Spec Filters"]
-
+L["Position is shared with Cooldown Text by default. Enable 'Separate Text Positions' in advanced settings to use independent positions."]
 --==========================================
 -- Helpers
 --==========================================
@@ -893,6 +893,8 @@ L["Remove"]
 L["Manual Add"]
 L["Auto-add from Action Bars, Spellbook, or CDM Auras."]
 L["Select a group first"]
+L["Every entry needs a panel."]
+L["A panel controls dimensions, display mode, and layout for all entries inside it. Use the buttons below to create your first panel."]
 
 --==========================================
 -- Config---Column3
@@ -930,6 +932,44 @@ L["No Tracked Buff/Bar auras found in the Cooldown Manager."]
 
 L["Lunar Power"]
 L["Alternate"]
+
+--==========================================
+-- Config---AutoImport
+--==========================================
+
+L["Duplicate entry in this import selection."]
+L["Unsupported action type: "]
+L["Spell data is unavailable."]
+L["Passive/proc spell is not tracked in CDM."]
+L["CDM Tracked Buff"]
+L["CDM Tracked Bar"]
+L["Step 1: Choose Source"]
+L["Action Bars"]
+L["Spellbook"]
+L["CDM Auras"]
+L["Cancel"]
+L["Step 2: Choose Action Bars"]
+L["Adjust bars to import, then click Next."]
+L["Bar "] 
+L["All"] 
+L["None"]  
+L["|cffff5555Select at least one bar to continue.|r"] 
+L["Back"]
+L["Next"]
+L["Step 3: Review and Add"]
+L["Step 2: Review and Add"]
+L["Select All"]
+L["Select None"]
+L["Spells"]
+L["Auras"]
+L["Items"]
+L["No entries are currently addable from this source."]
+L["Show Skipped Details ("]
+L["Skipped"]
+L["Back"]
+L["Add"]
+L["No selected entries to add from this preview."]
+L["Select a group first."]
 
 --==========================================
 -- Other---ResourceBarConstants
