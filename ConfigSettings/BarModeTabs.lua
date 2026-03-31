@@ -26,6 +26,8 @@ local AddOffsetSliders = ST._AddOffsetSliders
 -- Imports from SectionBuilders.lua
 local BuildPandemicBarControls = ST._BuildPandemicBarControls
 local BuildBarActiveAuraControls = ST._BuildBarActiveAuraControls
+local BuildBarAuraPulseControls = ST._BuildBarAuraPulseControls
+local BuildPandemicBarPulseControls = ST._BuildPandemicBarPulseControls
 local BuildLossOfControlControls = ST._BuildLossOfControlControls
 local BuildUnusableDimmingControls = ST._BuildUnusableDimmingControls
 local BuildShowTooltipsControls = ST._BuildShowTooltipsControls
@@ -443,6 +445,20 @@ local function BuildBarEffectsTab(container, group, style)
     BuildBarActiveAuraControls(container, style, function()
         CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
     end)
+
+    BuildBarAuraPulseControls(container, style, function()
+        CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
+    end)
+
+    local auraActivePreviewBtn = AceGUI:Create("Button")
+    auraActivePreviewBtn:SetText("Preview Active Aura Effects (3s)")
+    auraActivePreviewBtn:SetFullWidth(true)
+    auraActivePreviewBtn:SetCallback("OnClick", function()
+        if CS.selectedGroup then
+            CooldownCompanion:PlayBarAuraActivePreview(CS.selectedGroup, nil, 3)
+        end
+    end)
+    container:AddChild(auraActivePreviewBtn)
     end -- barAuraAdvExpanded
 
     -- ================================================================
@@ -477,6 +493,20 @@ local function BuildBarEffectsTab(container, group, style)
     BuildPandemicBarControls(container, style, function()
         CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
     end)
+
+    BuildPandemicBarPulseControls(container, style, function()
+        CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
+    end)
+
+    local pandemicPreviewBtn = AceGUI:Create("Button")
+    pandemicPreviewBtn:SetText("Preview Pandemic Effects (3s)")
+    pandemicPreviewBtn:SetFullWidth(true)
+    pandemicPreviewBtn:SetCallback("OnClick", function()
+        if CS.selectedGroup then
+            CooldownCompanion:PlayGroupPandemicPreview(CS.selectedGroup, 3)
+        end
+    end)
+    container:AddChild(pandemicPreviewBtn)
     end -- barPandemicAdvExpanded
 
     -- ================================================================
