@@ -22,6 +22,10 @@ local AddColorPicker = ST._AddColorPicker
 local AddAnchorDropdown = ST._AddAnchorDropdown
 local HookSliderEditBox = ST._HookSliderEditBox
 local BuildAlphaControls = ST._BuildAlphaControls
+local BuildPandemicBarControls = ST._BuildPandemicBarControls
+local BuildBarActiveAuraControls = ST._BuildBarActiveAuraControls
+local BuildBarAuraPulseControls = ST._BuildBarAuraPulseControls
+local BuildPandemicBarPulseControls = ST._BuildPandemicBarPulseControls
 local tabInfoButtons = CS.tabInfoButtons
 
 -- Shared constants from ResourceBarConstants
@@ -1584,7 +1588,7 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
     end
 
     if not customBars[selectedSlot] then
-        customBars[selectedSlot] = { enabled = false }
+        customBars[selectedSlot] = { enabled = false, trackingMode = "active" }
     end
     local cab = customBars[selectedSlot]
     local capturedIdx = selectedSlot
@@ -1612,6 +1616,9 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
     enableCab:SetFullWidth(true)
     enableCab:SetCallback("OnValueChanged", function(widget, event, val)
         customBars[capturedIdx].enabled = val
+        if val and not customBars[capturedIdx].trackingMode then
+            customBars[capturedIdx].trackingMode = "active"
+        end
         CooldownCompanion:ApplyResourceBars()
         CooldownCompanion:UpdateAnchorStacking()
         CooldownCompanion:RefreshConfigPanel()
@@ -1626,7 +1633,7 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
         independentCb:SetCallback("OnValueChanged", function(widget, event, val)
             local bars = CooldownCompanion:GetSpecCustomAuraBars()
             if not bars[capturedIdx] then
-                bars[capturedIdx] = { enabled = false }
+                bars[capturedIdx] = { enabled = false, trackingMode = "active" }
             end
 
             local enabled = IsTruthyConfigFlag(val)
@@ -1779,9 +1786,9 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
             local trackDrop = AceGUI:Create("Dropdown")
             trackDrop:SetLabel(L["Tracking Mode"])
             trackDrop:SetList({
-                stacks = L["Stack Count"],
-                active = L["Active (On/Off)"],
-            }, { "stacks", "active" })
+                active = "Active (On/Off)",
+                stacks = "Stack Count",
+            }, { "active", "stacks" })
             trackDrop:SetValue(cab.trackingMode or "stacks")
             trackDrop:SetFullWidth(true)
             trackDrop:SetCallback("OnValueChanged", function(widget, event, val)
@@ -1866,7 +1873,99 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                     cabApplyBars, function() CooldownCompanion:RecolorCustomAuraBar(customBars[cabIdx]) end)
 
                 local isActiveTracking = (cab.trackingMode or "stacks") == "active"
-                if not isActiveTracking then
+                if isActiveTracking then
+                    local indicatorsHeading = AceGUI:Create("Heading")
+                    indicatorsHeading:SetText("Indicators")
+                    ColorHeading(indicatorsHeading)
+                    indicatorsHeading:SetFullWidth(true)
+                    container:AddChild(indicatorsHeading)
+
+                    local activeAuraEnabled = (cab.barAuraEffect or "none") ~= "none"
+
+                    local activeAuraCb = AceGUI:Create("CheckBox")
+                    activeAuraCb:SetLabel("Show Active Aura Color/Glow")
+                    activeAuraCb:SetValue(activeAuraEnabled)
+                    activeAuraCb:SetFullWidth(true)
+                    activeAuraCb:SetCallback("OnValueChanged", function(widget, event, val)
+                        if val then
+                            local effect = customBars[cabIdx].barAuraEffect
+                            if effect == nil or effect == "none" then
+                                effect = "pixel"
+                            end
+                            customBars[cabIdx].barAuraEffect = effect
+                        else
+                            customBars[cabIdx].barAuraEffect = "none"
+                        end
+                        CooldownCompanion:ApplyResourceBars()
+                        CooldownCompanion:RefreshConfigPanel()
+                    end)
+                    container:AddChild(activeAuraCb)
+
+                    local activeAuraAdvExpanded = AddAdvancedToggle(activeAuraCb, "rbCabActiveAura_" .. capturedIdx, tabInfoButtons, activeAuraEnabled)
+                    if activeAuraAdvExpanded and activeAuraEnabled then
+                        local activeAuraCombatCb = AceGUI:Create("CheckBox")
+                        activeAuraCombatCb:SetLabel("Show Only In Combat")
+                        activeAuraCombatCb:SetValue(cab.auraGlowCombatOnly or false)
+                        activeAuraCombatCb:SetFullWidth(true)
+                        activeAuraCombatCb:SetCallback("OnValueChanged", function(widget, event, val)
+                            customBars[cabIdx].auraGlowCombatOnly = val
+                            CooldownCompanion:ApplyResourceBars()
+                        end)
+                        container:AddChild(activeAuraCombatCb)
+                        ApplyCheckboxIndent(activeAuraCombatCb, 20)
+
+                        BuildBarActiveAuraControls(container, customBars[cabIdx], cabApplyBars, {
+                            hidePrimaryColorPicker = true,
+                        })
+                        BuildBarAuraPulseControls(container, customBars[cabIdx], cabApplyBars)
+
+                        local activeAuraPreviewBtn = AceGUI:Create("Button")
+                        activeAuraPreviewBtn:SetText("Preview Active Aura Effects (3s)")
+                        activeAuraPreviewBtn:SetFullWidth(true)
+                        activeAuraPreviewBtn:SetCallback("OnClick", function()
+                            CooldownCompanion:PlayCustomAuraBarActivePreview(customBars[cabIdx], 3)
+                        end)
+                        container:AddChild(activeAuraPreviewBtn)
+                    end
+
+                    local pandemicEnabled = cab.showPandemicGlow == true
+
+                    local pandemicCb = AceGUI:Create("CheckBox")
+                    pandemicCb:SetLabel("Show Pandemic Color/Glow")
+                    pandemicCb:SetValue(pandemicEnabled)
+                    pandemicCb:SetFullWidth(true)
+                    pandemicCb:SetCallback("OnValueChanged", function(widget, event, val)
+                        customBars[cabIdx].showPandemicGlow = val and true or false
+                        CooldownCompanion:ApplyResourceBars()
+                        CooldownCompanion:RefreshConfigPanel()
+                    end)
+                    container:AddChild(pandemicCb)
+
+                    local pandemicAdvExpanded = AddAdvancedToggle(pandemicCb, "rbCabPandemic_" .. capturedIdx, tabInfoButtons, pandemicEnabled)
+                    if pandemicAdvExpanded and pandemicEnabled then
+                        local pandemicCombatCb = AceGUI:Create("CheckBox")
+                        pandemicCombatCb:SetLabel("Show Only In Combat")
+                        pandemicCombatCb:SetValue(cab.pandemicGlowCombatOnly or false)
+                        pandemicCombatCb:SetFullWidth(true)
+                        pandemicCombatCb:SetCallback("OnValueChanged", function(widget, event, val)
+                            customBars[cabIdx].pandemicGlowCombatOnly = val
+                            CooldownCompanion:ApplyResourceBars()
+                        end)
+                        container:AddChild(pandemicCombatCb)
+                        ApplyCheckboxIndent(pandemicCombatCb, 20)
+
+                        BuildPandemicBarControls(container, customBars[cabIdx], cabApplyBars)
+                        BuildPandemicBarPulseControls(container, customBars[cabIdx], cabApplyBars)
+
+                        local pandemicPreviewBtn = AceGUI:Create("Button")
+                        pandemicPreviewBtn:SetText("Preview Pandemic Effects (3s)")
+                        pandemicPreviewBtn:SetFullWidth(true)
+                        pandemicPreviewBtn:SetCallback("OnClick", function()
+                            CooldownCompanion:PlayCustomAuraBarPandemicPreview(customBars[cabIdx], 3)
+                        end)
+                        container:AddChild(pandemicPreviewBtn)
+                    end
+                else
                     local thresholdCb = AceGUI:Create("CheckBox")
                     thresholdCb:SetLabel(L["Enable Max Stack Color"])
                     thresholdCb:SetValue(cab.thresholdColorEnabled == true)
@@ -1886,6 +1985,12 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
 
                 -- Max Stacks Glow (independent of threshold color)
                 if not isActiveTracking then
+                    local indicatorsHeading = AceGUI:Create("Heading")
+                    indicatorsHeading:SetText("Indicators")
+                    ColorHeading(indicatorsHeading)
+                    indicatorsHeading:SetFullWidth(true)
+                    container:AddChild(indicatorsHeading)
+
                     local glowCb = AceGUI:Create("CheckBox")
                     glowCb:SetLabel(L["Max Stack Indicator"])
                     glowCb:SetValue(cab.maxStacksGlowEnabled == true)
@@ -2015,6 +2120,12 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                 local isContinuous = isActive or (cab.displayMode == "continuous")
 
                 if isContinuous then
+                    local textsHeading = AceGUI:Create("Heading")
+                    textsHeading:SetText("Texts")
+                    ColorHeading(textsHeading)
+                    textsHeading:SetFullWidth(true)
+                    container:AddChild(textsHeading)
+
                     -- Show Duration Text
                     local durationTextCb = AceGUI:Create("CheckBox")
                     durationTextCb:SetLabel(L["Show Duration Text"])
