@@ -162,7 +162,7 @@ end
 
 local function BuildChargeTextControls(container, styleTable, refreshCallback)
     local chargeTextCb = AceGUI:Create("CheckBox")
-    chargeTextCb:SetLabel(L["Show Charge Text"])
+    chargeTextCb:SetLabel(L["Show Count Text (Charges/Uses)"])
     chargeTextCb:SetValue(styleTable.showChargeText ~= false)
     chargeTextCb:SetFullWidth(true)
     chargeTextCb:SetCallback("OnValueChanged", function(widget, event, val)
