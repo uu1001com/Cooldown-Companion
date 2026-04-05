@@ -41,11 +41,26 @@ local function HideDragIndicator()
     if CS.dragIndicator then CS.dragIndicator:Hide() end
 end
 
+local function GetDragScaleFrame(scrollWidget)
+    if not scrollWidget then
+        return UIParent
+    end
+    return scrollWidget.frame or scrollWidget
+end
+
+local function GetScaledCursorCoordinates(scrollWidget)
+    local cursorX, cursorY = GetCursorPosition()
+    local scaleFrame = GetDragScaleFrame(scrollWidget)
+    local scale = (scaleFrame and scaleFrame.GetEffectiveScale and scaleFrame:GetEffectiveScale()) or 1
+    return cursorX / scale, cursorY / scale
+end
+
 local function GetScaledCursorPosition(scrollWidget)
-    local _, cursorY = GetCursorPosition()
-    local scale = scrollWidget.frame:GetEffectiveScale()
-    cursorY = cursorY / scale
-    return cursorY
+    return GetScaledCursorCoordinates(scrollWidget)
+end
+
+local function GetRawCursorCoordinates()
+    return GetCursorPosition()
 end
 
 local function GetDropIndex(scrollWidget, cursorY, childOffset, totalDraggable)
@@ -231,7 +246,14 @@ local function ShowDragIndicator(anchorFrame, anchorAbove, parentScrollWidget)
         return
     end
     local ind = GetDragIndicator()
-    local width = parentScrollWidget.content:GetWidth() or 100
+    local width
+    if parentScrollWidget and parentScrollWidget.content then
+        width = parentScrollWidget.content:GetWidth()
+    else
+        local scaleFrame = GetDragScaleFrame(parentScrollWidget)
+        width = scaleFrame and scaleFrame:GetWidth()
+    end
+    width = width or 100
     ind:SetWidth(width)
     ind:ClearAllPoints()
     if anchorAbove then
@@ -301,6 +323,28 @@ local function GetRelativeRect(frame, parent)
     return left - parentLeft, parentTop - top, width, height
 end
 
+local function ApplyRelativeRect(region, parent, rect)
+    if not (region and parent and rect and rect.width and rect.height) then
+        return false
+    end
+
+    region:ClearAllPoints()
+    region:SetPoint("TOPLEFT", parent, "TOPLEFT", rect.x or 0, -(rect.y or 0))
+    region:SetPoint(
+        "BOTTOMRIGHT",
+        parent,
+        "TOPLEFT",
+        (rect.x or 0) + rect.width,
+        -((rect.y or 0) + rect.height)
+    )
+    return true
+end
+
+local function BuildPreviewHeaderText(panel)
+    return (panel.name or ("Panel " .. tostring(panel.panelId))) ..
+        " |cff666666(" .. tostring(panel.count or #panel.rows) .. ")|r"
+end
+
 local function CopyPreviewRow(row)
     return {
         key = row.key,
@@ -314,6 +358,18 @@ local function CopyPreviewRow(row)
         usable = row.usable,
         textColor = row.textColor,
         imageSize = row.imageSize,
+        iconRect = row.iconRect and {
+            x = row.iconRect.x,
+            y = row.iconRect.y,
+            width = row.iconRect.width,
+            height = row.iconRect.height,
+        } or nil,
+        labelRect = row.labelRect and {
+            x = row.labelRect.x,
+            y = row.labelRect.y,
+            width = row.labelRect.width,
+            height = row.labelRect.height,
+        } or nil,
         isGap = row.isGap,
     }
 end
@@ -346,6 +402,18 @@ local function CopyPreviewPanel(panel)
             y = panel.header.y,
             width = panel.header.width,
             height = panel.header.height,
+            labelRect = panel.header.labelRect and {
+                x = panel.header.labelRect.x,
+                y = panel.header.labelRect.y,
+                width = panel.header.labelRect.width,
+                height = panel.header.labelRect.height,
+            } or nil,
+            modeBadgeRect = panel.header.modeBadgeRect and {
+                x = panel.header.modeBadgeRect.x,
+                y = panel.header.modeBadgeRect.y,
+                width = panel.header.modeBadgeRect.width,
+                height = panel.header.modeBadgeRect.height,
+            } or nil,
         },
         rows = {},
     }
@@ -393,6 +461,18 @@ local function BuildCol2BasePreviewLayout()
                 y = hy or 6,
                 width = hw or math.max(40, width - (PREVIEW_PANEL_INSET * 2)),
                 height = hh or 32,
+                labelRect = (function()
+                    local lx, ly, lw, lh = GetRelativeRect(meta.headerWidget and meta.headerWidget.label, meta.panelFrame)
+                    if lx then
+                        return { x = lx, y = ly, width = lw, height = lh }
+                    end
+                end)(),
+                modeBadgeRect = (function()
+                    local bx, by, bw, bh = GetRelativeRect(meta.headerWidget and meta.headerWidget._cdcModeBadge, meta.panelFrame)
+                    if bx then
+                        return { x = bx, y = by, width = bw, height = bh }
+                    end
+                end)(),
             }
 
             local totalRowHeight = 0
@@ -412,6 +492,18 @@ local function BuildCol2BasePreviewLayout()
                     usable = rowMeta.usable,
                     textColor = rowMeta.textColor,
                     imageSize = rowMeta.imageSize,
+                    iconRect = (function()
+                        local ix, iy, iw, ih = GetRelativeRect(rowMeta.widget and rowMeta.widget.image, rowMeta.frame)
+                        if ix then
+                            return { x = ix, y = iy, width = iw, height = ih }
+                        end
+                    end)(),
+                    labelRect = (function()
+                        local lx, ly, lw, lh = GetRelativeRect(rowMeta.widget and rowMeta.widget.label, rowMeta.frame)
+                        if lx then
+                            return { x = lx, y = ly, width = lw, height = lh }
+                        end
+                    end)(),
                 }
                 totalRowHeight = totalRowHeight + row.height
                 if previousRow then
@@ -905,11 +997,13 @@ local function RenderCol2AnimatedPreview(source)
                 panelFrame._cdcTitle:ClearAllPoints()
                 panelFrame._cdcTitle:SetPoint("CENTER", panelFrame, "CENTER", 8, 0)
             else
-                panelFrame._cdcTitle:ClearAllPoints()
-                panelFrame._cdcTitle:SetPoint("TOP", panelFrame, "TOP", 0, -(panel.header.y + (panel.header.height / 2)))
+                if not ApplyRelativeRect(panelFrame._cdcTitle, panelFrame, panel.header.labelRect) then
+                    panelFrame._cdcTitle:ClearAllPoints()
+                    panelFrame._cdcTitle:SetPoint("TOP", panelFrame, "TOP", 0, -(panel.header.y + (panel.header.height / 2)))
+                end
             end
             ApplyPreviewModeBadge(panelFrame._cdcModeBadge, panel.displayMode)
-            panelFrame._cdcTitle:SetText(panel.name .. " |cff666666(" .. tostring(panel.count or #panel.rows) .. ")|r")
+            panelFrame._cdcTitle:SetText(BuildPreviewHeaderText(panel))
             if not panel.enabled then
                 panelFrame._cdcTitle:SetTextColor(0.55, 0.55, 0.55)
             elseif panel.headerColor then
@@ -917,8 +1011,20 @@ local function RenderCol2AnimatedPreview(source)
             else
                 panelFrame._cdcTitle:SetTextColor(1, 1, 1)
             end
-            panelFrame._cdcModeBadge:ClearAllPoints()
-            panelFrame._cdcModeBadge:SetPoint("RIGHT", panelFrame._cdcTitle, "LEFT", -4, 0)
+            if model.mode == PREVIEW_MODE_PANEL_COMPACT then
+                panelFrame._cdcModeBadge:ClearAllPoints()
+                panelFrame._cdcModeBadge:SetPoint("RIGHT", panelFrame._cdcTitle, "LEFT", -4, 0)
+            else
+                local textW = panelFrame._cdcTitle:GetStringWidth()
+                panelFrame._cdcModeBadge:ClearAllPoints()
+                panelFrame._cdcModeBadge:SetPoint(
+                    "RIGHT",
+                    panelFrame._cdcTitle,
+                    "CENTER",
+                    -(textW / 2) - 2,
+                    0
+                )
+            end
 
             if model.mode == PREVIEW_MODE_PANEL_COMPACT then
                 QueuePreviewTween(
@@ -960,11 +1066,20 @@ local function RenderCol2AnimatedPreview(source)
                     else
                         rowProxy.frame._cdcLabel:SetTextColor(row.usable == false and 0.55 or 1, row.usable == false and 0.55 or 1, row.usable == false and 0.55 or 1)
                     end
-                    rowProxy.frame._cdcIcon:SetSize(row.imageSize or 32, row.imageSize or 32)
+                    rowProxy.frame._cdcIcon:ClearAllPoints()
+                    if not ApplyRelativeRect(rowProxy.frame._cdcIcon, rowProxy.frame, row.iconRect) then
+                        rowProxy.frame._cdcIcon:SetPoint("LEFT", rowProxy.frame, "LEFT", 0, 0)
+                        rowProxy.frame._cdcIcon:SetSize(row.imageSize or 32, row.imageSize or 32)
+                    end
                     rowProxy.frame._cdcIcon:SetTexture(row.icon or 134400)
                     rowProxy.frame._cdcIcon:SetShown(row.icon ~= nil)
                     if rowProxy.frame._cdcIcon.SetDesaturated then
                         rowProxy.frame._cdcIcon:SetDesaturated(row.usable == false)
+                    end
+                    if not ApplyRelativeRect(rowProxy.frame._cdcLabel, rowProxy.frame, row.labelRect) then
+                        rowProxy.frame._cdcLabel:ClearAllPoints()
+                        rowProxy.frame._cdcLabel:SetPoint("LEFT", rowProxy.frame._cdcIcon, "RIGHT", 8, 0)
+                        rowProxy.frame._cdcLabel:SetPoint("RIGHT", rowProxy.frame, "RIGHT", -PREVIEW_ROW_TEXT_RIGHT_PAD, 0)
                     end
 
                     QueuePreviewTween(
@@ -1135,6 +1250,29 @@ local function PerformPanelReorder(sourcePanelId, dropIndex, panelDropTargets)
             db.groups[pid].order = i
         end
     end
+end
+
+local function IsPanelReorderNoOp(sourcePanelId, dropIndex, panelDropTargets)
+    if not (sourcePanelId and dropIndex and panelDropTargets) then
+        return true
+    end
+
+    local sourceIndex
+    for i, entry in ipairs(panelDropTargets) do
+        if entry.panelId == sourcePanelId then
+            sourceIndex = i
+            break
+        end
+    end
+    if not sourceIndex then
+        return true
+    end
+
+    if dropIndex > sourceIndex then
+        dropIndex = dropIndex - 1
+    end
+
+    return sourceIndex == dropIndex
 end
 
 ------------------------------------------------------------------------
@@ -1592,14 +1730,28 @@ end
 ------------------------------------------------------------------------
 -- Drag lifecycle
 ------------------------------------------------------------------------
+local function SetDraggedWidgetAlpha(widget, alpha)
+    if not widget then return end
+    if widget.frame and widget.frame.SetAlpha then
+        widget.frame:SetAlpha(alpha)
+    elseif widget.SetAlpha then
+        widget:SetAlpha(alpha)
+    end
+end
+
 local function CancelDrag()
     if CS.dragState then
+        if CS.dragState.kind == "layout-slot"
+            and CS.dragState.layoutDrag
+            and CS.dragState.layoutDrag.onCancel then
+            CS.dragState.layoutDrag.onCancel(CS.dragState)
+        end
         if CS.dragState.dimmedWidgets then
             for _, w in ipairs(CS.dragState.dimmedWidgets) do
-                w.frame:SetAlpha(1)
+                SetDraggedWidgetAlpha(w, 1)
             end
         elseif CS.dragState.widget then
-            CS.dragState.widget.frame:SetAlpha(1)
+            SetDraggedWidgetAlpha(CS.dragState.widget, 1)
         end
     end
     CS.dragState = nil
@@ -1623,6 +1775,18 @@ local function FinishDrag()
         return
     end
     local state = CS.dragState
+    if state.kind == "layout-slot" then
+        local cursorX, cursorY = GetRawCursorCoordinates()
+        if state.layoutDrag and state.layoutDrag.resolveDropTarget then
+            state.dropTarget = state.layoutDrag.resolveDropTarget(cursorX, cursorY, state)
+        end
+        if state.layoutDrag and state.layoutDrag.applyDrop then
+            state.layoutDrag.applyDrop(state)
+        end
+        CancelDrag()
+        ResetDragIndicatorStyle()
+        return
+    end
     CS.showPhantomSections = false  -- clear before CancelDrag to avoid redundant deferred refresh
     CancelDrag()
     ResetDragIndicatorStyle()
@@ -1692,7 +1856,12 @@ local function FinishDrag()
         CooldownCompanion:RefreshConfigPanel()
     elseif state.kind == "panel" then
         local dropTarget = state.dropTarget
-        if dropTarget then
+        local changed = dropTarget and not IsPanelReorderNoOp(state.sourcePanelId, dropTarget.targetIndex, state.panelDropTargets)
+        if changed then
+            wipe(CS.selectedPanels)
+            CS.selectedGroup = state.sourcePanelId
+            CS.selectedButton = nil
+            wipe(CS.selectedButtons)
             PerformPanelReorder(state.sourcePanelId, dropTarget.targetIndex, state.panelDropTargets)
             -- Refresh all affected panel frames
             for _, entry in ipairs(state.panelDropTargets) do
@@ -1761,21 +1930,33 @@ local function StartDragTracking()
             end
             return
         end
-        local cursorY = GetScaledCursorPosition(CS.dragState.scrollWidget)
+        local cursorX, cursorY
+        if CS.dragState.kind == "layout-slot" then
+            cursorX, cursorY = GetRawCursorCoordinates()
+        else
+            cursorX, cursorY = GetScaledCursorCoordinates(CS.dragState.scrollWidget)
+        end
         if CS.dragState.phase == "pending" then
-            if math.abs(cursorY - CS.dragState.startY) > DRAG_THRESHOLD then
+            local deltaY = math.abs(cursorY - (CS.dragState.startY or cursorY))
+            local deltaX = math.abs(cursorX - (CS.dragState.startX or cursorX))
+            if deltaY > DRAG_THRESHOLD or deltaX > DRAG_THRESHOLD then
                 CS.dragState.phase = "active"
+                if CS.dragState.kind == "layout-slot"
+                    and CS.dragState.layoutDrag
+                    and CS.dragState.layoutDrag.onActivate then
+                    CS.dragState.layoutDrag.onActivate(CS.dragState)
+                end
                 -- Dim source widget(s)
                 if CS.dragState.kind == "multi-group" and CS.dragState.sourceGroupIds then
                     CS.dragState.dimmedWidgets = {}
                     for _, row in ipairs(CS.dragState.col1RenderedRows) do
                         if row.kind == "container" and CS.dragState.sourceGroupIds[row.id] then
-                            row.widget.frame:SetAlpha(0.4)
+                            SetDraggedWidgetAlpha(row.widget, 0.4)
                             table.insert(CS.dragState.dimmedWidgets, row.widget)
                         end
                     end
                 elseif CS.dragState.widget then
-                    CS.dragState.widget.frame:SetAlpha(0.4)
+                    SetDraggedWidgetAlpha(CS.dragState.widget, 0.4)
                 end
                 -- Check if we need phantom sections for cross-section drops
                 if CS.dragState.col1RenderedRows and not CS.showPhantomSections then
@@ -1812,7 +1993,7 @@ local function StartDragTracking()
                             CS.dragState.dimmedWidgets = {}
                             for _, row in ipairs(CS.dragState.col1RenderedRows) do
                                 if row.kind == "container" and savedSourceGroupIds[row.id] then
-                                    row.widget.frame:SetAlpha(0.4)
+                                    SetDraggedWidgetAlpha(row.widget, 0.4)
                                     table.insert(CS.dragState.dimmedWidgets, row.widget)
                                 end
                             end
@@ -1820,11 +2001,11 @@ local function StartDragTracking()
                             for _, row in ipairs(CS.dragState.col1RenderedRows) do
                                 if savedKind == "folder" and row.kind == "folder" and row.id == savedSourceFolderId then
                                     CS.dragState.widget = row.widget
-                                    row.widget.frame:SetAlpha(0.4)
+                                    SetDraggedWidgetAlpha(row.widget, 0.4)
                                     break
                                 elseif (savedKind == "group" or savedKind == "folder-group") and row.kind == "container" and row.id == savedSourceGroupId then
                                     CS.dragState.widget = row.widget
-                                    row.widget.frame:SetAlpha(0.4)
+                                    SetDraggedWidgetAlpha(row.widget, 0.4)
                                     break
                                 end
                             end
@@ -1834,7 +2015,20 @@ local function StartDragTracking()
             end
         end
         if CS.dragState.phase == "active" then
-            if CS.dragState.col1RenderedRows then
+            if CS.dragState.kind == "layout-slot" then
+                local dropTarget = CS.dragState.layoutDrag
+                    and CS.dragState.layoutDrag.resolveDropTarget
+                    and CS.dragState.layoutDrag.resolveDropTarget(cursorX, cursorY, CS.dragState)
+                CS.dragState.dropTarget = dropTarget
+                ClearCol2AnimatedPreview()
+                if CS.dragState.layoutDrag and CS.dragState.layoutDrag.onUpdate then
+                    CS.dragState.layoutDrag.onUpdate(CS.dragState, cursorX, cursorY, dropTarget)
+                elseif dropTarget and CS.dragState.layoutDrag.showIndicator then
+                    CS.dragState.layoutDrag.showIndicator(dropTarget)
+                else
+                    HideDragIndicator()
+                end
+            elseif CS.dragState.col1RenderedRows then
                 ClearCol2AnimatedPreview()
                 -- Column 1 folder-aware drop detection
                 local effectiveKind = CS.dragState.kind == "multi-group" and "group" or CS.dragState.kind
