@@ -198,6 +198,7 @@ local function BuildResourceBarAnchoringPanel(container)
                 settings.hideManaForNonHealer = val
                 CooldownCompanion:ApplyResourceBars()
                 CooldownCompanion:UpdateAnchorStacking()
+                CooldownCompanion:RefreshConfigPanel()
             end)
             container:AddChild(manaCb)
         end
