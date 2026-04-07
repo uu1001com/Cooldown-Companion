@@ -16,6 +16,8 @@ local ApplyCheckboxIndent = ST._ApplyCheckboxIndent
 local HasTooltipCooldown = ST.HasTooltipCooldown
 local AddColorPicker = ST._AddColorPicker
 local AddAnchorDropdown = ST._AddAnchorDropdown
+local AddOffsetSliders = ST._AddOffsetSliders
+local HookSliderEditBox = ST._HookSliderEditBox
 local BuildGroupExportData = ST._BuildGroupExportData
 local BuildContainerExportData = ST._BuildContainerExportData
 local EncodeExportData = ST._EncodeExportData
@@ -57,6 +59,25 @@ local BuildTextBackgroundControls = ST._BuildTextBackgroundControls
 local tabInfoButtons = CS.tabInfoButtons
 local appearanceTabElements = CS.appearanceTabElements
 local SOUND_ALERT_NONE_OPTION_KEY = "None" -- Keep in sync with Core/SoundAlerts.lua SOUND_NONE_KEY.
+
+local function GroupUsesTexturePanelEntries(group)
+    return group and (group.displayMode or "icons") == "textures"
+end
+
+local function BuildButtonSettingsTabs(group)
+    local tabs = {
+        { value = "settings", text = "Settings" },
+        { value = "soundalerts", text = "Sound Alerts" },
+    }
+
+    -- Texture panels only ever manage a single texture entry, so the
+    -- per-button Overrides tab does not apply there and just creates noise.
+    if not GroupUsesTexturePanelEntries(group) then
+        tabs[#tabs + 1] = { value = "overrides", text = "Overrides" }
+    end
+
+    return tabs
+end
 
 local function BuildSortedSoundOptionOrder(soundOptions)
     local order = {}
@@ -300,8 +321,23 @@ local function BuildSpellSettings(scroll, buttonData, infoButtons)
     scroll:AddChild(auraHeading)
 
     local auraHeadingInfoBtn = CreateInfoButton(auraHeading.frame, auraHeading.label, "LEFT", "RIGHT", 4, 0, {
-        L["Aura Tracking"],
-        {L["Using other CDM addons in conjunction with CDC may break aura tracking."], 1, 1, 1, true},
+        "Aura Tracking",
+        {"Shows the tracked aura's remaining duration on the cooldown swipe instead of the spell's normal cooldown.", 1, 1, 1, true},
+        " ",
+        "Requires:",
+        {"- Blizzard Cooldown Manager (CDM) must be enabled.", 1, 1, 1, true},
+        {"- In Edit Mode, the CDM Buffs/Debuffs visibility setting must be set to Always Visible.", 1, 1, 1, true},
+        {"- The aura you want must be tracked in CDM as a Tracked Buff or Tracked Bar, not only as a cooldown.", 1, 1, 1, true},
+        " ",
+        "Can:",
+        {"- Read aura data only from Player or Target.", 1, 1, 1, true},
+        " ",
+        "Cannot:",
+        {"- Track auras that are not present in Blizzard CDM.", 1, 1, 1, true},
+        " ",
+        {"If you do not want CDM visible on your screen, use the CDM hide toggle in the top-right of the config.", 1, 1, 1, true},
+        " ",
+        {"Using other CDM-related addons alongside Cooldown Companion may interfere with aura tracking.", 1, 1, 1, true},
     }, infoButtons)
 
     local auraKey = CS.selectedGroup .. "_" .. CS.selectedButton .. "_aura"
@@ -357,12 +393,6 @@ local function BuildSpellSettings(scroll, buttonData, infoButtons)
     end)
     scroll:AddChild(auraCb)
 
-    -- (?) tooltip for aura tracking
-    local auraWarnLines = {
-        isHarmful and "Debuff Tracking" or "Buff Tracking",
-        {"When enabled, the cooldown swipe shows the remaining tracked aura duration instead of the spell's cooldown. Use Aura Unit to decide whether that aura should be read from Player or Target.\n\nThis spell must be tracked as a Buff or Debuff in the Blizzard Cooldown Manager (not just as a Cooldown). The CDM must be active but does not need to be visible.\n\nOnly player and target auras are supported.", 1, 1, 1, true},
-    }
-    CreateInfoButton(auraCb.frame, auraCb.checkbg, "LEFT", "RIGHT", auraCb.text:GetStringWidth() + 4, 0, auraWarnLines, infoButtons)
     end -- not buttonData.isPassive
 
     local showAuraDetails = buttonData.isPassive or buttonData.auraTracking == true
@@ -1187,6 +1217,13 @@ local function RefreshButtonSettingsColumn()
     end
 
     if hasSelection then
+        local group = CooldownCompanion.db.profile.groups[CS.selectedGroup]
+        bsCol.bsTabGroup:SetTabs(BuildButtonSettingsTabs(group))
+
+        if GroupUsesTexturePanelEntries(group) and CS.buttonSettingsTab == "overrides" then
+            CS.buttonSettingsTab = "settings"
+        end
+
         if bsCol.bsPlaceholder then bsCol.bsPlaceholder:Hide() end
         bsCol.bsTabGroup.frame:Show()
         bsCol.bsTabGroup:SelectTab(CS.buttonSettingsTab or "settings")
