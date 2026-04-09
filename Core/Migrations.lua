@@ -23,7 +23,9 @@ function CooldownCompanion:RunAllMigrations()
     self:MigrateMasqueField()
     self:MigrateRemoveBarChargeOldFields()
     self:MigrateVisibility()
+    self:MigrateStandaloneAuraMetadata()
     self:MigrateAddedAsClassification()
+    self:MigrateInvertAuraDesaturationLogic()
     self:MigrateFolders()
     self:MigrateFolderSpecFilters()
     self:MigrateContainerHeroTalentStamps()
@@ -46,6 +48,7 @@ function CooldownCompanion:RunAllMigrations()
     self:MigrateNewDefaults()
     self:MigrateCharacterScopedBarSettings()
     self:MigrateGroupsToContainers()
+    self:MigrateContainerAnchorsToScreenOffsets()
     self:MigrateContainerAlphaToPanel()
     self:MigrateStrataOrderExpansion()
     self:MigrateCustomAuraBarSlots5()
@@ -67,10 +70,16 @@ function CooldownCompanion:ClearMigrationSentinels()
     profile.auraIndicatorMigrated = nil
     profile.assistedHighlightHostileTargetOnlyMigrated = nil
     profile.addedAsClassificationMigrated = nil
+    profile.addedAsClassificationV2Migrated = nil
+    profile.standaloneAuraMetadataMigrated = nil
+    profile.standaloneAuraLinkMetadataMigrated = nil
+    profile.standaloneAuraMetadataV2Migrated = nil
+    profile.invertAuraDesaturationLogicMigrated = nil
     profile.talentConditionsMigrated = nil
     profile.choiceTalentConditionsMigrated = nil
     profile.newDefaultsMigrated = nil
     profile._migratedContainersV1 = nil
+    profile._migratedContainerAnchorsToScreenOffsets = nil
     profile._migratedContainerAlphaToPanel = nil
     profile._migratedContainerHeroTalentStamps = nil
     profile._migratedStrataOrder6 = nil
@@ -281,7 +290,7 @@ end
 
 function CooldownCompanion:MigrateAddedAsClassification()
     local profile = self.db.profile
-    if profile.addedAsClassificationMigrated then return end
+    if profile.addedAsClassificationV2Migrated then return end
 
     for _, group in pairs(self.db.profile.groups) do
         if group.buttons then
@@ -289,13 +298,11 @@ function CooldownCompanion:MigrateAddedAsClassification()
                 if buttonData.type == "spell" then
                     local addedAs = buttonData.addedAs
                     if addedAs ~= "spell" and addedAs ~= "aura" then
-                        addedAs = buttonData.isPassive and "aura" or "spell"
-                    end
-
-                    -- Non-passive spells should not be permanently classified as aura
-                    -- just because aura tracking was auto-detected.
-                    if addedAs == "aura" and not buttonData.isPassive then
-                        addedAs = "spell"
+                        addedAs = self:ShouldRecoverLegacyStandaloneAuraEntry(
+                            buttonData,
+                            group.buttons,
+                            { trustExplicitAuraLabel = false }
+                        ) and "aura" or "spell"
                     end
 
                     buttonData.addedAs = addedAs
@@ -305,6 +312,48 @@ function CooldownCompanion:MigrateAddedAsClassification()
     end
 
     profile.addedAsClassificationMigrated = true
+    profile.addedAsClassificationV2Migrated = true
+end
+
+function CooldownCompanion:MigrateStandaloneAuraMetadata()
+    local profile = self.db.profile
+    if profile.standaloneAuraMetadataV2Migrated then return end
+
+    for _, group in pairs(profile.groups or {}) do
+        if group.buttons then
+            for _, buttonData in ipairs(group.buttons) do
+                self:NormalizeStandaloneAuraButtonData(buttonData, group.buttons, {
+                    -- Be conservative on legacy/imported data: an old saved
+                    -- addedAs="aura" label is not enough proof by itself that
+                    -- the entry was intentionally created as aura-only.
+                    trustExplicitAuraLabel = false,
+                })
+            end
+        end
+    end
+
+    profile.standaloneAuraLinkMetadataMigrated = true
+    profile.standaloneAuraMetadataV2Migrated = true
+end
+
+function CooldownCompanion:MigrateInvertAuraDesaturationLogic()
+    local profile = self.db.profile
+    if profile.invertAuraDesaturationLogicMigrated then return end
+
+    for _, group in pairs(profile.groups or {}) do
+        if group.buttons then
+            for _, buttonData in ipairs(group.buttons) do
+                if buttonData.saturateWhileAuraNotActive ~= nil then
+                    if buttonData.isPassive and buttonData.saturateWhileAuraNotActive then
+                        buttonData.neverDesaturate = true
+                    end
+                    buttonData.saturateWhileAuraNotActive = nil
+                end
+            end
+        end
+    end
+
+    profile.invertAuraDesaturationLogicMigrated = true
 end
 
 function CooldownCompanion:MigrateFolders()
@@ -1531,6 +1580,19 @@ function CooldownCompanion:MigrateGroupsToContainers()
     end
 
     profile._migratedContainersV1 = true
+end
+
+function CooldownCompanion:MigrateContainerAnchorsToScreenOffsets()
+    local profile = self.db.profile
+    if profile._migratedContainerAnchorsToScreenOffsets then return end
+
+    for containerId, container in pairs(profile.groupContainers or {}) do
+        if self:IsContainerVisibleToCurrentChar(containerId) then
+            container.anchor = self:NormalizeContainerAnchor(container.anchor)
+        end
+    end
+
+    profile._migratedContainerAnchorsToScreenOffsets = true
 end
 
 -------------------------------------------------------------------------

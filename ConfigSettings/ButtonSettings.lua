@@ -108,6 +108,40 @@ local function GetDefaultAuraUnit(isHarmful)
     return isHarmful and "target" or "player"
 end
 
+local function PrimeSelectedReadyGlowCappedChargeTransition(groupId, buttonIndex)
+    local frame = CooldownCompanion.groupFrames and CooldownCompanion.groupFrames[groupId]
+    local button = frame and frame.buttons and frame.buttons[buttonIndex]
+    local buttonData = button and button.buttonData
+    if not (button and buttonData) then
+        return
+    end
+
+    if buttonData.type ~= "spell"
+       or buttonData.hasCharges ~= true
+       or buttonData._hasDisplayCount then
+        return
+    end
+
+    button._readyGlowMaxChargesSpellID = button._displaySpellId or buttonData.id
+    button._readyGlowMaxChargesStartTime = nil
+    button._readyGlowMaxChargesActive = false
+end
+
+local function PrimeSelectedReadyGlowNormalTransition(groupId, buttonIndex)
+    local frame = CooldownCompanion.groupFrames and CooldownCompanion.groupFrames[groupId]
+    local button = frame and frame.buttons and frame.buttons[buttonIndex]
+    local buttonData = button and button.buttonData
+    if not (button and buttonData) then
+        return
+    end
+
+    if buttonData.isPassive or button._noCooldown == true or button._desatCooldownActive == true then
+        return
+    end
+
+    button._readyGlowStartTime = GetTime()
+end
+
 local function EnsureAuraUnitChoice(buttonData, isHarmful, unit)
     if IsValidAuraUnit(unit) then
         buttonData.auraUnit = unit
@@ -216,91 +250,9 @@ local function BuildSpellSettings(scroll, buttonData, infoButtons)
     if not group then return end
 
     local isHarmful = buttonData.type == "spell" and C_Spell.IsSpellHarmful(buttonData.id)
-    -- Look up viewer frame: for multi-slot buttons, use the slot-specific CDM child
-    local viewerFrame
-    if buttonData.cdmChildSlot then
-        local allChildren = CooldownCompanion.viewerAuraAllChildren[buttonData.id]
-        viewerFrame = allChildren and allChildren[buttonData.cdmChildSlot]
-    end
-    if not viewerFrame and buttonData.auraSpellID then
-        for id in tostring(buttonData.auraSpellID):gmatch("%d+") do
-            viewerFrame = CooldownCompanion.viewerAuraFrames[tonumber(id)]
-            if viewerFrame then break end
-        end
-    end
-    if not viewerFrame then
-        local resolvedAuraId = buttonData.type == "spell"
-            and C_UnitAuras.GetCooldownAuraBySpellID(buttonData.id)
-        viewerFrame = (resolvedAuraId and resolvedAuraId ~= 0
-                and CooldownCompanion.viewerAuraFrames[resolvedAuraId])
-            or CooldownCompanion.viewerAuraFrames[buttonData.id]
-    end
-
-    -- Fallback scan for transforming spells whose override hasn't fired yet
-    if not viewerFrame and buttonData.type == "spell" then
-        local child = CooldownCompanion:FindViewerChildForSpell(buttonData.id)
-        if child then
-            CooldownCompanion.viewerAuraFrames[buttonData.id] = child
-            viewerFrame = child
-        end
-    end
-    -- Fallback for hardcoded overrides: try the buff IDs in the viewer map
-    if not viewerFrame and buttonData.type == "spell" then
-        local overrideBuffs = CooldownCompanion.ABILITY_BUFF_OVERRIDES[buttonData.id]
-        if overrideBuffs then
-            for id in overrideBuffs:gmatch("%d+") do
-                viewerFrame = CooldownCompanion.viewerAuraFrames[tonumber(id)]
-                if viewerFrame then break end
-            end
-        end
-    end
-
     local cdmEnabled = C_CVar.GetCVarBool("cooldownViewerEnabled") == true
-
-    -- Only treat as aura-capable if CDM is enabled and viewer is from BuffIcon or BuffBar.
-    -- When CDM is disabled, viewer children persist with stale data and cannot be trusted.
-    -- (Essential and Utility viewers track cooldowns only, not auras)
-    local hasViewerFrame = false
-    if viewerFrame and cdmEnabled then
-        local parent = viewerFrame:GetParent()
-        local parentName = parent and parent:GetName()
-        hasViewerFrame = parentName == "BuffIconCooldownViewer" or parentName == "BuffBarCooldownViewer"
-    end
-    local function ComputeAuraConfigReady()
-        return CooldownCompanion:IsAuraTrackingConfigReady(
-            buttonData,
-            cdmEnabled,
-            hasViewerFrame and viewerFrame or nil
-        )
-    end
-    local auraConfigReady = ComputeAuraConfigReady()
-
-    -- Determine if this spell could theoretically track a buff/debuff.
-    -- Query the CDM's authoritative category lists for TrackedBuff and TrackedBar.
-    local buffTrackableSpells = {}
-    for _, cat in ipairs({Enum.CooldownViewerCategory.TrackedBuff, Enum.CooldownViewerCategory.TrackedBar}) do
-        local ids = C_CooldownViewer.GetCooldownViewerCategorySet(cat, true)
-        if ids then
-            for _, cdID in ipairs(ids) do
-                local info = C_CooldownViewer.GetCooldownViewerCooldownInfo(cdID)
-                if info then
-                    buffTrackableSpells[info.spellID] = true
-                    if info.overrideSpellID then
-                        buffTrackableSpells[info.overrideSpellID] = true
-                    end
-                    if info.overrideTooltipSpellID then
-                        buffTrackableSpells[info.overrideTooltipSpellID] = true
-                    end
-                end
-            end
-        end
-    end
-
-    local canTrackAura = hasViewerFrame
-        or buffTrackableSpells[buttonData.id]
-        or (buttonData.auraSpellID and buttonData.auraSpellID ~= "")
-        or (buttonData.type == "spell" and CooldownCompanion.ABILITY_BUFF_OVERRIDES[buttonData.id])
-
+    local viewerFrame = cdmEnabled and CooldownCompanion:ResolveButtonAuraViewerFrame(buttonData) or nil
+    local hasViewerFrame = viewerFrame ~= nil
     -- Auto-enable aura tracking for viewer-backed spells
     if hasViewerFrame and buttonData.auraTracking == nil then
         buttonData.auraTracking = true
@@ -309,8 +261,26 @@ local function BuildSpellSettings(scroll, buttonData, infoButtons)
             buttonData.auraSpellID = overrideBuffs
         end
         EnsureAuraUnitChoice(buttonData, isHarmful)
-        auraConfigReady = ComputeAuraConfigReady()
         CooldownCompanion:RefreshGroupFrame(CS.selectedGroup)
+    end
+
+    local auraStatus = CooldownCompanion:ResolveAuraTrackingConfigStatus(
+        buttonData,
+        cdmEnabled,
+        viewerFrame
+    )
+    local auraConfigReady = auraStatus.ready == true
+    local auraFoundButUntracked = auraStatus.state == "associatedAuraNotTracked"
+    local auraTrackedButUnavailable = auraStatus.state == "trackedAuraUnavailable"
+    local auraInactiveColorCode = auraFoundButUntracked and "|cffffff00" or "|cffff0000"
+    local function SetupWrappedStatusLabel(label, text, justifyH)
+        label:SetFullWidth(true)
+        label:SetJustifyH(justifyH or "LEFT")
+        local contentWidth = scroll.content and scroll.content:GetWidth()
+        if contentWidth and contentWidth > 0 then
+            label:SetWidth(math.max(1, contentWidth - 20))
+        end
+        label:SetText(text)
     end
 
     if buttonData.type == "spell" then
@@ -374,12 +344,14 @@ local function BuildSpellSettings(scroll, buttonData, infoButtons)
         scroll:AddChild(slotLabel)
     end
 
-    -- Track buff/debuff duration toggle (hidden for passives — forced on)
-    if not buttonData.isPassive then
+    local isAuraEntry = buttonData.addedAs == "aura"
+
+    -- Track buff/debuff duration toggle (hidden for passives and aura entries — forced on)
+    if not buttonData.isPassive and not isAuraEntry then
     local auraCb = AceGUI:Create("CheckBox")
     local auraLabel = L["Aura Tracking"]
     local auraActive = auraConfigReady
-    auraLabel = auraLabel .. (auraActive and L[": |cff00ff00Active|r"] or L[": |cffff0000Inactive|r"])
+    auraLabel = auraLabel .. (auraActive and ": |cff00ff00Active|r" or ": " .. auraInactiveColorCode .. "Inactive|r")
     auraCb:SetLabel(auraLabel)
     auraCb:SetValue(buttonData.auraTracking == true)
     auraCb:SetFullWidth(true)
@@ -393,9 +365,9 @@ local function BuildSpellSettings(scroll, buttonData, infoButtons)
     end)
     scroll:AddChild(auraCb)
 
-    end -- not buttonData.isPassive
+    end -- not buttonData.isPassive and not aura entry
 
-    local showAuraDetails = buttonData.isPassive or buttonData.auraTracking == true
+    local showAuraDetails = buttonData.isPassive or isAuraEntry or buttonData.auraTracking == true
 
     if showAuraDetails then
     local function StartAuraSpellOverridePicker()
@@ -546,12 +518,10 @@ local function BuildSpellSettings(scroll, buttonData, infoButtons)
 
     local auraStatusLabel = AceGUI:Create("Label")
     if auraConfigReady then
-        auraStatusLabel:SetText("|cff00ff00Aura tracking is active and ready.|r")
+        SetupWrappedStatusLabel(auraStatusLabel, "|cff00ff00Aura tracking is active and ready.|r", "CENTER")
     else
-        auraStatusLabel:SetText(L["|cffff0000Aura tracking is not ready.|r"])
+        SetupWrappedStatusLabel(auraStatusLabel, (auraFoundButUntracked and "|cffffff00" or "|cffff0000") .. "Aura tracking is not ready.|r", "CENTER")
     end
-    auraStatusLabel:SetFullWidth(true)
-    auraStatusLabel:SetJustifyH("CENTER")
     scroll:AddChild(auraStatusLabel)
 
     local auraStatusSpacer2 = AceGUI:Create("Label")
@@ -559,22 +529,38 @@ local function BuildSpellSettings(scroll, buttonData, infoButtons)
     auraStatusSpacer2:SetFullWidth(true)
     scroll:AddChild(auraStatusSpacer2)
 
-    if not canTrackAura then
+    if auraStatus.state == "cdmDisabled" then
+        local cdmDisabledLabel = AceGUI:Create("Label")
+        SetupWrappedStatusLabel(cdmDisabledLabel, "|cff888888Blizzard Cooldown Manager is disabled. Enable it above to allow aura tracking.|r")
+        scroll:AddChild(cdmDisabledLabel)
+        local cdmDisabledSpacer = AceGUI:Create("Label")
+        cdmDisabledSpacer:SetText(" ")
+        cdmDisabledSpacer:SetFullWidth(true)
+        scroll:AddChild(cdmDisabledSpacer)
+    elseif auraStatus.state == "noAssociatedAura" then
         local noAuraLabel = AceGUI:Create("Label")
-        noAuraLabel:SetText(L["|cff888888No associated buff or debuff was found in the Cooldown Manager for this spell. Use the Spell ID Override above to link this spell to a CDM-trackable aura.|r"])
-        noAuraLabel:SetFullWidth(true)
+        SetupWrappedStatusLabel(noAuraLabel, "|cff888888No associated aura was found for this spell. Use the Spell ID Override above if you want to link it to a specific CDM-trackable aura.|r")
         scroll:AddChild(noAuraLabel)
         local noAuraSpacer = AceGUI:Create("Label")
         noAuraSpacer:SetText(" ")
         noAuraSpacer:SetFullWidth(true)
         scroll:AddChild(noAuraSpacer)
+    elseif auraTrackedButUnavailable then
+        local viewerUnavailableLabel = AceGUI:Create("Label")
+        SetupWrappedStatusLabel(
+            viewerUnavailableLabel,
+            "|cff888888An associated aura is tracked in Blizzard CDM, but its Buffs/Debuffs viewer is not currently readable. Set the CDM Buffs/Debuffs visibility to Always Visible.|r"
+        )
+        scroll:AddChild(viewerUnavailableLabel)
+        local viewerUnavailableSpacer = AceGUI:Create("Label")
+        viewerUnavailableSpacer:SetText(" ")
+        viewerUnavailableSpacer:SetFullWidth(true)
+        scroll:AddChild(viewerUnavailableSpacer)
     end
 
-    if canTrackAura then
-    if not hasViewerFrame then
+    if auraStatus.state == "associatedAuraNotTracked" then
         local auraDisabledLabel = AceGUI:Create("Label")
-        auraDisabledLabel:SetText(L["|cff888888This spell has a trackable aura in the Cooldown Manager, but it has not been added as a tracked buff or debuff yet. Add it in the CDM to enable aura tracking.|r"])
-        auraDisabledLabel:SetFullWidth(true)
+        SetupWrappedStatusLabel(auraDisabledLabel, "|cff888888An associated aura was found, but it is not being currently tracked in Blizzard CDM as a Tracked Buff or Tracked Bar.|r")
         scroll:AddChild(auraDisabledLabel)
         local auraDisabledSpacer = AceGUI:Create("Label")
         auraDisabledSpacer:SetText(" ")
@@ -590,7 +576,6 @@ local function BuildSpellSettings(scroll, buttonData, infoButtons)
             end
 
     end -- hasViewerFrame and auraTracking
-    end -- canTrackAura
 
     if buttonData.auraTracking and not buttonData.isPassive then
         local auraIconCb = AceGUI:Create("CheckBox")
@@ -1143,7 +1128,13 @@ local function RefreshPanelMultiSelect(scroll, multiCount, multiPanelIds)
                 exportPanels[#exportPanels + 1] = panelData
             end
         end
-        local payload = { type = "container", version = 1, container = containerData, panels = exportPanels }
+        local payload = {
+            type = "container",
+            version = 1,
+            container = containerData,
+            panels = exportPanels,
+            _originalContainerId = containerId,
+        }
         local exportString = EncodeExportData(payload)
         CS.ShowPopupAboveConfig("CDC_EXPORT_GROUP", nil, { exportString = exportString })
     end)
@@ -1334,7 +1325,7 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
     if not buttonData.overrideSections or not next(buttonData.overrideSections) then
         if displayMode ~= "text" then
             local noOverridesLabel = AceGUI:Create("Label")
-            noOverridesLabel:SetText(L["|cff888888No appearance overrides.\n\nTo customize this button's appearance, select it and click the |A:Crosshair_VehichleCursor_32:0:0|a icon next to a group settings section heading.|r"])
+            noOverridesLabel:SetText("|cff888888No appearance overrides are currently set.\n\nIf you want to override a setting for this specific button, click the |A:Crosshair_VehichleCursor_32:0:0|a badge next to the associated panel level setting while this button is selected.|r")
             noOverridesLabel:SetFullWidth(true)
             scroll:AddChild(noOverridesLabel)
         end
@@ -1515,27 +1506,59 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
                             end
 
                             if sectionId == "readyGlow" then
+                                local cappedCb = AceGUI:Create("CheckBox")
+                                cappedCb:SetLabel("Glow When Charges Are Capped")
+                                cappedCb:SetValue(GetEffectiveOverrideValue("readyGlowOnlyAtMaxCharges") or false)
+                                cappedCb:SetFullWidth(true)
+                                cappedCb:SetCallback("OnValueChanged", function(widget, event, val)
+                                    overrides.readyGlowOnlyAtMaxCharges = val == true
+                                    CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
+                                    if (GetEffectiveOverrideValue("readyGlowDuration") or 0) > 0 then
+                                        if val then
+                                            PrimeSelectedReadyGlowCappedChargeTransition(CS.selectedGroup, CS.selectedButton)
+                                        else
+                                            PrimeSelectedReadyGlowNormalTransition(CS.selectedGroup, CS.selectedButton)
+                                        end
+                                    end
+                                    CooldownCompanion:UpdateAllCooldowns()
+                                end)
+                                cont:AddChild(cappedCb)
+                                ApplyCheckboxIndent(cappedCb, 20)
+                                CreateInfoButton(cappedCb.frame, cappedCb.checkbg, "LEFT", "RIGHT", cappedCb.text:GetStringWidth() + 6, 0, {
+                                    "Glow When Charges Are Capped",
+                                    {"When this toggle is enabled, the glow will only appear for charge based spells when at max charges.", 1, 1, 1, true},
+                                }, infoButtons)
+
                                 local durCb = AceGUI:Create("CheckBox")
-                                durCb:SetLabel(L["Auto-Hide After Duration"])
-                                durCb:SetValue((overrides.readyGlowDuration or 0) > 0)
+                                durCb:SetLabel("Auto-Hide After Duration")
+                                durCb:SetValue((GetEffectiveOverrideValue("readyGlowDuration") or 0) > 0)
                                 durCb:SetFullWidth(true)
                                 durCb:SetCallback("OnValueChanged", function(widget, event, val)
                                     overrides.readyGlowDuration = val and 3 or 0
                                     CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
+                                    if val then
+                                        if GetEffectiveOverrideValue("readyGlowOnlyAtMaxCharges") then
+                                            PrimeSelectedReadyGlowCappedChargeTransition(CS.selectedGroup, CS.selectedButton)
+                                        else
+                                            PrimeSelectedReadyGlowNormalTransition(CS.selectedGroup, CS.selectedButton)
+                                        end
+                                    end
+                                    CooldownCompanion:UpdateAllCooldowns()
                                     CooldownCompanion:RefreshConfigPanel()
                                 end)
                                 cont:AddChild(durCb)
                                 ApplyCheckboxIndent(durCb, 20)
 
-                                if (overrides.readyGlowDuration or 0) > 0 then
+                                if (GetEffectiveOverrideValue("readyGlowDuration") or 0) > 0 then
                                     local durSlider = AceGUI:Create("Slider")
                                     durSlider:SetLabel(L["Duration (seconds)"])
                                     durSlider:SetSliderValues(0.5, 5, 0.5)
-                                    durSlider:SetValue(overrides.readyGlowDuration or 3)
+                                    durSlider:SetValue(GetEffectiveOverrideValue("readyGlowDuration") or 3)
                                     durSlider:SetFullWidth(true)
                                     durSlider:SetCallback("OnValueChanged", function(widget, event, val)
                                         overrides.readyGlowDuration = val
                                         CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
+                                        CooldownCompanion:RefreshConfigPanel()
                                     end)
                                     cont:AddChild(durSlider)
                                 end
@@ -1600,7 +1623,7 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
                         scroll:AddChild(pandemicPreviewBtn)
                     elseif sectionId == "readyGlow" and overrides.readyGlowStyle and overrides.readyGlowStyle ~= "none" then
                         local readyPreviewBtn = AceGUI:Create("Button")
-                        readyPreviewBtn:SetText(L["Preview Ready Glow (3s)"])
+                        readyPreviewBtn:SetText("Preview Ready Glow Style (3s)")
                         readyPreviewBtn:SetFullWidth(true)
                         readyPreviewBtn:SetCallback("OnClick", function()
                             if CS.selectedGroup and CS.selectedButton then

@@ -53,6 +53,44 @@ local BuildBarColorsControls = ST._BuildBarColorsControls
 local BuildBarNameTextControls = ST._BuildBarNameTextControls
 local BuildBarReadyTextControls = ST._BuildBarReadyTextControls
 
+local function PrimeReadyGlowCappedChargeTransitions(groupId)
+    local frame = CooldownCompanion.groupFrames and CooldownCompanion.groupFrames[groupId]
+    if not (frame and frame.buttons) then
+        return
+    end
+
+    for _, button in ipairs(frame.buttons) do
+        local buttonData = button.buttonData
+        if buttonData
+           and buttonData.type == "spell"
+           and buttonData.hasCharges == true
+           and not buttonData._hasDisplayCount then
+            button._readyGlowMaxChargesSpellID = button._displaySpellId or buttonData.id
+            button._readyGlowMaxChargesStartTime = nil
+            button._readyGlowMaxChargesActive = false
+        end
+    end
+end
+
+local function PrimeReadyGlowNormalTransitions(groupId)
+    local frame = CooldownCompanion.groupFrames and CooldownCompanion.groupFrames[groupId]
+    if not (frame and frame.buttons) then
+        return
+    end
+
+    local now = GetTime()
+    for _, button in ipairs(frame.buttons) do
+        local buttonData = button.buttonData
+        if buttonData
+           and not buttonData.isPassive
+           and button._noCooldown ~= true
+           and button._visibilityHidden ~= true
+           and button._desatCooldownActive ~= true then
+            button._readyGlowStartTime = now
+        end
+    end
+end
+
 local tabInfoButtons = CS.tabInfoButtons
 local appearanceTabElements = CS.appearanceTabElements
 local KEYBIND_CUSTOM_LABEL = "Show Keybind/Custom Text"
@@ -568,6 +606,33 @@ local function BuildLayoutTab(container)
             self:SetPoint(p, rel, rp, xOfs, yOfs - 2)
         end
     end)
+
+    local panelAnchorDrop = AceGUI:Create("Dropdown")
+    panelAnchorDrop:SetLabel("Anchor to Panel")
+    CooldownCompanion:PopulatePanelAnchorTargetDropdown(panelAnchorDrop, CS.selectedGroup)
+    panelAnchorDrop:SetFullWidth(true)
+    local currentAnchorGroupId = type(currentAnchor) == "string"
+        and currentAnchor:match("^CooldownCompanionGroup(%d+)$")
+        or nil
+    if currentAnchorGroupId then
+        panelAnchorDrop:SetValue(tostring(currentAnchorGroupId))
+    else
+        panelAnchorDrop:SetValue(nil)
+    end
+    panelAnchorDrop:SetCallback("OnValueChanged", function(widget, event, val)
+        if not val or val == "" then return end
+        local targetGroupId = tonumber(val)
+        if not targetGroupId then return end
+        local targetFrameName = "CooldownCompanionGroup" .. targetGroupId
+        if CooldownCompanion:SetGroupAnchor(CS.selectedGroup, targetFrameName) then
+            currentAnchor = targetFrameName
+            anchorBox:SetText(targetFrameName)
+            CooldownCompanion:RefreshConfigPanel()
+        else
+            widget:SetValue(nil)
+        end
+    end)
+    container:AddChild(panelAnchorDrop)
 
     -- Anchor Point / Relative Point dropdowns
     local function refreshGroupAnchor()
@@ -1245,8 +1310,8 @@ local function BuildEffectsTab(container)
     local readyAdvExpanded, readyAdvBtn = AddAdvancedToggle(readyEnableCb, "readyGlow", tabInfoButtons, style.readyGlowStyle and style.readyGlowStyle ~= "none")
     local readyPromoteBtn = CreateCheckboxPromoteButton(readyEnableCb, readyAdvBtn, "readyGlow", group, style)
     CreateInfoButton(readyEnableCb.frame, readyPromoteBtn, "LEFT", "RIGHT", 4, 0, {
-        L["Ready Glow"],
-        {L["Adds a glow effect around buttons whose spells or items are off cooldown and ready to use."], 1, 1, 1, true},
+        "Ready Glow",
+        {"Adds a glow to spells/items that are not on cooldown.", 1, 1, 1, true},
     }, tabInfoButtons)
 
     if readyAdvExpanded and style.readyGlowStyle and style.readyGlowStyle ~= "none" then
@@ -1261,6 +1326,29 @@ local function BuildEffectsTab(container)
     container:AddChild(readyCombatCb)
     ApplyCheckboxIndent(readyCombatCb, 20)
 
+    local readyChargesCb = AceGUI:Create("CheckBox")
+    readyChargesCb:SetLabel("Glow When Charges Are Capped")
+    readyChargesCb:SetValue(style.readyGlowOnlyAtMaxCharges or false)
+    readyChargesCb:SetFullWidth(true)
+    readyChargesCb:SetCallback("OnValueChanged", function(widget, event, val)
+        style.readyGlowOnlyAtMaxCharges = val == true
+        CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
+        if (style.readyGlowDuration or 0) > 0 then
+            if val then
+                PrimeReadyGlowCappedChargeTransitions(CS.selectedGroup)
+            else
+                PrimeReadyGlowNormalTransitions(CS.selectedGroup)
+            end
+        end
+        CooldownCompanion:UpdateAllCooldowns()
+    end)
+    container:AddChild(readyChargesCb)
+    ApplyCheckboxIndent(readyChargesCb, 20)
+    CreateInfoButton(readyChargesCb.frame, readyChargesCb.checkbg, "LEFT", "RIGHT", readyChargesCb.text:GetStringWidth() + 6, 0, {
+        "Glow When Charges Are Capped",
+        {"When this toggle is enabled, the glow will only appear for charge based spells when at max charges.", 1, 1, 1, true},
+    }, tabInfoButtons)
+
     local readyDurCb = AceGUI:Create("CheckBox")
     readyDurCb:SetLabel(L["Auto-Hide After Duration"])
     readyDurCb:SetValue((style.readyGlowDuration or 0) > 0)
@@ -1268,6 +1356,14 @@ local function BuildEffectsTab(container)
     readyDurCb:SetCallback("OnValueChanged", function(widget, event, val)
         style.readyGlowDuration = val and 3 or 0
         CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
+        if val then
+            if style.readyGlowOnlyAtMaxCharges then
+                PrimeReadyGlowCappedChargeTransitions(CS.selectedGroup)
+            else
+                PrimeReadyGlowNormalTransitions(CS.selectedGroup)
+            end
+        end
+        CooldownCompanion:UpdateAllCooldowns()
         CooldownCompanion:RefreshConfigPanel()
     end)
     container:AddChild(readyDurCb)
@@ -1291,7 +1387,7 @@ local function BuildEffectsTab(container)
     end)
 
     local readyPreviewBtn = AceGUI:Create("Button")
-    readyPreviewBtn:SetText(L["Preview Ready Glow (3s)"])
+    readyPreviewBtn:SetText("Preview Ready Glow Style (3s)")
     readyPreviewBtn:SetFullWidth(true)
     readyPreviewBtn:SetCallback("OnClick", function()
         CooldownCompanion:PlayGroupReadyGlowPreview(CS.selectedGroup, 3)
@@ -2255,131 +2351,39 @@ local function BuildContainerGeneralTab(scroll, containerId)
     end)
 
     if not layoutCollapsed then
+        container.anchor = CooldownCompanion:NormalizeContainerAnchor(container.anchor)
 
-    -- ================================================================
-    -- Anchor to Frame (editbox + pick button row)
-    -- ================================================================
-    local anchorRow = AceGUI:Create("SimpleGroup")
-    anchorRow:SetFullWidth(true)
-    anchorRow:SetLayout("Flow")
-
-    local anchorBox = AceGUI:Create("EditBox")
-    if anchorBox.editbox.Instructions then anchorBox.editbox.Instructions:Hide() end
-    anchorBox:SetLabel(L["Anchor to Frame"])
-    local currentAnchor = container.anchor.relativeTo
-    if currentAnchor == "UIParent" then currentAnchor = "" end
-    anchorBox:SetText(currentAnchor)
-    anchorBox:SetRelativeWidth(0.68)
-    anchorBox:SetCallback("OnEnterPressed", function(widget, event, text)
-        if text == "" then
-            local wasAnchored = container.anchor.relativeTo and container.anchor.relativeTo ~= "UIParent"
-            if wasAnchored then
-                container.anchor = {
-                    point = "CENTER",
-                    relativeTo = "UIParent",
-                    relativePoint = "CENTER",
-                    x = 0,
-                    y = 0,
-                }
-            else
-                container.anchor.relativeTo = "UIParent"
+        -- X Offset
+        local xSlider = AceGUI:Create("Slider")
+        xSlider:SetLabel("X Offset")
+        xSlider:SetSliderValues(-2000, 2000, 0.1)
+        xSlider:SetValue(container.anchor.x or 0)
+        xSlider:SetFullWidth(true)
+        xSlider:SetCallback("OnValueChanged", function(widget, event, val)
+            container.anchor.x = val
+            local containerFrame = CooldownCompanion.containerFrames and CooldownCompanion.containerFrames[containerId]
+            if containerFrame then
+                CooldownCompanion:AnchorContainerFrame(containerFrame, container.anchor)
             end
-        else
-            local targetFrame = _G[text]
-            if not targetFrame then
-                CooldownCompanion:Print("Frame '" .. text .. "' not found.")
-                CooldownCompanion:RefreshConfigPanel()
-                return
-            end
-            container.anchor.relativeTo = text
-        end
-        local containerFrame = CooldownCompanion.containerFrames and CooldownCompanion.containerFrames[containerId]
-        if containerFrame then
-            CooldownCompanion:AnchorContainerFrame(containerFrame, container.anchor)
-        end
-        RefreshPanels()
-        CooldownCompanion:RefreshConfigPanel()
-    end)
-    anchorRow:AddChild(anchorBox)
-
-    local pickBtn = AceGUI:Create("Button")
-    pickBtn:SetText(L["Pick"])
-    pickBtn:SetRelativeWidth(0.24)
-    pickBtn:SetCallback("OnClick", function()
-        CS.StartPickFrame(function(name)
-            if CS.configFrame then
-                CS.configFrame.frame:Show()
-            end
-            if name then
-                container.anchor = {
-                    point = "TOPLEFT",
-                    relativeTo = name,
-                    relativePoint = "BOTTOMLEFT",
-                    x = 0,
-                    y = -5,
-                }
-                local containerFrame = CooldownCompanion.containerFrames and CooldownCompanion.containerFrames[containerId]
-                if containerFrame then
-                    CooldownCompanion:AnchorContainerFrame(containerFrame, container.anchor)
-                end
-                RefreshPanels()
-            end
-            CooldownCompanion:RefreshConfigPanel()
         end)
-    end)
-    anchorRow:AddChild(pickBtn)
+        HookSliderEditBox(xSlider)
+        scroll:AddChild(xSlider)
 
-    scroll:AddChild(anchorRow)
-    pickBtn.frame:SetScript("OnUpdate", function(self)
-        self:SetScript("OnUpdate", nil)
-        local p, rel, rp, xOfs, yOfs = self:GetPoint(1)
-        if yOfs then
-            self:SetPoint(p, rel, rp, xOfs, yOfs - 2)
-        end
-    end)
-
-    -- Anchor Point / Relative Point dropdowns
-    local function refreshContainerAnchor()
-        local containerFrame = CooldownCompanion.containerFrames and CooldownCompanion.containerFrames[containerId]
-        if containerFrame then
-            CooldownCompanion:AnchorContainerFrame(containerFrame, container.anchor)
-        end
-    end
-
-    AddAnchorDropdown(scroll, container.anchor, "point", "CENTER", refreshContainerAnchor, L["Anchor Point"])
-    AddAnchorDropdown(scroll, container.anchor, "relativePoint", "CENTER", refreshContainerAnchor, L["Relative Point"])
-
-    -- X Offset
-    local xSlider = AceGUI:Create("Slider")
-    xSlider:SetLabel(L["X Offset"])
-    xSlider:SetSliderValues(-2000, 2000, 0.1)
-    xSlider:SetValue(container.anchor.x or 0)
-    xSlider:SetFullWidth(true)
-    xSlider:SetCallback("OnValueChanged", function(widget, event, val)
-        container.anchor.x = val
-        local containerFrame = CooldownCompanion.containerFrames and CooldownCompanion.containerFrames[containerId]
-        if containerFrame then
-            CooldownCompanion:AnchorContainerFrame(containerFrame, container.anchor)
-        end
-    end)
-    HookSliderEditBox(xSlider)
-    scroll:AddChild(xSlider)
-
-    -- Y Offset
-    local ySlider = AceGUI:Create("Slider")
-    ySlider:SetLabel(L["Y Offset"])
-    ySlider:SetSliderValues(-2000, 2000, 0.1)
-    ySlider:SetValue(container.anchor.y or 0)
-    ySlider:SetFullWidth(true)
-    ySlider:SetCallback("OnValueChanged", function(widget, event, val)
-        container.anchor.y = val
-        local containerFrame = CooldownCompanion.containerFrames and CooldownCompanion.containerFrames[containerId]
-        if containerFrame then
-            CooldownCompanion:AnchorContainerFrame(containerFrame, container.anchor)
-        end
-    end)
-    HookSliderEditBox(ySlider)
-    scroll:AddChild(ySlider)
+        -- Y Offset
+        local ySlider = AceGUI:Create("Slider")
+        ySlider:SetLabel("Y Offset")
+        ySlider:SetSliderValues(-2000, 2000, 0.1)
+        ySlider:SetValue(container.anchor.y or 0)
+        ySlider:SetFullWidth(true)
+        ySlider:SetCallback("OnValueChanged", function(widget, event, val)
+            container.anchor.y = val
+            local containerFrame = CooldownCompanion.containerFrames and CooldownCompanion.containerFrames[containerId]
+            if containerFrame then
+                CooldownCompanion:AnchorContainerFrame(containerFrame, container.anchor)
+            end
+        end)
+        HookSliderEditBox(ySlider)
+        scroll:AddChild(ySlider)
 
     end -- if not layoutCollapsed
 

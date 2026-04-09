@@ -91,6 +91,84 @@ local function GetCustomAuraBarsColumnTitle()
     return L["Custom Aura Bars: "] .. GetClassColoredText(specName)
 end
 
+local function CountSelections(selectionSet)
+    local count = 0
+    for _ in pairs(selectionSet or {}) do
+        count = count + 1
+    end
+    return count
+end
+
+local function GetConfigSelectionSummary()
+    return {
+        panelMultiCount = CountSelections(CS.selectedPanels),
+        groupMultiCount = CountSelections(CS.selectedGroups),
+        hasSelectedPanel = CS.selectedGroup ~= nil,
+        hasSelectedGroup = CS.selectedContainer ~= nil,
+    }
+end
+
+local function GetColumn3HeaderMode(selection)
+    if CS.resourceBarPanelActive then
+        return "custom_aura"
+    end
+    if selection.panelMultiCount >= 2 then
+        return "panel_actions"
+    end
+    if CS.autoAddFlowActive then
+        return "auto_add"
+    end
+    return "button"
+end
+
+local function GetColumn4HeaderMode(selection)
+    if CS.resourceBarPanelActive then
+        return "layout_order"
+    end
+    if selection.panelMultiCount >= 2 or selection.hasSelectedPanel then
+        return "panel"
+    end
+    return "group"
+end
+
+local function GetColumn3HeaderTitle(selection)
+    local mode = GetColumn3HeaderMode(selection)
+    if mode == "custom_aura" then
+        return GetCustomAuraBarsColumnTitle()
+    elseif mode == "auto_add" then
+        return "Auto Add"
+    elseif mode == "panel_actions" then
+        return "Panel Actions"
+    end
+    return "Button Settings"
+end
+
+local function GetColumn4HeaderTitle(selection)
+    local mode = GetColumn4HeaderMode(selection)
+    if mode == "layout_order" then
+        return GetLayoutOrderColumnTitle()
+    elseif mode == "panel" then
+        return "Panel Settings"
+    end
+    return "Group Settings"
+end
+
+local function ApplyConfigColumnTitles(frame)
+    if CS.resourceBarPanelActive then
+        frame.col1:SetTitle("Bars & Frames")
+    elseif CS.browseMode then
+        frame.col1:SetTitle("Browse Characters")
+        frame.col2:SetTitle("Preview")
+    else
+        frame.col1:SetTitle("Groups")
+        frame.col2:SetTitle("Panels")
+    end
+
+    local selection = GetConfigSelectionSummary()
+    frame.col3:SetTitle(GetColumn3HeaderTitle(selection))
+    frame.col4:SetTitle(GetColumn4HeaderTitle(selection))
+end
+
 -- Shared reset for profile change/copy/reset callbacks
 local function ResetConfigForProfileChange()
     ResetConfigSelection(true)
@@ -1348,9 +1426,10 @@ local function CreateConfigPanel()
         GameTooltip:AddLine("Panels")
         GameTooltip:AddLine("A panel controls dimensions, display mode, and layout for all entries inside it. Every entry needs a panel, even if it's just one.", 1, 1, 1, true)
         GameTooltip:AddLine(" ")
-        GameTooltip:AddLine(L["Left-click to select/deselect."], 1, 1, 1)
-        GameTooltip:AddLine(L["Right-click for options."], 1, 1, 1)
-        GameTooltip:AddLine(L["Hold left-click and drag to reorder."], 1, 1, 1)
+        GameTooltip:AddLine("Left-click to select/deselect.", 1, 1, 1)
+        GameTooltip:AddLine("Right-click for options.", 1, 1, 1)
+        GameTooltip:AddLine("Hold left-click and drag to reorder.", 1, 1, 1)
+        GameTooltip:AddLine("Hold Shift while hovering over an entry to see its tooltip.", 1, 1, 1, true)
         GameTooltip:AddLine(" ")
         GameTooltip:AddLine(L["Panel Headers"], 1, 0.82, 0)
         GameTooltip:AddLine(L["Double-click to collapse/expand."], 1, 1, 1, true)
@@ -1377,7 +1456,7 @@ local function CreateConfigPanel()
     col3.frame:SetParent(colParent)
     col3.frame:Show()
 
-    -- Info button next to Button/Panel Settings title
+    -- Info button next to Column 3 title
     local bsInfoBtn = CreateFrame("Button", nil, col3.frame)
     bsInfoBtn:SetSize(16, 16)
     bsInfoBtn:SetPoint("LEFT", col3.titletext, "RIGHT", -2, 0)
@@ -1402,11 +1481,19 @@ local function CreateConfigPanel()
             GameTooltip:AddLine(L["Auto Add"])
             GameTooltip:AddLine(L["Guided import flow for Action Bars, Spellbook, and CDM Auras."], 1, 1, 1, true)
         else
-            GameTooltip:AddLine(L["Button / Panel Settings"])
-            GameTooltip:AddLine(L["Select a button to configure that button."], 1, 1, 1)
-            GameTooltip:AddLine(L["Select a panel header to configure that panel."], 1, 1, 1)
-            GameTooltip:AddLine(" ")
-            GameTooltip:AddLine(L["Panel settings apply to all buttons in that panel."], 1, 1, 1)
+            local selection = GetConfigSelectionSummary()
+            local mode = GetColumn3HeaderMode(selection)
+            if mode == "panel_actions" then
+                GameTooltip:AddLine("Panel Actions")
+                GameTooltip:AddLine("Select multiple panels to batch-manage them here.", 1, 1, 1, true)
+                GameTooltip:AddLine(" ")
+                GameTooltip:AddLine("Single-panel settings stay in column 4.", 1, 1, 1, true)
+            else
+                GameTooltip:AddLine("Button Settings")
+                GameTooltip:AddLine("Select a button to configure that entry here.", 1, 1, 1)
+                GameTooltip:AddLine(" ")
+                GameTooltip:AddLine("These settings only apply to the selected entry.", 1, 1, 1, true)
+            end
         end
         GameTooltip:Show()
     end)
@@ -1422,7 +1509,7 @@ local function CreateConfigPanel()
     col4.frame:SetParent(colParent)
     col4.frame:Show()
 
-    -- Info button next to Panel/Group Settings title
+    -- Info button next to Column 4 title
     local settingsInfoBtn = CreateFrame("Button", nil, col4.frame)
     settingsInfoBtn:SetSize(16, 16)
     settingsInfoBtn:SetPoint("LEFT", col4.titletext, "RIGHT", -2, 0)
@@ -1442,12 +1529,31 @@ local function CreateConfigPanel()
                 GameTooltip:AddLine(" ")
                 GameTooltip:AddLine("Layout is saved per specialization and swaps automatically.", 1, 1, 1)
         else
-            GameTooltip:AddLine(L["Panel / Group Settings"])
-            GameTooltip:AddLine(L["Select a button to configure its panel."], 1, 1, 1)
-            GameTooltip:AddLine(L["Select a group or panel header to configure the group."], 1, 1, 1)
-            GameTooltip:AddLine(" ")
-            GameTooltip:AddLine(L["Panel settings apply to all buttons in that panel."], 1, 1, 1)
-            GameTooltip:AddLine(L["Group settings apply to all panels in the group."], 1, 1, 1)
+            local selection = GetConfigSelectionSummary()
+            local mode = GetColumn4HeaderMode(selection)
+            if mode == "panel" then
+                GameTooltip:AddLine("Panel Settings")
+                if selection.panelMultiCount >= 2 then
+                    GameTooltip:AddLine("Select a single panel to configure it here.", 1, 1, 1, true)
+                else
+                    GameTooltip:AddLine("Select a panel header or any button inside it to configure that panel here.", 1, 1, 1, true)
+                end
+                GameTooltip:AddLine(" ")
+                GameTooltip:AddLine("Panel settings apply to all buttons in that panel.", 1, 1, 1, true)
+                GameTooltip:AddLine(" ")
+                GameTooltip:AddLine("If you want to override a setting for this specific button, click the |A:Crosshair_VehichleCursor_32:14:14|a badge next to the associated panel level setting while this button is selected.", 1, 1, 1, true)
+            else
+                GameTooltip:AddLine("Group Settings")
+                if selection.groupMultiCount >= 2 then
+                    GameTooltip:AddLine("Select a single group to configure it here.", 1, 1, 1, true)
+                elseif selection.hasSelectedGroup then
+                    GameTooltip:AddLine("The selected group is configured here.", 1, 1, 1, true)
+                else
+                    GameTooltip:AddLine("Select a group to configure it here.", 1, 1, 1, true)
+                end
+                GameTooltip:AddLine(" ")
+                GameTooltip:AddLine("Group settings apply to all panels in the group.", 1, 1, 1, true)
+            end
         end
         GameTooltip:Show()
     end)
@@ -1899,77 +2005,11 @@ function CooldownCompanion:RefreshConfigPanel()
     if CS.configFrame.UpdateBrowseButtonState then
         CS.configFrame.UpdateBrowseButtonState()
     end
-    -- Compute anyButtonSelected for title logic (used across both branches)
-    local anyButtonSelected = CS.selectedButton ~= nil
-    if not anyButtonSelected then
-        for _ in pairs(CS.selectedButtons) do anyButtonSelected = true; break end
-    end
-
-    if CS.resourceBarPanelActive then
-        CS.configFrame.col1:SetTitle(L["Bars & Frames"])
-        CS.configFrame.col3:SetTitle(GetCustomAuraBarsColumnTitle())
-        CS.configFrame.col4:SetTitle(GetLayoutOrderColumnTitle())
-    elseif CS.browseMode then
-        CS.configFrame.col1:SetTitle(L["Browse Characters"])
-        CS.configFrame.col2:SetTitle(L["Preview"])
-        if CS.selectedContainer and CS.selectedGroup and not anyButtonSelected then
-            CS.configFrame.col3:SetTitle(L["Panel Settings"])
-        else
-            CS.configFrame.col3:SetTitle(L["Button Settings"])
-        end
-        if CS.selectedContainer and CS.selectedGroup and anyButtonSelected then
-            CS.configFrame.col4:SetTitle(L["Panel Settings"])
-        else
-            CS.configFrame.col4:SetTitle(L["Group Settings"])
-        end
-    else
-        CS.configFrame.col1:SetTitle(L["Groups"])
-        CS.configFrame.col2:SetTitle(L["Panels"])
-        local panelMultiCount = 0
-        for _ in pairs(CS.selectedPanels) do panelMultiCount = panelMultiCount + 1 end
-        if panelMultiCount >= 2 then
-            CS.configFrame.col3:SetTitle(L["Panel Settings"])
-        elseif CS.autoAddFlowActive then
-            CS.configFrame.col3:SetTitle(L["Auto Add"])
-        elseif CS.selectedContainer and CS.selectedGroup and not anyButtonSelected then
-            CS.configFrame.col3:SetTitle(L["Panel Settings"])
-        else
-            CS.configFrame.col3:SetTitle(L["Button Settings"])
-        end
-        -- Col 4: "Panel Settings" when panel + button selected in container, "Group Settings" otherwise
-        if CS.selectedContainer and CS.selectedGroup and anyButtonSelected then
-            CS.configFrame.col4:SetTitle(L["Panel Settings"])
-        else
-            CS.configFrame.col4:SetTitle(L["Group Settings"])
-        end
-    end
     RefreshColumn1()
     RefreshColumn2()
     RefreshColumn3()
     RefreshColumn4(CS.col4Container)
-
-    -- Recompute Column 3 title after RefreshColumn3(), since it may cancel Auto Add.
-    do
-        local pmcPost = 0
-        for _ in pairs(CS.selectedPanels) do pmcPost = pmcPost + 1 end
-        if CS.resourceBarPanelActive then
-            CS.configFrame.col3:SetTitle(GetCustomAuraBarsColumnTitle())
-        elseif CS.browseMode then
-            if CS.selectedContainer and CS.selectedGroup and not anyButtonSelected then
-                CS.configFrame.col3:SetTitle(L["Panel Settings"])
-            else
-                CS.configFrame.col3:SetTitle(L["Button Settings"])
-            end
-        elseif pmcPost >= 2 then
-            CS.configFrame.col3:SetTitle(L["Panel Settings"])
-        elseif CS.autoAddFlowActive then
-            CS.configFrame.col3:SetTitle(L["Auto Add"])
-        elseif CS.selectedContainer and CS.selectedGroup and not anyButtonSelected then
-            CS.configFrame.col3:SetTitle(L["Panel Settings"])
-        else
-            CS.configFrame.col3:SetTitle(L["Button Settings"])
-        end
-    end
+    ApplyConfigColumnTitles(CS.configFrame)
 
     -- Restore AceGUI scroll state.
     restoreScroll(CS.col1Scroll, saved1)
