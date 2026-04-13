@@ -11,7 +11,8 @@ local LibDeflate = LibStub("LibDeflate")
 
 local COMPRESSION_CONFIG = { level = 9 }
 local COMPACT_FORMAT_KEY = "_cdcExportFormat"
-local CURRENT_COMPACT_FORMAT_VALUE = "compact2"
+local CURRENT_COMPACT_FORMAT_VALUE = "compact3"
+local PREVIOUS_COMPACT_FORMAT_VALUE = "compact2"
 local LEGACY_COMPACT_FORMAT_VALUE = "compact1"
 
 local LOAD_CONDITIONS_DEFAULTS = {
@@ -33,6 +34,7 @@ local PANEL_DEFAULTS = {
     maxVisibleButtons = 0,
     compactGrowthDirection = "center",
     baselineAlpha = 1,
+    forceAlphaTargetEnemyOnly = false,
     fadeDelay = 1,
     fadeInDuration = 0.2,
     fadeOutDuration = 0.2,
@@ -120,7 +122,7 @@ local COMPACT_PROFILE_DEFAULTS = {
             bars = {},
         },
         auraTextureLibrary = {
-            recentProcOverlays = {},
+            textureFavorites = {},
         },
         globalStyle = {
             buttonSize = 36,
@@ -365,6 +367,7 @@ local COMPACT_PROFILE_DEFAULTS = {
             forceAlphaRegularMounted = false,
             forceAlphaDragonriding = false,
             forceAlphaTargetExists = false,
+            forceAlphaTargetEnemyOnly = false,
             forceAlphaMouseover = false,
             forceHideInCombat = false,
             forceHideOutOfCombat = false,
@@ -464,6 +467,7 @@ local COMPACT_ENTITY_DEFAULTS = {
             maxVisibleButtons = 0,
             compactGrowthDirection = "center",
             baselineAlpha = 1,
+            forceAlphaTargetEnemyOnly = false,
             fadeDelay = 1,
             fadeInDuration = 0.2,
             fadeOutDuration = 0.2,
@@ -497,11 +501,15 @@ local COMPACT_ENTITY_DEFAULTS = {
     },
 }
 
+COMPACT_PROFILE_DEFAULTS[PREVIOUS_COMPACT_FORMAT_VALUE] = CopyTable(COMPACT_PROFILE_DEFAULTS[CURRENT_COMPACT_FORMAT_VALUE])
+COMPACT_PROFILE_DEFAULTS[PREVIOUS_COMPACT_FORMAT_VALUE].auraTextureLibrary.recentProcOverlays = {}
+COMPACT_ENTITY_DEFAULTS[PREVIOUS_COMPACT_FORMAT_VALUE] = CopyTable(COMPACT_ENTITY_DEFAULTS[CURRENT_COMPACT_FORMAT_VALUE])
+
 -- compact1 shipped before defaults were version-pinned. Freeze it against the
 -- original baseline so older compact strings do not drift as live defaults
 -- evolve in later releases.
-COMPACT_PROFILE_DEFAULTS[LEGACY_COMPACT_FORMAT_VALUE] = CopyTable(COMPACT_PROFILE_DEFAULTS[CURRENT_COMPACT_FORMAT_VALUE])
-COMPACT_ENTITY_DEFAULTS[LEGACY_COMPACT_FORMAT_VALUE] = CopyTable(COMPACT_ENTITY_DEFAULTS[CURRENT_COMPACT_FORMAT_VALUE])
+COMPACT_PROFILE_DEFAULTS[LEGACY_COMPACT_FORMAT_VALUE] = CopyTable(COMPACT_PROFILE_DEFAULTS[PREVIOUS_COMPACT_FORMAT_VALUE])
+COMPACT_ENTITY_DEFAULTS[LEGACY_COMPACT_FORMAT_VALUE] = CopyTable(COMPACT_ENTITY_DEFAULTS[PREVIOUS_COMPACT_FORMAT_VALUE])
 
 local function CopyValue(value)
     if type(value) == "table" then
@@ -878,11 +886,88 @@ local function RehydrateScopedStore(store, defaultKey, formatVersion)
     return store
 end
 
+local function NormalizeTextureLibraryStore(store)
+    if type(store) ~= "table" then
+        return store
+    end
+
+    if type(CooldownCompanion.NormalizeAuraTextureLibraryStore) == "function" then
+        return CooldownCompanion:NormalizeAuraTextureLibraryStore(store)
+    end
+
+    if type(store.customTextures) ~= "table" then
+        store.customTextures = {}
+    end
+    if type(store.textureFavorites) ~= "table" then
+        store.textureFavorites = {}
+    end
+
+    local legacyFavorites = store.sharedMediaFavorites
+    if type(legacyFavorites) == "table" then
+        for storedKey, storedValue in pairs(legacyFavorites) do
+            if type(storedValue) == "string" then
+                store.textureFavorites[storedValue] = store.textureFavorites[storedValue] or storedValue
+            elseif type(storedValue) == "table" then
+                local favoriteKey = storedValue.favoriteKey
+                if type(favoriteKey) == "string" then
+                    store.textureFavorites[favoriteKey] = store.textureFavorites[favoriteKey] or CopyTable(storedValue)
+                end
+            end
+            legacyFavorites[storedKey] = nil
+        end
+    end
+
+    if type(store.textureFavorites) == "table" then
+        for favoriteKey, favoriteValue in pairs(store.textureFavorites) do
+            local storedFavoriteKey = type(favoriteValue) == "table" and favoriteValue.favoriteKey or nil
+            if (type(favoriteKey) == "string" and string.find(favoriteKey, "^favorite:legacy%-proc:"))
+                or (type(storedFavoriteKey) == "string" and string.find(storedFavoriteKey, "^favorite:legacy%-proc:")) then
+                store.textureFavorites[favoriteKey] = nil
+            end
+        end
+    end
+
+    store.sharedMediaFavorites = nil
+    store.recentProcOverlays = nil
+    return store
+end
+
+local function NormalizeTextureLibraryProfile(profile)
+    if type(profile) ~= "table" then
+        return profile
+    end
+
+    if type(profile.auraTextureLibrary) ~= "table" then
+        return profile
+    end
+
+    profile.auraTextureLibrary = NormalizeTextureLibraryStore(profile.auraTextureLibrary)
+    return profile
+end
+
+local function NormalizeTextureLibraryPayload(data)
+    if type(data) ~= "table" then
+        return data
+    end
+
+    if type(data.profile) == "table" then
+        data.profile = NormalizeTextureLibraryProfile(data.profile)
+        return data
+    end
+
+    if data.type then
+        return data
+    end
+
+    return NormalizeTextureLibraryProfile(data)
+end
+
 local function CompactProfile(profile, formatVersion)
     if type(profile) ~= "table" then
         return profile
     end
 
+    profile = NormalizeTextureLibraryProfile(CopyTable(profile))
     local profileDefaults = GetDefaultsProfile(formatVersion)
     local globalStyleDefaults = profile.globalStyle or profileDefaults.globalStyle or {}
     local compact = {}
@@ -956,6 +1041,13 @@ local function RehydrateProfile(profile, formatVersion)
         end
     end
 
+    if type(profile.groupContainers) ~= "table" then
+        profile.groupContainers = {}
+    end
+    if type(profile.folders) ~= "table" then
+        profile.folders = {}
+    end
+
     local globalStyleDefaults = profile.globalStyle or profileDefaults.globalStyle or {}
 
     if type(profile.groups) == "table" then
@@ -987,7 +1079,7 @@ local function RehydrateProfile(profile, formatVersion)
         end
     end
 
-    return profile
+    return NormalizeTextureLibraryProfile(profile)
 end
 
 local function CompactEntityPayload(payload, formatVersion)
@@ -1137,14 +1229,14 @@ local function RehydrateCompactPayload(data, formatVersion)
 
     if data.profile and type(data.profile) == "table" then
         data.profile = RehydrateProfile(data.profile, formatVersion)
-        return data
+        return NormalizeTextureLibraryPayload(data)
     end
 
     if data.type then
         return RehydrateEntityPayload(data, formatVersion)
     end
 
-    return RehydrateProfile(data, formatVersion)
+    return NormalizeTextureLibraryProfile(RehydrateProfile(data, formatVersion))
 end
 
 local function EncodeSharedPayload(payload, exportKind)
@@ -1173,7 +1265,7 @@ local function DecodeSharedPayload(text)
     end
 
     if isLegacy then
-        return AceSerializer:Deserialize(trimmed)
+        return false, nil
     end
 
     local decoded = LibDeflate:DecodeForPrint(normalized)
@@ -1192,9 +1284,13 @@ local function DecodeSharedPayload(text)
     end
 
     local formatVersion = data[COMPACT_FORMAT_KEY]
-    if formatVersion == LEGACY_COMPACT_FORMAT_VALUE or formatVersion == CURRENT_COMPACT_FORMAT_VALUE then
+    if formatVersion == LEGACY_COMPACT_FORMAT_VALUE
+        or formatVersion == PREVIOUS_COMPACT_FORMAT_VALUE
+        or formatVersion == CURRENT_COMPACT_FORMAT_VALUE then
         data[COMPACT_FORMAT_KEY] = nil
-        RehydrateCompactPayload(data, formatVersion)
+        data = RehydrateCompactPayload(data, formatVersion)
+    else
+        data = NormalizeTextureLibraryPayload(data)
     end
 
     return true, data

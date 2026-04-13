@@ -9,6 +9,7 @@ local CooldownCompanion = ST.Addon
 -- Localize frequently-used globals for faster access
 local GetTime = GetTime
 local InCombatLockdown = InCombatLockdown
+local pairs = pairs
 local wipe = wipe
 local ipairs = ipairs
 local select = select
@@ -71,17 +72,42 @@ function CooldownCompanion:OnInitialize()
 
     -- Re-apply fonts/textures when shared media used elsewhere in the addon updates.
     LSM.RegisterCallback(self, "LibSharedMedia_Registered", function(event, mediatype, key)
-        if mediatype == "font" or mediatype == "statusbar" then
-            if mediatype == "font" and ST._InvalidateFontCache then
+        if mediatype == "font" then
+            if ST._InvalidateFontCache then
                 ST._InvalidateFontCache()
             end
             self:RefreshAllMedia()
+        elseif mediatype == "statusbar" or mediatype == "background" or mediatype == "border" then
+            self:RefreshAllMedia()
+            self:RefreshConfigPanel()
+            if ST._configState and ST._configState.RefreshAuraTexturePicker then
+                ST._configState.RefreshAuraTexturePicker()
+            end
         elseif mediatype == "sound" then
             self:RefreshConfigPanel()
         end
     end)
 
     self:Print("Cooldown Companion loaded. Use /cdc to open settings. Use /cdc help for commands.")
+end
+
+function CooldownCompanion:EnsureRuntimeInitialized()
+    self.alphaState = self.alphaState or {}
+
+    if not self.updateTicker then
+        self.updateTicker = C_Timer.NewTicker(0.1, function()
+            -- Read assisted combat recommended spell (plain table field, no API call)
+            if AssistedCombatManager then
+                self.assistedSpellID = AssistedCombatManager.lastNextCastSpellID
+            end
+
+            self:UpdateAllCooldowns()
+            self:UpdateAllGroupLayouts()
+            self._cooldownsDirty = false
+        end)
+    end
+
+    self:InitAlphaUpdateFrame()
 end
 
 function CooldownCompanion:OnEnable()
@@ -113,7 +139,6 @@ function CooldownCompanion:OnEnable()
     -- Spell activation overlay (proc glow) events
     -- Track state via events instead of polling IsSpellOverlayed
     -- (that API is AllowedWhenUntainted — calling from addon code causes taint)
-    self:RegisterEvent("SPELL_ACTIVATION_OVERLAY_SHOW", "OnProcOverlayShow")
     self:RegisterEvent("SPELL_ACTIVATION_OVERLAY_GLOW_SHOW", "OnProcGlowShow")
     self:RegisterEvent("SPELL_ACTIVATION_OVERLAY_GLOW_HIDE", "OnProcGlowHide")
 
@@ -167,7 +192,10 @@ function CooldownCompanion:OnEnable()
     -- data; catches pet/focus target changes that don't fire PLAYER_TARGET_CHANGED.
     if not self._unitTargetFrame then
         self._unitTargetFrame = CreateFrame("Frame")
-        self._unitTargetFrame:SetScript("OnEvent", function()
+        self._unitTargetFrame:SetScript("OnEvent", function(_, event, unitToken)
+            if ST._QueueInheritedUnitFrameAlphaResync then
+                ST._QueueInheritedUnitFrameAlphaResync()
+            end
             self._cooldownsDirty = true
             self:UpdateAllCooldowns()
         end)
@@ -242,32 +270,20 @@ function CooldownCompanion:OnEnable()
     -- Cache current spec before creating frames (visibility depends on it)
     self:CacheCurrentSpec()
 
-    -- Run all data migrations (ownership, alpha, display mode, style, etc.)
-    self:RunAllMigrations()
+    -- Keep runtime scaffolding alive even if the active profile is unsupported.
+    -- That lets the user switch to a supported profile in the same session
+    -- without requiring /reload to recreate the ticker and alpha systems.
+    self:EnsureRuntimeInitialized()
 
-    -- Initialize alpha fade state (runtime only, not saved)
-    self.alphaState = {}
+    -- Run all data migrations (ownership, alpha, display mode, style, etc.)
+    if not self:RunAllMigrations() then
+        return
+    end
 
     -- Create all container frames, then group (panel) frames
     self:CreateAllContainerFrames()
     self:CreateAllGroupFrames()
     self:FinalizeContainerAnchorsToScreenOffsets()
-
-    -- Start a ticker to update cooldowns periodically
-    -- This ensures cooldowns update even if events don't fire
-    self.updateTicker = C_Timer.NewTicker(0.1, function()
-        -- Read assisted combat recommended spell (plain table field, no API call)
-        if AssistedCombatManager then
-            self.assistedSpellID = AssistedCombatManager.lastNextCastSpellID
-        end
-
-        self:UpdateAllCooldowns()
-        self:UpdateAllGroupLayouts()
-        self._cooldownsDirty = false
-    end)
-
-    -- Start the alpha fade OnUpdate frame (~30Hz for smooth fading)
-    self:InitAlphaUpdateFrame()
 end
 
 function CooldownCompanion:MarkCooldownsDirty()
@@ -322,6 +338,26 @@ function CooldownCompanion:OnDisable()
 end
 
 function CooldownCompanion:OnChargesChanged(event, spellID, baseSpellID)
+    if event == "SPELL_UPDATE_USES" and spellID then
+        local matchesConditionalCastCountEvent = CooldownCompanion.MatchesConditionalCastCountEvent
+        local matchedCastCountButton = false
+        for _, group in pairs(self.db.profile.groups) do
+            for _, bd in ipairs(group.buttons) do
+                if bd.type == "spell"
+                        and not bd.hasCharges
+                        and matchesConditionalCastCountEvent
+                        and matchesConditionalCastCountEvent(bd, spellID, baseSpellID) then
+                    bd._castCountCandidate = true
+                    bd._castCountEventSpellID = spellID
+                    bd._castCountSelf = (bd.id == spellID) or nil
+                    matchedCastCountButton = true
+                end
+            end
+        end
+        if matchedCastCountButton then
+            self._hasDisplayCountCandidates = true
+        end
+    end
     if self._hasDisplayCountCandidates then
         self:RefreshChargeFlags("spell")
     end
@@ -331,10 +367,6 @@ end
 function CooldownCompanion:OnProcGlowShow(event, spellID)
     self.procOverlaySpells[spellID] = true
     self:UpdateAllCooldowns()
-end
-
-function CooldownCompanion:OnProcOverlayShow(event, spellID, overlayFileDataID, locationType, scale, r, g, b)
-    self:RecordRecentAuraTextureOverlay(spellID, overlayFileDataID, locationType, scale, r, g, b)
 end
 
 function CooldownCompanion:OnProcGlowHide(event, spellID)
@@ -396,6 +428,12 @@ end
 function CooldownCompanion:OnCombatEnd()
     self:UpdateAllCooldowns()
     self:ApplyCdmAlpha()
+    if self._pendingUnsupportedLegacyHide or self._unsupportedLegacyProfile then
+        self._pendingUnsupportedLegacyHide = nil
+        self._pendingFullRefresh = nil
+        self._pendingVisibilityRefresh = nil
+        self:ClearUnsupportedProfileRuntime()
+    end
     -- Full refresh supersedes visibility-only refresh
     if self._pendingFullRefresh then
         self._pendingFullRefresh = nil

@@ -7,6 +7,9 @@ local ADDON_NAME, ST = ...
 
 ST._changelogData = {
     order = {
+        "1.12.3",
+        "1.12.2",
+        "1.12.1",
         "1.12",
         "1.11",
         "1.10.28",
@@ -15,6 +18,58 @@ ST._changelogData = {
         "1.10.25",
     },
     entries = {
+        ["1.12.3"] = {
+            markdown = [[
+## Polish | QoL
+
+- **Aura unit specification for Custom Aura Bars:** You now choose whether a custom aura bar watches your own aura or your target's aura, making buffs, procs, and debuffs easier to set up correctly and protecting them from potentially displaying incorrect durations.
+- **Enemy-only target alpha toggle:** Target-based alpha rules can now be limited to enemy targets only, so friendly targets no longer force those elements fully visible when you do not want that.
+- **Cleaner move menus:** Moving entries between panels is now grouped by folder and group, which makes large setups much easier to navigate.
+- **Clearer config headers:** Selected groups and entries now show cleaner, more consistent names at the top of columns by changing their names dynamically based on what is selected in the config.
+
+## Bug Fixes
+
+- **Shapeshift freeze with config open:** Shapeshifting while the config is open should no longer cause the multi-second freeze that could happen in larger setups.
+
+## Other
+
+- ! **Import strings from before 1.10 are now deprecated:** Profiles and imports from before version 1.10 (when the panel system was implemented) now fail on import and show a rejection message. This change was made in order to reduce maintenance overhead and simplify ongoing development.
+]],
+        },
+        ["1.12.2"] = {
+            markdown = [[
+## Polish | QoL
+- **Texture Panels**:
+  - **SharedMedia:** The texture picker now lets you save SharedMedia textures. The custom import system has been replaced by this. If wanting to add custom textures, sync them via `SharedMedia_MyMedia` in your AddOns folder.
+  - **Favorites**: Favorite any texture in the browser by clicking the + sign in the top right of the texture preview. This adds the texture to the new favorites category, making it much easier to reuse the textures you like most.
+  - **Clearer texture browser controls:** Texture panel labels, browser messages, and favorite actions are now easier to understand at a glance.
+  - **More blend-ready texture options:** More default texture panels and saved favorites now keep their intended blend look automatically.
+
+## Bug Fixes
+
+- **Charge/use text:** Cleaned up some more issues with this text element.
+]],
+        },
+        ["1.12.1"] = {
+            markdown = [[
+## New Features
+
+- **Ready glow for full charges:** Charge-based spells and items can now trigger Ready Glow when they are fully recharged, with new panel controls for tuning that behavior.
+
+## Polish | QoL
+
+- **Sound previews in dropdowns:** Sound alert dropdowns now include inline preview buttons so you can hear a sound before picking it.
+- **Easier panel anchoring:** Panel anchor targets are now grouped in a cleaner dropdown, making it faster to pick the panel you want to anchor to.
+
+## Bug Fixes
+
+- **Standalone aura entries:** Fixed several issues that could cause standalone aura tracking to show the wrong ready state, charge state, or status text, especially on older migrated setups.
+
+## Performance
+
+- **Hidden custom aura bars:** Custom aura bars now avoid unnecessary update work while hidden, reducing CPU usage when they are not visible.
+]],
+        },
         ["1.12"] = {
             markdown = [[
 ## New Features

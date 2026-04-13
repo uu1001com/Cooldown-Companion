@@ -109,13 +109,13 @@ local BuildBarEffectsTab = ST._BuildBarEffectsTab
 local BuildTextAppearanceTab = ST._BuildTextAppearanceTab
 
 local TEXTURE_BLEND_OPTIONS = {
-    ADD = "Add",
-    BLEND = "Blend",
+    BLEND = "Normal / Original",
+    ADD = "Soft / Transparent",
 }
 
 local TEXTURE_BLEND_ORDER = {
-    "ADD",
     "BLEND",
+    "ADD",
 }
 
 local TEXTURE_PREVIEW_WIDTH = 240
@@ -214,7 +214,8 @@ local function ApplyTexturePreviewSource(texture, settings)
 
     local resolvedSourceType, resolvedSourceValue = CooldownCompanion:ResolveAuraTextureAsset(
         settings.sourceType,
-        settings.sourceValue
+        settings.sourceValue,
+        settings.mediaType
     )
 
     if resolvedSourceType == "atlas" then
@@ -240,7 +241,7 @@ local function ApplyTexturePreviewVisual(texture, settings, alpha, flipH, flipV,
 
     local color = settings.color or { 1, 1, 1, 1 }
     texture:SetVertexColor(color[1] or 1, color[2] or 1, color[3] or 1, alpha or 1)
-    texture:SetBlendMode(settings.blendMode or "ADD")
+    texture:SetBlendMode(settings.blendMode or "BLEND")
 
     local left = flipH and 1 or 0
     local right = flipH and 0 or 1
@@ -1793,12 +1794,12 @@ local function BuildAppearanceTab(container)
         end
 
         local blendDrop = AceGUI:Create("Dropdown")
-        blendDrop:SetLabel("Blend Mode")
+        blendDrop:SetLabel("Texture Look")
         blendDrop:SetList(TEXTURE_BLEND_OPTIONS, TEXTURE_BLEND_ORDER)
-        blendDrop:SetValue(settings.blendMode or "ADD")
+        blendDrop:SetValue(settings.blendMode or "BLEND")
         blendDrop:SetFullWidth(true)
         blendDrop:SetCallback("OnValueChanged", function(_, _, value)
-            settings.blendMode = value or "ADD"
+            settings.blendMode = value or "BLEND"
             RefreshTextureVisual()
         end)
         container:AddChild(blendDrop)

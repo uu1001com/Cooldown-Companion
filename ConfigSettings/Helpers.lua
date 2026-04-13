@@ -4,6 +4,7 @@ local L = LibStub("AceLocale-3.0"):GetLocale("CooldownCompanion", true) or {}
 local AceGUI = LibStub("AceGUI-3.0")
 local CS = ST._configState
 local ShowPopupAboveConfig = CS.ShowPopupAboveConfig
+local ApplyCheckboxIndent = ST._ApplyCheckboxIndent
 
 -- Helper: tint AceGUI Heading labels with player class color
 local function ColorHeading(heading)
@@ -908,7 +909,7 @@ local function HookSliderEditBox(sliderWidget)
 end
 ST._HookSliderEditBox = HookSliderEditBox
 
--- Shared alpha UI builder for groups, resource bars, and cast bar.
+-- Shared alpha UI builder for groups, resource bars, and other shared alpha consumers.
 -- container: AceGUI parent widget
 -- config: table with alpha fields (baselineAlpha, forceAlpha*, forceHide*, fade*, etc.)
 -- refreshFn: function called after value changes (typically RefreshConfigPanel)
@@ -1013,6 +1014,20 @@ local function BuildAlphaControls(container, config, refreshFn, collapseKey, opt
             refreshFn()
         end)
         container:AddChild(targetCb)
+
+        if targetVal then
+            local enemyOnlyVal = config.forceAlphaTargetEnemyOnly or false
+            local enemyOnlyCb = AceGUI:Create("CheckBox")
+            enemyOnlyCb:SetLabel("Enemy Only")
+            enemyOnlyCb:SetValue(enemyOnlyVal)
+            enemyOnlyCb:SetFullWidth(true)
+            enemyOnlyCb:SetCallback("OnValueChanged", function(widget, event, val)
+                config.forceAlphaTargetEnemyOnly = val
+                refreshFn()
+            end)
+            container:AddChild(enemyOnlyCb)
+            ApplyCheckboxIndent(enemyOnlyCb, 20)
+        end
 
         local mouseoverVal = config.forceAlphaMouseover or false
         local mouseoverCb = AceGUI:Create("CheckBox")

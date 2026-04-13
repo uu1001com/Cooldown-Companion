@@ -12,6 +12,7 @@ local AceGUI = LibStub("AceGUI-3.0")
 -- Imports from earlier Config/ files
 local CleanRecycledEntry = ST._CleanRecycledEntry
 local GetButtonIcon = ST._GetButtonIcon
+local GetConfigEntryDisplayName = ST._GetConfigEntryDisplayName
 local GenerateFolderName = ST._GenerateFolderName
 local ShowPopupAboveConfig = ST._ShowPopupAboveConfig
 local CompactUntitledInlineGroupConfig = ST._CompactUntitledInlineGroupConfig
@@ -189,6 +190,179 @@ local function MoveEntryBetweenGroups(db, sourceGroupId, sourceIndex, targetGrou
     wipe(CS.selectedButtons)
     CooldownCompanion:RefreshConfigPanel()
     return true
+end
+
+local function BuildEntryMoveDestinationSections(db, sourceGroupId)
+    local containers = db and db.groupContainers or {}
+    local groupedByFolder = {}
+    local looseGroups = {}
+
+    for groupId, group in pairs(db.groups or {}) do
+        if groupId ~= sourceGroupId
+            and CooldownCompanion:IsGroupVisibleToCurrentChar(groupId)
+            and CanTexturePanelAcceptEntry(group)
+        then
+            local containerId = group.parentContainerId
+            local container = containerId and containers[containerId]
+            if container then
+                local folderId = container.folderId
+                local bucket
+                if folderId and db.folders and db.folders[folderId] then
+                    groupedByFolder[folderId] = groupedByFolder[folderId] or {}
+                    bucket = groupedByFolder[folderId]
+                else
+                    bucket = looseGroups
+                end
+
+                local entry = bucket[containerId]
+                if not entry then
+                    entry = {
+                        containerId = containerId,
+                        containerName = container.name or ("Group " .. containerId),
+                        containerOrder = CooldownCompanion:GetOrderForSpec(
+                            container,
+                            CooldownCompanion._currentSpecId,
+                            containerId
+                        ),
+                        panels = {},
+                    }
+                    bucket[containerId] = entry
+                end
+
+                entry.panels[#entry.panels + 1] = {
+                    groupId = groupId,
+                    name = group.name or ("Panel " .. groupId),
+                    order = group.order or groupId,
+                }
+            end
+        end
+    end
+
+    local function BuildSectionEntries(containerMap)
+        local entries = {}
+        for _, containerEntry in pairs(containerMap or {}) do
+            table.sort(containerEntry.panels, function(a, b)
+                if a.order ~= b.order then
+                    return a.order < b.order
+                end
+                return a.groupId < b.groupId
+            end)
+            entries[#entries + 1] = containerEntry
+        end
+
+        table.sort(entries, function(a, b)
+            if a.containerOrder ~= b.containerOrder then
+                return a.containerOrder < b.containerOrder
+            end
+            return a.containerId < b.containerId
+        end)
+
+        return entries
+    end
+
+    local sections = {}
+    local sortedFolders = {}
+    for folderId, _ in pairs(groupedByFolder) do
+        local folder = db.folders and db.folders[folderId]
+        if folder then
+            sortedFolders[#sortedFolders + 1] = {
+                id = folderId,
+                name = folder.name or ("Folder " .. folderId),
+                order = CooldownCompanion:GetOrderForSpec(folder, CooldownCompanion._currentSpecId, folderId),
+            }
+        end
+    end
+
+    table.sort(sortedFolders, function(a, b)
+        if a.order ~= b.order then
+            return a.order < b.order
+        end
+        return a.id < b.id
+    end)
+
+    for _, folder in ipairs(sortedFolders) do
+        sections[#sections + 1] = {
+            title = folder.name,
+            entries = BuildSectionEntries(groupedByFolder[folder.id]),
+        }
+    end
+
+    local looseEntries = BuildSectionEntries(looseGroups)
+    if #looseEntries > 0 then
+        sections[#sections + 1] = {
+            title = (#sortedFolders > 0) and "No Folder" or nil,
+            entries = looseEntries,
+        }
+    end
+
+    return sections
+end
+
+local ENTRY_MOVE_GROUP_MENU_PREFIX = "ENTRY_MOVE_GROUP:"
+
+local function FindEntryMoveContainerEntry(sections, containerId)
+    for _, section in ipairs(sections or {}) do
+        for _, containerEntry in ipairs(section.entries or {}) do
+            if containerEntry.containerId == containerId then
+                return containerEntry
+            end
+        end
+    end
+    return nil
+end
+
+local function ParseEntryMoveContainerId(menuList)
+    if type(menuList) ~= "string" then
+        return nil
+    end
+    local idText = menuList:match("^" .. ENTRY_MOVE_GROUP_MENU_PREFIX .. "(%d+)$")
+    return idText and tonumber(idText) or nil
+end
+
+local function AddEntryMoveDestinationButtons(level, sourceGroupId, sourceIndex, entryData, menuList)
+    local db = CooldownCompanion.db.profile
+    local sections = BuildEntryMoveDestinationSections(db, sourceGroupId)
+
+    local targetContainerId = ParseEntryMoveContainerId(menuList)
+    if targetContainerId then
+        local containerEntry = FindEntryMoveContainerEntry(sections, targetContainerId)
+        if not containerEntry then
+            return
+        end
+
+        for _, panel in ipairs(containerEntry.panels) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = panel.name
+            info.notCheckable = true
+            info.func = function()
+                if MoveEntryBetweenGroups(db, sourceGroupId, sourceIndex, panel.groupId, entryData) then
+                    CloseDropDownMenus()
+                end
+            end
+            UIDropDownMenu_AddButton(info, level)
+        end
+        return
+    end
+
+    for _, section in ipairs(sections) do
+        if section.title then
+            local header = UIDropDownMenu_CreateInfo()
+            header.text = section.title
+            header.isTitle = true
+            header.notCheckable = true
+            UIDropDownMenu_AddButton(header, level)
+        end
+
+        for _, containerEntry in ipairs(section.entries) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = containerEntry.containerName
+            info.notCheckable = true
+            info.hasArrow = true
+            info.menuList = ENTRY_MOVE_GROUP_MENU_PREFIX .. tostring(containerEntry.containerId)
+            info.leftPadding = section.title and 10 or 0
+            UIDropDownMenu_AddButton(info, level)
+        end
+    end
 end
 
 ------------------------------------------------------------------------
@@ -1753,50 +1927,7 @@ local function RefreshColumn2()
                     CleanRecycledEntry(entry)
                     local usable = CooldownCompanion:IsButtonUsable(buttonData)
 
-                    local entryName = buttonData.name
-                    if buttonData.type == "spell" then
-                        local child
-                        if buttonData.cdmChildSlot then
-                            local allChildren = CooldownCompanion.viewerAuraAllChildren[buttonData.id]
-                            child = allChildren and allChildren[buttonData.cdmChildSlot]
-                        else
-                            child = CooldownCompanion.viewerAuraFrames[buttonData.id]
-                        end
-                        if child and child.cooldownInfo and child.cooldownInfo.overrideSpellID then
-                            local spellName = C_Spell.GetSpellName(child.cooldownInfo.overrideSpellID)
-                            if spellName then entryName = spellName end
-                        else
-                            -- Resolve through GetOverrideSpell so base-stored
-                            -- IDs display the current transform name.
-                            local raw = C_Spell.GetOverrideSpell(buttonData.id)
-                            local displayId = (raw and raw ~= 0) and raw or buttonData.id
-                            local spellName = C_Spell.GetSpellName(displayId)
-                            if spellName then entryName = spellName end
-                        end
-                        if buttonData.cdmChildSlot then
-                            entryName = entryName .. " #" .. buttonData.cdmChildSlot
-                        end
-                        local addedAs = buttonData.addedAs
-                        if addedAs ~= "spell" and addedAs ~= "aura" then
-                            addedAs = buttonData.isPassive and "aura" or "spell"
-                        end
-                        local icons = ""
-                        if addedAs ~= "aura" then
-                            icons = icons .. "|A:ui_adv_atk:15:15|a"
-                        end
-                        if addedAs == "aura" or buttonData.auraTracking then
-                            icons = icons .. "|A:ui_adv_health:15:15|a"
-                        end
-                        if icons ~= "" then
-                            entryName = entryName .. "  " .. icons
-                        end
-                    elseif buttonData.type == "item" then
-                        if C_Item.IsEquippableItem(buttonData.id) then
-                            entryName = entryName .. "  |A:Crosshair_repairnpc_32:15:15|a"
-                        else
-                            entryName = entryName .. "  |A:auctionhouse-icon-coin-gold:12:12|a"
-                        end
-                    end
+                    local entryName = GetConfigEntryDisplayName(buttonData, { includeDecorations = true })
                     entry:SetText(entryName or ("Unknown " .. buttonData.type))
                     entry:SetImage(GetButtonIcon(buttonData))
                     entry:SetImageSize(32, 32)
@@ -2048,74 +2179,16 @@ local function RefreshColumn2()
                                         ShowPopupAboveConfig("CDC_DELETE_BUTTON", name, { groupId = sourceGroupId, buttonIndex = sourceIndex })
                                     end
                                     UIDropDownMenu_AddButton(removeInfo, level)
-                                elseif menuList == "MOVE_TO_GROUP" then
-                                    local db = CooldownCompanion.db.profile
-                                    local containers = db.groupContainers or {}
-                                    local folderGroups, looseGroups = {}, {}
-                                    for id, group in pairs(db.groups) do
-                                        if id ~= sourceGroupId
-                                            and CooldownCompanion:IsGroupVisibleToCurrentChar(id)
-                                            and CanTexturePanelAcceptEntry(group) then
-                                            local gName = group.name or ("Group " .. id)
-                                            local cid = group.parentContainerId
-                                            local ctr = cid and containers[cid]
-                                            local fid = ctr and ctr.folderId
-                                            if fid and db.folders[fid] then
-                                                folderGroups[fid] = folderGroups[fid] or {}
-                                                table.insert(folderGroups[fid], { id = id, name = gName })
-                                            else
-                                                table.insert(looseGroups, { id = id, name = gName })
-                                            end
-                                        end
-                                    end
-                                    local sortedFolders = {}
-                                    for fid, folder in pairs(db.folders) do
-                                        if folderGroups[fid] then
-                                            table.insert(sortedFolders, { id = fid, name = folder.name or ("Folder " .. fid), order = CooldownCompanion:GetOrderForSpec(folder, CooldownCompanion._currentSpecId, fid) })
-                                        end
-                                    end
-                                    table.sort(sortedFolders, function(a, b) return a.order < b.order end)
-                                    local hasFolders = #sortedFolders > 0
-                                    for _, folder in ipairs(sortedFolders) do
-                                        local hdr = UIDropDownMenu_CreateInfo()
-                                        hdr.text = folder.name
-                                        hdr.isTitle = true
-                                        hdr.notCheckable = true
-                                        UIDropDownMenu_AddButton(hdr, level)
-                                        table.sort(folderGroups[folder.id], function(a, b) return a.name < b.name end)
-                                        for _, g in ipairs(folderGroups[folder.id]) do
-                                            local info = UIDropDownMenu_CreateInfo()
-                                            info.text = g.name
-                                            info.notCheckable = true
-                                            info.func = function()
-                                                if MoveEntryBetweenGroups(db, sourceGroupId, sourceIndex, g.id, entryData) then
-                                                    CloseDropDownMenus()
-                                                end
-                                            end
-                                            UIDropDownMenu_AddButton(info, level)
-                                        end
-                                    end
-                                    if #looseGroups > 0 then
-                                        if hasFolders then
-                                            local hdr = UIDropDownMenu_CreateInfo()
-                                            hdr.text = L["No Folder"]
-                                            hdr.isTitle = true
-                                            hdr.notCheckable = true
-                                            UIDropDownMenu_AddButton(hdr, level)
-                                        end
-                                        table.sort(looseGroups, function(a, b) return a.name < b.name end)
-                                        for _, g in ipairs(looseGroups) do
-                                            local info = UIDropDownMenu_CreateInfo()
-                                            info.text = g.name
-                                            info.notCheckable = true
-                                            info.func = function()
-                                                if MoveEntryBetweenGroups(db, sourceGroupId, sourceIndex, g.id, entryData) then
-                                                    CloseDropDownMenus()
-                                                end
-                                            end
-                                            UIDropDownMenu_AddButton(info, level)
-                                        end
-                                    end
+                                elseif menuList == "MOVE_TO_GROUP"
+                                    or ParseEntryMoveContainerId(menuList)
+                                then
+                                    AddEntryMoveDestinationButtons(
+                                        level,
+                                        sourceGroupId,
+                                        sourceIndex,
+                                        entryData,
+                                        menuList
+                                    )
                                 end
                             end, "MENU")
                             CS.buttonContextMenu:SetFrameStrata("FULLSCREEN_DIALOG")
@@ -2132,72 +2205,18 @@ local function RefreshColumn2()
                             local sourceGroupId = btnPanelId
                             local sourceIndex = btnIndex
                             local entryData = buttonData
-                            UIDropDownMenu_Initialize(CS.moveMenuFrame, function(self, level)
-                                local db = CooldownCompanion.db.profile
-                                local containers = db.groupContainers or {}
-                                local folderGroups, looseGroups = {}, {}
-                                for id, group in pairs(db.groups) do
-                                    if id ~= sourceGroupId
-                                        and CooldownCompanion:IsGroupVisibleToCurrentChar(id)
-                                        and CanTexturePanelAcceptEntry(group) then
-                                        local gName = group.name or ("Group " .. id)
-                                        local cid = group.parentContainerId
-                                        local ctr = cid and containers[cid]
-                                        local fid = ctr and ctr.folderId
-                                        if fid and db.folders[fid] then
-                                            folderGroups[fid] = folderGroups[fid] or {}
-                                            table.insert(folderGroups[fid], { id = id, name = gName })
-                                        else
-                                            table.insert(looseGroups, { id = id, name = gName })
-                                        end
-                                    end
+                            UIDropDownMenu_Initialize(CS.moveMenuFrame, function(self, level, menuList)
+                                level = level or 1
+                                if level ~= 1 and not ParseEntryMoveContainerId(menuList) then
+                                    return
                                 end
-                                local sortedFolders = {}
-                                for fid, folder in pairs(db.folders) do
-                                    if folderGroups[fid] then
-                                        table.insert(sortedFolders, { id = fid, name = folder.name or ("Folder " .. fid), order = CooldownCompanion:GetOrderForSpec(folder, CooldownCompanion._currentSpecId, fid) })
-                                    end
-                                end
-                                table.sort(sortedFolders, function(a, b) return a.order < b.order end)
-                                local hasFolders = #sortedFolders > 0
-                                for _, folder in ipairs(sortedFolders) do
-                                    local hdr = UIDropDownMenu_CreateInfo()
-                                    hdr.text = folder.name
-                                    hdr.isTitle = true
-                                    hdr.notCheckable = true
-                                    UIDropDownMenu_AddButton(hdr, level)
-                                    table.sort(folderGroups[folder.id], function(a, b) return a.name < b.name end)
-                                    for _, g in ipairs(folderGroups[folder.id]) do
-                                        local info = UIDropDownMenu_CreateInfo()
-                                        info.text = g.name
-                                        info.func = function()
-                                            if MoveEntryBetweenGroups(db, sourceGroupId, sourceIndex, g.id, entryData) then
-                                                CloseDropDownMenus()
-                                            end
-                                        end
-                                        UIDropDownMenu_AddButton(info, level)
-                                    end
-                                end
-                                if #looseGroups > 0 then
-                                    if hasFolders then
-                                        local hdr = UIDropDownMenu_CreateInfo()
-                                        hdr.text = L["No Folder"]
-                                        hdr.isTitle = true
-                                        hdr.notCheckable = true
-                                        UIDropDownMenu_AddButton(hdr, level)
-                                    end
-                                    table.sort(looseGroups, function(a, b) return a.name < b.name end)
-                                    for _, g in ipairs(looseGroups) do
-                                        local info = UIDropDownMenu_CreateInfo()
-                                        info.text = g.name
-                                        info.func = function()
-                                            if MoveEntryBetweenGroups(db, sourceGroupId, sourceIndex, g.id, entryData) then
-                                                CloseDropDownMenus()
-                                            end
-                                        end
-                                        UIDropDownMenu_AddButton(info, level)
-                                    end
-                                end
+                                AddEntryMoveDestinationButtons(
+                                    level,
+                                    sourceGroupId,
+                                    sourceIndex,
+                                    entryData,
+                                    menuList
+                                )
                             end, "MENU")
                             CS.moveMenuFrame:SetFrameStrata("FULLSCREEN_DIALOG")
                             ToggleDropDownMenu(1, nil, CS.moveMenuFrame, "cursor", 0, 0)
