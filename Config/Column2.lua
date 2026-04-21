@@ -30,6 +30,9 @@ local BuildContainerExportData = ST._BuildContainerExportData
 local EncodeExportData = ST._EncodeExportData
 local GroupsHaveForeignSpecs = ST._GroupsHaveForeignSpecs
 local BindConfigShiftTooltip = ST._BindConfigShiftTooltip
+local NotifyTutorialAction = ST._NotifyTutorialAction
+
+local IsTriggerPanelGroup
 
 local function HideAllBarWidgets(col2)
     if col2._barsStylingScroll then col2._barsStylingScroll.frame:Hide() end
@@ -46,24 +49,511 @@ local OVERRIDE_BADGE_ICON_SIZE = 12
 local ROW_BADGE_SPACING = 2
 local ROW_BADGE_RIGHT_PAD = 4
 local TEXTURE_PANEL_HEADER_BADGE_ATLAS = "UI-HUD-MicroMenu-Communities-Icon-Notification"
+local TRIGGER_PANEL_BADGE_COLOR = { 1.0, 0.18, 0.78 }
 local PANEL_TYPE_TOOLTIPS = {
     icons = {
         title = "Icon Panel",
-        description = "Classic cooldown icons for spells or items.",
+        description = "Shows spells or items as classic cooldown icons.",
     },
     bars = {
         title = "Bar Panel",
-        description = "Bar timers with names and durations.",
+        description = "Shows spells or items as timer bars with names and durations.",
     },
     text = {
         title = "Text Panel",
-        description = "Text-only entries for compact status lists.",
+        description = "Shows text-only entries for compact readouts and status lists.",
     },
     textures = {
         title = "Texture Panel",
-        description = "One custom texture for a single spell or item.",
+        description = "Shows one standalone texture for a single spell or item.",
+    },
+    trigger = {
+        title = "Trigger Panel",
+        description = "Add spell or item entries, then set conditions on each one. The display appears only when every enabled entry meets its conditions.",
     },
 }
+
+local function GetPanelTypeTooltip(displayMode)
+    return PANEL_TYPE_TOOLTIPS[displayMode] or PANEL_TYPE_TOOLTIPS.icons
+end
+
+local function ShowPanelTypeTooltip(owner, displayMode)
+    local tooltip = GetPanelTypeTooltip(displayMode)
+    if not tooltip then
+        return
+    end
+
+    GameTooltip:SetOwner(owner, "ANCHOR_TOP")
+    GameTooltip:AddLine(tooltip.title, 1, 0.82, 0, true)
+    GameTooltip:AddLine(tooltip.description, 1, 1, 1, true)
+    GameTooltip:Show()
+end
+
+local function AddPanelTypeMenuTooltip(info, displayMode)
+    local tooltip = GetPanelTypeTooltip(displayMode)
+    if not tooltip then
+        return
+    end
+
+    info.tooltipTitle = tooltip.title
+    info.tooltipText = tooltip.description
+    info.tooltipOnButton = true
+end
+
+local function EnsurePanelTypeTooltipTarget(header)
+    local target = header._cdcModeBadgeHitRect
+    if not target then
+        target = CreateFrame("Button", nil, header.frame)
+        target:SetSize(18, 18)
+        target:SetPropagateMouseClicks(true)
+        target:SetPropagateMouseMotion(true)
+        target:SetScript("OnEnter", function(self)
+            ShowPanelTypeTooltip(self, self._cdcDisplayMode)
+        end)
+        target:SetScript("OnLeave", function()
+            GameTooltip:Hide()
+        end)
+        header._cdcModeBadgeHitRect = target
+    end
+
+    target:SetFrameStrata(header.frame:GetFrameStrata())
+    target:SetFrameLevel(header.frame:GetFrameLevel() + 20)
+    return target
+end
+
+local function ConfigurePanelTypeBadge(header, displayMode, textWidth)
+    local modeBadge = header._cdcModeBadge
+    if not modeBadge then
+        modeBadge = header.frame:CreateTexture(nil, "ARTWORK")
+        header._cdcModeBadge = modeBadge
+    end
+
+    modeBadge:ClearAllPoints()
+    modeBadge:SetSize(16, 16)
+    if modeBadge.SetDesaturated then
+        modeBadge:SetDesaturated(false)
+    end
+    modeBadge:SetVertexColor(1, 1, 1, 1)
+    if displayMode == "bars" then
+        modeBadge:SetAtlas("CreditsScreen-Assets-Buttons-Pause", false)
+    elseif displayMode == "text" then
+        modeBadge:SetAtlas("poi-workorders", false)
+    elseif displayMode == "textures" then
+        modeBadge:SetAtlas(TEXTURE_PANEL_HEADER_BADGE_ATLAS, false)
+    elseif displayMode == "trigger" then
+        modeBadge:SetAtlas(TEXTURE_PANEL_HEADER_BADGE_ATLAS, false)
+        if modeBadge.SetDesaturated then
+            modeBadge:SetDesaturated(true)
+        end
+        modeBadge:SetVertexColor(TRIGGER_PANEL_BADGE_COLOR[1], TRIGGER_PANEL_BADGE_COLOR[2], TRIGGER_PANEL_BADGE_COLOR[3], 1)
+    else
+        modeBadge:SetAtlas("UI-QuestPoi-QuestNumber-SuperTracked", false)
+    end
+    modeBadge:SetPoint("RIGHT", header.label, "CENTER", -(textWidth / 2) - 2, 0)
+    modeBadge:Show()
+
+    local tooltipTarget = EnsurePanelTypeTooltipTarget(header)
+    tooltipTarget._cdcDisplayMode = displayMode
+    tooltipTarget:ClearAllPoints()
+    tooltipTarget:SetPoint("CENTER", modeBadge, "CENTER")
+    tooltipTarget:Show()
+end
+
+local function AddClassAccentSpacer(scroll, classColor)
+    local spacer = AceGUI:Create("Label")
+    spacer:SetText(" ")
+    spacer:SetFullWidth(true)
+    spacer:SetHeight(2)
+    local accentBar = spacer.frame._cdcAccentBar
+    if not accentBar then
+        accentBar = spacer.frame:CreateTexture(nil, "ARTWORK")
+        spacer.frame._cdcAccentBar = accentBar
+    end
+    accentBar:SetHeight(1.5)
+    accentBar:ClearAllPoints()
+    local inset = math.floor(spacer.frame:GetWidth() * 0.10 + 0.5)
+    accentBar:SetPoint("LEFT", spacer.frame, "LEFT", inset, 1)
+    accentBar:SetPoint("RIGHT", spacer.frame, "RIGHT", -inset, 1)
+    if classColor then
+        accentBar:SetColorTexture(classColor.r, classColor.g, classColor.b, 0.8)
+    else
+        accentBar:SetColorTexture(1, 1, 1, 0.3)
+    end
+    accentBar:Show()
+    spacer:SetCallback("OnRelease", function() accentBar:Hide() end)
+    scroll:AddChild(spacer)
+end
+
+local function FinalizeCreatedPanel(newPanelId, displayMode, opts)
+    if not newPanelId then
+        return
+    end
+
+    local group = CooldownCompanion.db.profile.groups[newPanelId]
+    if opts and opts.verticalStyle and group then
+        group.style.orientation = "vertical"
+        if group.masqueEnabled then
+            CooldownCompanion:ToggleGroupMasque(newPanelId, false)
+        end
+        CooldownCompanion:RefreshGroupFrame(newPanelId)
+    end
+
+    CS.selectedGroup = newPanelId
+    if opts and opts.clearSelection then
+        CS.selectedButton = nil
+        wipe(CS.selectedButtons)
+    end
+    CS.addingToPanelId = newPanelId
+    CS.pendingEditBoxFocus = true
+    CooldownCompanion:RefreshConfigPanel()
+
+    if opts and opts.notifyTutorial and NotifyTutorialAction then
+        NotifyTutorialAction("panel_created", {
+            containerId = CS.selectedContainer,
+            panelId = newPanelId,
+            displayMode = displayMode,
+        })
+    end
+end
+
+local function CreatePanelInSelectedContainer(displayMode, opts)
+    local newPanelId = CooldownCompanion:CreatePanel(CS.selectedContainer, displayMode)
+    FinalizeCreatedPanel(newPanelId, displayMode, opts)
+end
+
+local function EnsureCol2PanelTypeMenu()
+    if not CS.col2PanelTypeMenu then
+        CS.col2PanelTypeMenu = CreateFrame("Frame", "CDCCol2PanelTypeMenu", UIParent, "UIDropDownMenuTemplate")
+    end
+    return CS.col2PanelTypeMenu
+end
+
+local function PopulateCol2PanelCreationBar(panelBtnWidth)
+    if not CS.col2ButtonBar then
+        return
+    end
+
+    local function CreateButton(text, onClick, tooltipMode, anchorPoint, relativeTo)
+        local button = AceGUI:Create("Button")
+        button:SetText(text)
+        button:SetCallback("OnClick", onClick)
+        if tooltipMode then
+            button:SetCallback("OnEnter", function(widget)
+                ShowPanelTypeTooltip(widget.frame, tooltipMode)
+            end)
+            button:SetCallback("OnLeave", function()
+                GameTooltip:Hide()
+            end)
+        end
+        button.frame:SetParent(CS.col2ButtonBar)
+        button.frame:ClearAllPoints()
+        button.frame:SetPoint(anchorPoint, relativeTo, anchorPoint == "TOPLEFT" and "TOPLEFT" or "RIGHT", anchorPoint == "TOPLEFT" and 0 or 3, anchorPoint == "TOPLEFT" and -1 or 0)
+        button.frame:SetWidth(panelBtnWidth)
+        button.frame:SetHeight(28)
+        button.frame:Show()
+        table.insert(CS.col2BarWidgets, button)
+        return button
+    end
+
+    local iconPanelBtn = CreateButton(
+        "Icon Panel",
+        function()
+            CreatePanelInSelectedContainer("icons", {
+                clearSelection = true,
+                notifyTutorial = true,
+            })
+        end,
+        "icons",
+        "TOPLEFT",
+        CS.col2ButtonBar
+    )
+    if CS.tutorialAnchors then
+        CS.tutorialAnchors.icon_panel_button = iconPanelBtn.frame
+    end
+
+    local barPanelBtn = CreateButton(
+        "Bar Panel",
+        function()
+            CreatePanelInSelectedContainer("bars", {
+                verticalStyle = true,
+            })
+        end,
+        "bars",
+        "LEFT",
+        iconPanelBtn.frame
+    )
+
+    local otherPanelBtn = AceGUI:Create("Button")
+    otherPanelBtn:SetText("Extra")
+    otherPanelBtn:SetCallback("OnClick", function()
+        local menu = EnsureCol2PanelTypeMenu()
+        UIDropDownMenu_Initialize(menu, function(self, level)
+            level = level or 1
+            if level ~= 1 then return end
+
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = "Text Panel"
+            info.notCheckable = true
+            AddPanelTypeMenuTooltip(info, "text")
+            info.func = function()
+                CloseDropDownMenus()
+                CreatePanelInSelectedContainer("text", {
+                    verticalStyle = true,
+                })
+            end
+            UIDropDownMenu_AddButton(info, level)
+
+            info = UIDropDownMenu_CreateInfo()
+            info.text = "Texture Panel"
+            info.notCheckable = true
+            AddPanelTypeMenuTooltip(info, "textures")
+            info.func = function()
+                CloseDropDownMenus()
+                CreatePanelInSelectedContainer("textures", {
+                    clearSelection = true,
+                })
+            end
+            UIDropDownMenu_AddButton(info, level)
+
+            info = UIDropDownMenu_CreateInfo()
+            info.text = "Trigger Panel"
+            info.notCheckable = true
+            AddPanelTypeMenuTooltip(info, "trigger")
+            info.func = function()
+                CloseDropDownMenus()
+                CreatePanelInSelectedContainer("trigger", {
+                    clearSelection = true,
+                })
+            end
+            UIDropDownMenu_AddButton(info, level)
+        end, "MENU")
+        menu:SetFrameStrata("FULLSCREEN_DIALOG")
+        ToggleDropDownMenu(1, nil, menu, "cursor", 0, 0)
+    end)
+    otherPanelBtn.frame:SetParent(CS.col2ButtonBar)
+    otherPanelBtn.frame:ClearAllPoints()
+    otherPanelBtn.frame:SetPoint("LEFT", barPanelBtn.frame, "RIGHT", 3, 0)
+    otherPanelBtn.frame:SetWidth(panelBtnWidth)
+    otherPanelBtn.frame:SetHeight(28)
+    otherPanelBtn.frame:Show()
+    table.insert(CS.col2BarWidgets, otherPanelBtn)
+
+    CS.col2ButtonBar._topRowBtns = {
+        iconPanelBtn.frame,
+        barPanelBtn.frame,
+        otherPanelBtn.frame,
+    }
+    CS.col2ButtonBar:SetScript("OnSizeChanged", function(self, w)
+        if self._topRowBtns then
+            local tw = (w - 6) / 3
+            for _, frame in ipairs(self._topRowBtns) do
+                frame:SetWidth(tw)
+            end
+        end
+    end)
+end
+
+local function RenderColumn2NoPanelsState(classColor)
+    local spacer = AceGUI:Create("SimpleGroup")
+    spacer:SetFullWidth(true)
+    spacer:SetHeight(20)
+    spacer.noAutoHeight = true
+    CS.col2Scroll:AddChild(spacer)
+
+    local header = AceGUI:Create("Label")
+    header:SetText("Every entry needs a panel.")
+    header:SetFullWidth(true)
+    header:SetJustifyH("CENTER")
+    header:SetFont((GameFontNormal:GetFont()), 15, "")
+    CS.col2Scroll:AddChild(header)
+
+    local descSpacer = AceGUI:Create("SimpleGroup")
+    descSpacer:SetFullWidth(true)
+    descSpacer:SetHeight(6)
+    descSpacer.noAutoHeight = true
+    CS.col2Scroll:AddChild(descSpacer)
+
+    local desc = AceGUI:Create("Label")
+    desc:SetText("Choose a panel type below to get started.")
+    desc:SetFullWidth(true)
+    desc:SetJustifyH("CENTER")
+    desc:SetFont((GameFontNormal:GetFont()), 12, "")
+    desc:SetColor(0.7, 0.7, 0.7)
+    CS.col2Scroll:AddChild(desc)
+
+    local helpSpacer = AceGUI:Create("SimpleGroup")
+    helpSpacer:SetFullWidth(true)
+    helpSpacer:SetHeight(10)
+    helpSpacer.noAutoHeight = true
+    CS.col2Scroll:AddChild(helpSpacer)
+
+    AddClassAccentSpacer(CS.col2Scroll, classColor)
+
+    local postDividerSpacer = AceGUI:Create("SimpleGroup")
+    postDividerSpacer:SetFullWidth(true)
+    postDividerSpacer:SetHeight(10)
+    postDividerSpacer.noAutoHeight = true
+    CS.col2Scroll:AddChild(postDividerSpacer)
+
+    local helpEntries = {
+        PANEL_TYPE_TOOLTIPS.icons,
+        PANEL_TYPE_TOOLTIPS.bars,
+        PANEL_TYPE_TOOLTIPS.text,
+        PANEL_TYPE_TOOLTIPS.textures,
+        PANEL_TYPE_TOOLTIPS.trigger,
+    }
+
+    for index, entry in ipairs(helpEntries) do
+        if index > 1 then
+            local entrySpacer = AceGUI:Create("SimpleGroup")
+            entrySpacer:SetFullWidth(true)
+            entrySpacer:SetHeight(8)
+            entrySpacer.noAutoHeight = true
+            CS.col2Scroll:AddChild(entrySpacer)
+        end
+
+        local panelHelp = AceGUI:Create("Label")
+        panelHelp:SetText("|cffffffff" .. entry.title .. "|r - " .. entry.description)
+        panelHelp:SetFullWidth(true)
+        panelHelp:SetJustifyH("CENTER")
+        panelHelp:SetFont((GameFontNormal:GetFont()), 12, "")
+        panelHelp:SetColor(0.75, 0.75, 0.75)
+        CS.col2Scroll:AddChild(panelHelp)
+    end
+
+    CS.col2Scroll:DoLayout()
+end
+
+local function NotifyTutorialInlineAddSuccess(addTargetGroupId, rawInput)
+    if not NotifyTutorialAction then
+        return
+    end
+    local selectedButton = CS.selectedButton
+    if addTargetGroupId and selectedButton then
+        NotifyTutorialAction("inline_add_succeeded", {
+            groupId = addTargetGroupId,
+            buttonIndex = selectedButton,
+            rawInput = rawInput,
+        })
+    end
+end
+
+local function SubmitInlineAdd(rawInput)
+    CS.newInput = rawInput
+    if CS.newInput == "" or not CS.addingToPanelId then
+        return false
+    end
+
+    local addTargetGroupId = CS.addingToPanelId
+    CS.selectedGroup = addTargetGroupId
+    if not TryAdd(CS.newInput) then
+        return false
+    end
+
+    NotifyTutorialInlineAddSuccess(addTargetGroupId, CS.newInput)
+    CS.newInput = ""
+    local targetGroup = CooldownCompanion.db.profile.groups[addTargetGroupId]
+    if not (targetGroup and targetGroup.displayMode == "textures") then
+        CS.pendingEditBoxFocus = true
+    end
+    CooldownCompanion:RefreshConfigPanel()
+    return true
+end
+
+local function BuildInlineAddControls(panelContainer, panelMeta, panel, panelId, btnCount)
+    if CS.addingToPanelId ~= panelId or (panel.displayMode == "textures" and btnCount >= 1) then
+        return
+    end
+
+    panelMeta.hasInlineAdd = true
+    local inputBox = AceGUI:Create("EditBox")
+    if inputBox.editbox.Instructions then inputBox.editbox.Instructions:Hide() end
+    inputBox:SetLabel("")
+    inputBox:SetText(CS.newInput)
+    inputBox:DisableButton(true)
+    inputBox:SetFullWidth(true)
+    panelMeta.addInputFrame = inputBox.frame
+    inputBox:SetCallback("OnEnterPressed", function(widget, event, text)
+        if CS.ConsumeAutocompleteEnter() then return end
+        CS.HideAutocomplete()
+        SubmitInlineAdd(text)
+    end)
+    inputBox:SetCallback("OnTextChanged", function(widget, event, text)
+        CS.newInput = text
+        if text and #text >= 1 then
+            local results = SearchAutocomplete(text)
+            CS.ShowAutocompleteResults(results, widget, OnAutocompleteSelect)
+        else
+            CS.HideAutocomplete()
+        end
+    end)
+    inputBox.editbox:SetPoint("BOTTOMRIGHT", 1, 0)
+    CS.SetupAutocompleteKeyHandler(inputBox)
+    panelContainer:AddChild(inputBox)
+
+    if CS.pendingEditBoxFocus then
+        CS.pendingEditBoxFocus = false
+        C_Timer.After(0, function()
+            if inputBox.editbox then
+                inputBox:SetFocus()
+            end
+        end)
+    end
+
+    local addSpacer = AceGUI:Create("SimpleGroup")
+    addSpacer:SetFullWidth(true)
+    addSpacer:SetHeight(2)
+    addSpacer.noAutoHeight = true
+    panelContainer:AddChild(addSpacer)
+
+    local addRow = AceGUI:Create("SimpleGroup")
+    addRow:SetFullWidth(true)
+    addRow:SetLayout("Flow")
+    panelMeta.addRowFrame = addRow.frame
+
+    local isTriggerPanel = IsTriggerPanelGroup(panel)
+    local manualAddBtn = AceGUI:Create("Button")
+    manualAddBtn:SetText(isTriggerPanel and "Add Entry" or "Manual Add")
+    manualAddBtn:SetRelativeWidth((panel.displayMode == "textures" or isTriggerPanel) and 1 or 0.49)
+    panelMeta.manualAddButtonFrame = manualAddBtn.frame
+    manualAddBtn:SetCallback("OnClick", function()
+        SubmitInlineAdd(CS.newInput)
+    end)
+    addRow:AddChild(manualAddBtn)
+
+    if panel.displayMode ~= "textures" and not isTriggerPanel then
+        local autoAddBtn = AceGUI:Create("Button")
+        autoAddBtn:SetText("Auto Add")
+        autoAddBtn:SetRelativeWidth(0.49)
+        local tutorialRuntime = CS.tutorialRuntime
+        local deemphasizeAutoAdd = tutorialRuntime
+            and tutorialRuntime.active
+            and (tutorialRuntime.step == "add_box_intro" or tutorialRuntime.step == "add_one_spell")
+        autoAddBtn:SetCallback("OnClick", function()
+            CS.selectedGroup = CS.addingToPanelId
+            OpenAutoAddFlow()
+        end)
+        autoAddBtn:SetCallback("OnEnter", function(widget)
+            GameTooltip:SetOwner(widget.frame, "ANCHOR_TOP")
+            GameTooltip:AddLine("Auto Add")
+            GameTooltip:AddLine("Auto-add from Action Bars, Spellbook, or CDM Auras.", 1, 1, 1, true)
+            if deemphasizeAutoAdd then
+                GameTooltip:AddLine("Optional during the tutorial. The guided path uses the add box above.", 0.8, 0.8, 0.8, true)
+            end
+            GameTooltip:Show()
+        end)
+        autoAddBtn:SetCallback("OnLeave", function()
+            GameTooltip:Hide()
+        end)
+        if autoAddBtn.frame then
+            autoAddBtn.frame:SetAlpha(deemphasizeAutoAdd and 0.62 or 1)
+        end
+        panelMeta.autoAddButtonFrame = autoAddBtn.frame
+        addRow:AddChild(autoAddBtn)
+    end
+
+    panelContainer:AddChild(addRow)
+end
 
 local function EnsureRowBadge(frame, key, atlas, iconSize)
     local badge = frame[key]
@@ -140,6 +630,61 @@ end
 
 local function CanTexturePanelAcceptEntry(group)
     return not (group and group.displayMode == "textures" and group.buttons and #group.buttons >= 1)
+end
+
+IsTriggerPanelGroup = function(group)
+    return group and group.displayMode == "trigger"
+end
+
+local function TriggerRowNeedsAuraIndicator(buttonData)
+    if not (buttonData and buttonData.type == "spell") then
+        return false
+    end
+
+    if buttonData.isPassive == true or buttonData.addedAs == "aura" then
+        return true
+    end
+
+    return CooldownCompanion.TriggerRowUsesCondition
+        and CooldownCompanion:TriggerRowUsesCondition(buttonData, "auraActive")
+        or false
+end
+
+local function GetTriggerRowDisplayText(buttonData)
+    local targetText
+    if buttonData and buttonData.type == "spell" then
+        targetText = GetConfigEntryDisplayName(buttonData)
+            or buttonData.name
+            or ("Unknown " .. tostring(buttonData.type))
+
+        local addedAs = buttonData.addedAs
+        if addedAs ~= "spell" and addedAs ~= "aura" then
+            addedAs = buttonData.isPassive and "aura" or "spell"
+        end
+
+        local icons = ""
+        if addedAs ~= "aura" then
+            icons = icons .. "|A:ui_adv_atk:15:15|a"
+        end
+        if TriggerRowNeedsAuraIndicator(buttonData) then
+            icons = icons .. "|A:ui_adv_health:15:15|a"
+        end
+        if icons ~= "" then
+            targetText = targetText .. "  " .. icons
+        end
+    else
+        targetText = GetConfigEntryDisplayName(buttonData, { includeDecorations = true })
+            or buttonData.name
+            or ("Unknown " .. tostring(buttonData.type))
+    end
+
+    if CooldownCompanion.GetCompactTriggerConditionSummary then
+        local summary = CooldownCompanion:GetCompactTriggerConditionSummary(buttonData, 2)
+        if summary and summary ~= "" then
+            return targetText .. "  |cff888888" .. summary .. "|r"
+        end
+    end
+    return targetText
 end
 
 local function ResolveColumn2TooltipSpellId(buttonData)
@@ -626,28 +1171,11 @@ local function RefreshColumn2()
             header:SetImage("Interface\\BUTTONS\\WHITE8X8")
             header.image:SetAlpha(0)
 
-            local modeBadge = header._cdcModeBadge
-            if not modeBadge then
-                modeBadge = header.frame:CreateTexture(nil, "ARTWORK")
-                header._cdcModeBadge = modeBadge
-            end
-            modeBadge:ClearAllPoints()
-            modeBadge:SetSize(16, 16)
-            if panel.displayMode == "bars" then
-                modeBadge:SetAtlas("CreditsScreen-Assets-Buttons-Pause", false)
-            elseif panel.displayMode == "text" then
-                modeBadge:SetAtlas("poi-workorders", false)
-            elseif panel.displayMode == "textures" then
-                modeBadge:SetAtlas(TEXTURE_PANEL_HEADER_BADGE_ATLAS, false)
-            else
-                modeBadge:SetAtlas("UI-QuestPoi-QuestNumber-SuperTracked", false)
-            end
-            modeBadge:Show()
             header:SetFullWidth(true)
             header:SetFontObject(GameFontHighlight)
             header:SetJustifyH("CENTER")
             local textW = header.label:GetStringWidth()
-            modeBadge:SetPoint("RIGHT", header.label, "CENTER", -(textW / 2) - 2, 0)
+            ConfigurePanelTypeBadge(header, panel.displayMode, textW)
 
             -- Disabled badge (shown when panel is individually disabled)
             local disabledBadge = header.frame._cdcHeaderDisabledBadge
@@ -1046,140 +1574,7 @@ local function RefreshColumn2()
             CS.col2ButtonBar:Show()
             local barW = CS.col2ButtonBar:GetWidth() or 300
             local panelBtnWidth = (barW - 6) / 3
-
-            local function CreateIconPanel()
-                local newPanelId = CooldownCompanion:CreatePanel(CS.selectedContainer, "icons")
-                if newPanelId then
-                    CS.selectedGroup = newPanelId
-                    CS.addingToPanelId = newPanelId
-                    CS.pendingEditBoxFocus = true
-                    CooldownCompanion:RefreshConfigPanel()
-                end
-            end
-
-            local function CreateBarPanel()
-                local newPanelId = CooldownCompanion:CreatePanel(CS.selectedContainer, "bars")
-                if newPanelId then
-                    local group = CooldownCompanion.db.profile.groups[newPanelId]
-                    if group then
-                        group.style.orientation = "vertical"
-                        if group.masqueEnabled then
-                            CooldownCompanion:ToggleGroupMasque(newPanelId, false)
-                        end
-                        CooldownCompanion:RefreshGroupFrame(newPanelId)
-                    end
-                    CS.selectedGroup = newPanelId
-                    CS.addingToPanelId = newPanelId
-                    CS.pendingEditBoxFocus = true
-                    CooldownCompanion:RefreshConfigPanel()
-                end
-            end
-
-            local function CreateTextPanel()
-                local newPanelId = CooldownCompanion:CreatePanel(CS.selectedContainer, "text")
-                if newPanelId then
-                    local group = CooldownCompanion.db.profile.groups[newPanelId]
-                    if group then
-                        group.style.orientation = "vertical"
-                        if group.masqueEnabled then
-                            CooldownCompanion:ToggleGroupMasque(newPanelId, false)
-                        end
-                        CooldownCompanion:RefreshGroupFrame(newPanelId)
-                    end
-                    CS.selectedGroup = newPanelId
-                    CS.addingToPanelId = newPanelId
-                    CS.pendingEditBoxFocus = true
-                    CooldownCompanion:RefreshConfigPanel()
-                end
-            end
-
-            local function CreateTexturePanel()
-                local newPanelId = CooldownCompanion:CreatePanel(CS.selectedContainer, "textures")
-                if newPanelId then
-                    CS.selectedGroup = newPanelId
-                    CS.selectedButton = nil
-                    wipe(CS.selectedButtons)
-                    CS.addingToPanelId = newPanelId
-                    CS.pendingEditBoxFocus = true
-                    CooldownCompanion:RefreshConfigPanel()
-                end
-            end
-
-            local iconPanelBtn = AceGUI:Create("Button")
-            iconPanelBtn:SetText("Icon Panel")
-            iconPanelBtn:SetCallback("OnClick", CreateIconPanel)
-            iconPanelBtn.frame:SetParent(CS.col2ButtonBar)
-            iconPanelBtn.frame:ClearAllPoints()
-            iconPanelBtn.frame:SetPoint("TOPLEFT", CS.col2ButtonBar, "TOPLEFT", 0, -1)
-            iconPanelBtn.frame:SetWidth(panelBtnWidth)
-            iconPanelBtn.frame:SetHeight(28)
-            iconPanelBtn.frame:Show()
-            table.insert(CS.col2BarWidgets, iconPanelBtn)
-
-            local barPanelBtn = AceGUI:Create("Button")
-            barPanelBtn:SetText("Bar Panel")
-            barPanelBtn:SetCallback("OnClick", CreateBarPanel)
-            barPanelBtn.frame:SetParent(CS.col2ButtonBar)
-            barPanelBtn.frame:ClearAllPoints()
-            barPanelBtn.frame:SetPoint("LEFT", iconPanelBtn.frame, "RIGHT", 3, 0)
-            barPanelBtn.frame:SetWidth(panelBtnWidth)
-            barPanelBtn.frame:SetHeight(28)
-            barPanelBtn.frame:Show()
-            table.insert(CS.col2BarWidgets, barPanelBtn)
-
-            local otherPanelBtn = AceGUI:Create("Button")
-            otherPanelBtn:SetText("Extra")
-            otherPanelBtn:SetCallback("OnClick", function()
-                if not CS.col2PanelTypeMenu then
-                    CS.col2PanelTypeMenu = CreateFrame("Frame", "CDCCol2PanelTypeMenu", UIParent, "UIDropDownMenuTemplate")
-                end
-                UIDropDownMenu_Initialize(CS.col2PanelTypeMenu, function(self, level)
-                    level = level or 1
-                    if level ~= 1 then return end
-
-                    local info = UIDropDownMenu_CreateInfo()
-                    info.text = "Text Panel"
-                    info.notCheckable = true
-                    info.func = function()
-                        CloseDropDownMenus()
-                        CreateTextPanel()
-                    end
-                    UIDropDownMenu_AddButton(info, level)
-
-                    info = UIDropDownMenu_CreateInfo()
-                    info.text = "Texture Panel"
-                    info.notCheckable = true
-                    info.func = function()
-                        CloseDropDownMenus()
-                        CreateTexturePanel()
-                    end
-                    UIDropDownMenu_AddButton(info, level)
-                end, "MENU")
-                CS.col2PanelTypeMenu:SetFrameStrata("FULLSCREEN_DIALOG")
-                ToggleDropDownMenu(1, nil, CS.col2PanelTypeMenu, "cursor", 0, 0)
-            end)
-            otherPanelBtn.frame:SetParent(CS.col2ButtonBar)
-            otherPanelBtn.frame:ClearAllPoints()
-            otherPanelBtn.frame:SetPoint("LEFT", barPanelBtn.frame, "RIGHT", 3, 0)
-            otherPanelBtn.frame:SetWidth(panelBtnWidth)
-            otherPanelBtn.frame:SetHeight(28)
-            otherPanelBtn.frame:Show()
-            table.insert(CS.col2BarWidgets, otherPanelBtn)
-
-            -- Dynamic equal-width resize for panel buttons
-            CS.col2ButtonBar._topRowBtns = {
-                iconPanelBtn.frame,
-                barPanelBtn.frame,
-                otherPanelBtn.frame,
-            }
-            CS.col2ButtonBar:SetScript("OnSizeChanged", function(self, w)
-                if self._topRowBtns then
-                    local tw = (w - 6) / 3
-                    for _, f in ipairs(self._topRowBtns) do
-                        f:SetWidth(tw)
-                    end
-                end
-            end)
+            PopulateCol2PanelCreationBar(panelBtnWidth)
         end
 
         -- Collect sorted panels
@@ -1198,92 +1593,7 @@ local function RefreshColumn2()
         local cc = C_ClassColor.GetClassColor(select(2, UnitClass("player")))
 
         if panelCount == 0 then
-            local spacer = AceGUI:Create("SimpleGroup")
-            spacer:SetFullWidth(true)
-            spacer:SetHeight(20)
-            spacer.noAutoHeight = true
-            CS.col2Scroll:AddChild(spacer)
-
-            local header = AceGUI:Create("Label")
-            header:SetText(L["Every entry needs a panel."])
-            header:SetFullWidth(true)
-            header:SetJustifyH("CENTER")
-            header:SetFont((GameFontNormal:GetFont()), 15, "")
-            CS.col2Scroll:AddChild(header)
-
-            local descSpacer = AceGUI:Create("SimpleGroup")
-            descSpacer:SetFullWidth(true)
-            descSpacer:SetHeight(6)
-            descSpacer.noAutoHeight = true
-            CS.col2Scroll:AddChild(descSpacer)
-
-            local desc = AceGUI:Create("Label")
-            desc:SetText("Choose a panel type below to get started.")
-            desc:SetFullWidth(true)
-            desc:SetJustifyH("CENTER")
-            desc:SetFont((GameFontNormal:GetFont()), 12, "")
-            desc:SetColor(0.7, 0.7, 0.7)
-            CS.col2Scroll:AddChild(desc)
-
-            local helpSpacer = AceGUI:Create("SimpleGroup")
-            helpSpacer:SetFullWidth(true)
-            helpSpacer:SetHeight(10)
-            helpSpacer.noAutoHeight = true
-            CS.col2Scroll:AddChild(helpSpacer)
-
-            local divider = AceGUI:Create("Label")
-            divider:SetText(" ")
-            divider:SetFullWidth(true)
-            divider:SetHeight(2)
-            local dividerBar = divider.frame._cdcAccentBar
-            if not dividerBar then
-                dividerBar = divider.frame:CreateTexture(nil, "ARTWORK")
-                divider.frame._cdcAccentBar = dividerBar
-            end
-            dividerBar:SetHeight(1.5)
-            dividerBar:ClearAllPoints()
-            local dividerInset = math.floor(divider.frame:GetWidth() * 0.10 + 0.5)
-            dividerBar:SetPoint("LEFT", divider.frame, "LEFT", dividerInset, 1)
-            dividerBar:SetPoint("RIGHT", divider.frame, "RIGHT", -dividerInset, 1)
-            if cc then
-                dividerBar:SetColorTexture(cc.r, cc.g, cc.b, 0.8)
-            end
-            dividerBar:Show()
-            divider:SetCallback("OnRelease", function() dividerBar:Hide() end)
-            CS.col2Scroll:AddChild(divider)
-
-            local postDividerSpacer = AceGUI:Create("SimpleGroup")
-            postDividerSpacer:SetFullWidth(true)
-            postDividerSpacer:SetHeight(10)
-            postDividerSpacer.noAutoHeight = true
-            CS.col2Scroll:AddChild(postDividerSpacer)
-
-            local helpEntries = {
-                PANEL_TYPE_TOOLTIPS.icons,
-                PANEL_TYPE_TOOLTIPS.bars,
-                PANEL_TYPE_TOOLTIPS.text,
-                PANEL_TYPE_TOOLTIPS.textures,
-            }
-
-            for index, entry in ipairs(helpEntries) do
-                if index > 1 then
-                    local entrySpacer = AceGUI:Create("SimpleGroup")
-                    entrySpacer:SetFullWidth(true)
-                    entrySpacer:SetHeight(8)
-                    entrySpacer.noAutoHeight = true
-                    CS.col2Scroll:AddChild(entrySpacer)
-                end
-
-                local panelHelp = AceGUI:Create("Label")
-                panelHelp:SetText("|cffffffff" .. entry.title .. "|r - " .. entry.description)
-                panelHelp:SetFullWidth(true)
-                panelHelp:SetJustifyH("CENTER")
-                panelHelp:SetFont((GameFontNormal:GetFont()), 12, "")
-                panelHelp:SetColor(0.75, 0.75, 0.75)
-                CS.col2Scroll:AddChild(panelHelp)
-            end
-
-            CS.col2Scroll:DoLayout()
+            RenderColumn2NoPanelsState(cc)
             return
         end
 
@@ -1307,30 +1617,15 @@ local function RefreshColumn2()
                 isCollapsed = isCollapsed and true or false,
                 displayMode = panel.displayMode,
                 buttonRows = {},
+                addRowFrame = nil,
+                addInputFrame = nil,
+                manualAddButtonFrame = nil,
+                autoAddButtonFrame = nil,
             }
 
             -- Class-colored accent separator between panels
             if panelIndex > 1 then
-                local spacer = AceGUI:Create("Label")
-                spacer:SetText(" ")
-                spacer:SetFullWidth(true)
-                spacer:SetHeight(2)
-                local bar = spacer.frame._cdcAccentBar
-                if not bar then
-                    bar = spacer.frame:CreateTexture(nil, "ARTWORK")
-                    spacer.frame._cdcAccentBar = bar
-                end
-                bar:SetHeight(1.5)
-                bar:ClearAllPoints()
-                local barInset = math.floor(spacer.frame:GetWidth() * 0.10 + 0.5)
-                bar:SetPoint("LEFT", spacer.frame, "LEFT", barInset, 1)
-                bar:SetPoint("RIGHT", spacer.frame, "RIGHT", -barInset, 1)
-                if cc then
-                    bar:SetColorTexture(cc.r, cc.g, cc.b, 0.8)
-                end
-                bar:Show()
-                spacer:SetCallback("OnRelease", function() bar:Hide() end)
-                CS.col2Scroll:AddChild(spacer)
+                AddClassAccentSpacer(CS.col2Scroll, cc)
             end
 
             -- Bordered container for this panel
@@ -1410,29 +1705,12 @@ local function RefreshColumn2()
                 header.image:SetAlpha(0)
 
                 -- Mode badge overlay (pooled on widget, same pattern as old Column 1)
-                local modeBadge = header._cdcModeBadge
-                if not modeBadge then
-                    modeBadge = header.frame:CreateTexture(nil, "ARTWORK")
-                    header._cdcModeBadge = modeBadge
-                end
-                modeBadge:ClearAllPoints()
-                modeBadge:SetSize(16, 16)
-                if panel.displayMode == "bars" then
-                    modeBadge:SetAtlas("CreditsScreen-Assets-Buttons-Pause", false)
-                elseif panel.displayMode == "text" then
-                    modeBadge:SetAtlas("poi-workorders", false)
-                elseif panel.displayMode == "textures" then
-                    modeBadge:SetAtlas(TEXTURE_PANEL_HEADER_BADGE_ATLAS, false)
-                else
-                    modeBadge:SetAtlas("UI-QuestPoi-QuestNumber-SuperTracked", false)
-                end
-                modeBadge:Show()
                 header:SetFullWidth(true)
                 header:SetFontObject(GameFontHighlight)
                 header:SetJustifyH("CENTER")
                 -- Position badge to the left of centered text
                 local textW = header.label:GetStringWidth()
-                modeBadge:SetPoint("RIGHT", header.label, "CENTER", -(textW / 2) - 2, 0)
+                ConfigurePanelTypeBadge(header, panel.displayMode, textW)
                 header:SetHighlight("Interface\\QuestFrame\\UI-QuestTitleHighlight")
 
                 -- Anchor unlock badge (shown when panel is individually unlocked)
@@ -1927,7 +2205,9 @@ local function RefreshColumn2()
                     CleanRecycledEntry(entry)
                     local usable = CooldownCompanion:IsButtonUsable(buttonData)
 
-                    local entryName = GetConfigEntryDisplayName(buttonData, { includeDecorations = true })
+                    local entryName = IsTriggerPanelGroup(panel)
+                        and GetTriggerRowDisplayText(buttonData)
+                        or GetConfigEntryDisplayName(buttonData, { includeDecorations = true })
                     entry:SetText(entryName or ("Unknown " .. buttonData.type))
                     entry:SetImage(GetButtonIcon(buttonData))
                     entry:SetImageSize(32, 32)
@@ -1989,7 +2269,12 @@ local function RefreshColumn2()
                             soundBadge:Show()
                         end
 
-                        if buttonData.auraTracking then
+                        local showAuraBadge = buttonData.auraTracking
+                        if IsTriggerPanelGroup(panel) then
+                            showAuraBadge = TriggerRowNeedsAuraIndicator(buttonData)
+                        end
+
+                        if showAuraBadge then
                             auraBadge = EnsureRowBadge(rowFrame, "_cdcAuraBadge", "icon_trackedbuffs")
                             auraBadge:SetFrameLevel(rowBadgeLevel)
                             local auraReady, auraStatus = IsAuraTrackingConfigReady(buttonData, cdmEnabled)
@@ -2241,105 +2526,7 @@ local function RefreshColumn2()
                     })
                 end -- button loop
 
-                -- Inline add editbox (visible only when this panel is the active add target)
-                if CS.addingToPanelId == panelId and not (panel.displayMode == "textures" and btnCount >= 1) then
-                    panelMeta.hasInlineAdd = true
-                    local inputBox = AceGUI:Create("EditBox")
-                    if inputBox.editbox.Instructions then inputBox.editbox.Instructions:Hide() end
-                    inputBox:SetLabel("")
-                    inputBox:SetText(CS.newInput)
-                    inputBox:DisableButton(true)
-                    inputBox:SetFullWidth(true)
-                    inputBox:SetCallback("OnEnterPressed", function(widget, event, text)
-                        if CS.ConsumeAutocompleteEnter() then return end
-                        CS.HideAutocomplete()
-                        CS.newInput = text
-                        if CS.newInput ~= "" and CS.addingToPanelId then
-                            local addTargetGroupId = CS.addingToPanelId
-                            CS.selectedGroup = addTargetGroupId
-                            if TryAdd(CS.newInput) then
-                                CS.newInput = ""
-                                local targetGroup = CooldownCompanion.db.profile.groups[addTargetGroupId]
-                                if not (targetGroup and targetGroup.displayMode == "textures") then
-                                    CS.pendingEditBoxFocus = true  -- re-focus for rapid successive adds
-                                end
-                                CooldownCompanion:RefreshConfigPanel()
-                            end
-                        end
-                    end)
-                    inputBox:SetCallback("OnTextChanged", function(widget, event, text)
-                        CS.newInput = text
-                        if text and #text >= 1 then
-                            local results = SearchAutocomplete(text)
-                            CS.ShowAutocompleteResults(results, widget, OnAutocompleteSelect)
-                        else
-                            CS.HideAutocomplete()
-                        end
-                    end)
-                    inputBox.editbox:SetPoint("BOTTOMRIGHT", 1, 0)
-                    CS.SetupAutocompleteKeyHandler(inputBox)
-                    panelContainer:AddChild(inputBox)
-
-                    if CS.pendingEditBoxFocus then
-                        CS.pendingEditBoxFocus = false
-                        C_Timer.After(0, function()
-                            if inputBox.editbox then
-                                inputBox:SetFocus()
-                            end
-                        end)
-                    end
-
-                    local addSpacer = AceGUI:Create("SimpleGroup")
-                    addSpacer:SetFullWidth(true)
-                    addSpacer:SetHeight(2)
-                    addSpacer.noAutoHeight = true
-                    panelContainer:AddChild(addSpacer)
-
-                    local addRow = AceGUI:Create("SimpleGroup")
-                    addRow:SetFullWidth(true)
-                    addRow:SetLayout("Flow")
-
-                    local manualAddBtn = AceGUI:Create("Button")
-                    manualAddBtn:SetText("Manual Add")
-                    manualAddBtn:SetRelativeWidth(panel.displayMode == "textures" and 1 or 0.49)
-                    manualAddBtn:SetCallback("OnClick", function()
-                        if CS.newInput ~= "" and CS.addingToPanelId then
-                            local addTargetGroupId = CS.addingToPanelId
-                            CS.selectedGroup = addTargetGroupId
-                            if TryAdd(CS.newInput) then
-                                CS.newInput = ""
-                                local targetGroup = CooldownCompanion.db.profile.groups[addTargetGroupId]
-                                if not (targetGroup and targetGroup.displayMode == "textures") then
-                                    CS.pendingEditBoxFocus = true  -- re-focus for rapid successive adds
-                                end
-                                CooldownCompanion:RefreshConfigPanel()
-                            end
-                        end
-                    end)
-                    addRow:AddChild(manualAddBtn)
-
-                    if panel.displayMode ~= "textures" then
-                        local autoAddBtn = AceGUI:Create("Button")
-                        autoAddBtn:SetText("Auto Add")
-                        autoAddBtn:SetRelativeWidth(0.49)
-                        autoAddBtn:SetCallback("OnClick", function()
-                            CS.selectedGroup = CS.addingToPanelId
-                            OpenAutoAddFlow()
-                        end)
-                        autoAddBtn:SetCallback("OnEnter", function(widget)
-                            GameTooltip:SetOwner(widget.frame, "ANCHOR_TOP")
-                            GameTooltip:AddLine("Auto Add")
-                            GameTooltip:AddLine("Auto-add from Action Bars, Spellbook, or CDM Auras.", 1, 1, 1, true)
-                            GameTooltip:Show()
-                        end)
-                        autoAddBtn:SetCallback("OnLeave", function()
-                            GameTooltip:Hide()
-                        end)
-                        addRow:AddChild(autoAddBtn)
-                    end
-
-                    panelContainer:AddChild(addRow)
-                end
+                BuildInlineAddControls(panelContainer, panelMeta, panel, panelId, btnCount)
             end -- not collapsed
             table.insert(col2PanelMetas, panelMeta)
         end -- panel loop

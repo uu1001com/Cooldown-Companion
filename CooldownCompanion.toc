@@ -54,6 +54,10 @@ Core\Init.lua
 Core\Defaults.lua
 Core\SpellActivationOverlayData.lua
 Core\AuraTextures.lua
+Core\AuraTexturesBuiltins.lua
+Core\AuraTexturesPicker.lua
+Core\AuraTexturesEffects.lua
+Core\AuraTexturesDisplay.lua
 Core\ChangelogData.lua
 Core\Changelog.lua
 Core\ScopedSettings.lua
@@ -85,6 +89,7 @@ OtherBars\ResourceBarVisuals.lua
 OtherBars\ResourceBar.lua
 Core\FrameAnchoring.lua
 Config\State.lua
+Config\Tutorial.lua
 Config\ExportCodec.lua
 Config\Popups.lua
 Config\Diagnostics.lua
@@ -97,6 +102,7 @@ Config\Column1.lua
 Config\Column2.lua
 Config\Column3.lua
 Config\Column4.lua
+Config\PanelChangelogOverlay.lua
 Config\Panel.lua
 ConfigSettings\Helpers.lua
 ConfigSettings\SectionBuilders.lua
@@ -106,6 +112,8 @@ ConfigSettings\ResourceBarLayoutOrderPreview.lua
 ConfigSettings\ResourceBarPanels.lua
 ConfigSettings\FrameAnchoringPanels.lua
 ConfigSettings\AuraTexturePicker.lua
+ConfigSettings\ButtonSettingsMultiSelect.lua
+ConfigSettings\ButtonSettingsOverrides.lua
 ConfigSettings\ButtonSettings.lua
 ConfigSettings\ButtonConditions.lua
 ConfigSettings\BarModeTabs.lua

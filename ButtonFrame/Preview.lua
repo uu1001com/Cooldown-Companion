@@ -28,6 +28,7 @@ local readyPreviewTokens = {}
 local readyButtonPreviewTokens = {}
 local kphPreviewTokens = {}
 local textureIndicatorPreviewTokens = {}
+local triggerEffectPreviewTokens = {}
 
 local function BumpButtonPreviewToken(tokenStore, groupId, buttonIndex)
     local groupTokens = tokenStore[groupId]
@@ -459,6 +460,44 @@ function CooldownCompanion:ClearAllTextureIndicatorPreviews()
     end
 end
 
+function CooldownCompanion:SetTriggerPanelEffectsPreview(groupId, show)
+    local frame = self.groupFrames[groupId]
+    if not frame then
+        return
+    end
+
+    if not show then
+        triggerEffectPreviewTokens[groupId] = (triggerEffectPreviewTokens[groupId] or 0) + 1
+    end
+
+    for _, button in ipairs(frame.buttons) do
+        button._triggerEffectsPreview = show or nil
+        if button.UpdateCooldown then
+            button:UpdateCooldown()
+        else
+            self:UpdateAuraTextureVisual(button)
+        end
+    end
+end
+
+function CooldownCompanion:PlayTriggerPanelEffectsPreview(groupId, durationSeconds)
+    PlayGroupPreview(self, groupId, durationSeconds, triggerEffectPreviewTokens, self.SetTriggerPanelEffectsPreview)
+end
+
+function CooldownCompanion:ClearAllTriggerPanelEffectPreviews()
+    wipe(triggerEffectPreviewTokens)
+    for _, frame in pairs(self.groupFrames) do
+        for _, button in ipairs(frame.buttons) do
+            button._triggerEffectsPreview = nil
+            if button.UpdateCooldown then
+                button:UpdateCooldown()
+            else
+                self:UpdateAuraTextureVisual(button)
+            end
+        end
+    end
+end
+
 --------------------------------------------------------------------------------
 -- Aura Texture Picker Preview
 --------------------------------------------------------------------------------
@@ -466,6 +505,22 @@ end
 function CooldownCompanion:SetAuraTexturePickerPreview(groupId, buttonIndex, selection)
     local frame = self.groupFrames[groupId]
     if not frame then
+        return
+    end
+
+    local group = self.db and self.db.profile and self.db.profile.groups and self.db.profile.groups[groupId]
+    if group and group.displayMode == "trigger" and buttonIndex == nil then
+        for _, button in ipairs(frame.buttons) do
+            button._auraTexturePreviewSelection = selection and CopyTable(selection) or nil
+        end
+        local driverButton = frame.buttons and frame.buttons[1] or nil
+        if driverButton then
+            if driverButton.UpdateCooldown then
+                driverButton:UpdateCooldown()
+            else
+                self:UpdateAuraTextureVisual(driverButton)
+            end
+        end
         return
     end
 

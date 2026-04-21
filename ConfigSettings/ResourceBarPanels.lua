@@ -22,6 +22,7 @@ local AddColorPicker = ST._AddColorPicker
 local AddAnchorDropdown = ST._AddAnchorDropdown
 local HookSliderEditBox = ST._HookSliderEditBox
 local BuildAlphaControls = ST._BuildAlphaControls
+local BuildIndependentAnchorTargetRow = ST._BuildIndependentAnchorTargetRow
 local BuildPandemicBarControls = ST._BuildPandemicBarControls
 local BuildBarActiveAuraControls = ST._BuildBarActiveAuraControls
 local BuildBarAuraPulseControls = ST._BuildBarAuraPulseControls
@@ -78,6 +79,16 @@ local DEFAULT_ESSENCE_RECHARGING_COLOR = RB.DEFAULT_ESSENCE_RECHARGING_COLOR
 local DEFAULT_ESSENCE_MAX_COLOR = RB.DEFAULT_ESSENCE_MAX_COLOR
 local GetResolvedCustomAuraBarAuraUnit = RB.GetResolvedCustomAuraBarAuraUnit
 local EnsureCustomAuraBarAuraUnit = RB.EnsureCustomAuraBarAuraUnit
+
+local function IsHeroSpecProxyCondition(cond)
+    return type(cond) == "table"
+        and cond.nodeID ~= nil
+        and cond.heroSubTreeID ~= nil
+        and cond.entryID == nil
+        and type(cond.name) == "string"
+        and type(cond.heroName) == "string"
+        and cond.name == cond.heroName
+end
 local RefreshCustomAuraBarAuraUnitForSpell = RB.RefreshCustomAuraBarAuraUnitForSpell
 
 -- Imports from ResourceBarPanelsHelpers
@@ -404,83 +415,15 @@ local function BuildResourceBarPositioningPanel(container)
             end)
             container:AddChild(widthSlider)
 
-            -- Anchor to Frame (editbox + pick button row)
-            local anchorRow = AceGUI:Create("SimpleGroup")
-            anchorRow:SetFullWidth(true)
-            anchorRow:SetLayout("Flow")
-
-            local anchorBox = AceGUI:Create("EditBox")
-            if anchorBox.editbox.Instructions then anchorBox.editbox.Instructions:Hide() end
-            anchorBox:SetLabel(L["Anchor to Frame"])
-            local currentRelativeTo = anchor.relativeTo
-            if not currentRelativeTo or currentRelativeTo == "UIParent" then currentRelativeTo = "" end
-            anchorBox:SetText(currentRelativeTo)
-            anchorBox:SetRelativeWidth(0.68)
-            anchorBox:SetCallback("OnEnterPressed", function(widget, event, text)
-                if text == "" then
-                    local wasAnchored = anchor.relativeTo and anchor.relativeTo ~= "UIParent"
-                    if wasAnchored then
-                        anchor.point = "CENTER"
-                        anchor.relativeTo = nil
-                        anchor.relativePoint = "CENTER"
-                        anchor.x = 0
-                        anchor.y = 0
-                    else
-                        anchor.relativeTo = nil
-                    end
-                else
-                    local targetFrame = _G[text]
-                    if not targetFrame then
-                        CooldownCompanion:Print("Frame '" .. text .. "' not found.")
-                        CooldownCompanion:RefreshConfigPanel()
-                        return
-                    end
-                    anchor.relativeTo = text
-                end
-                CooldownCompanion:ApplyResourceBars()
-                CooldownCompanion:UpdateAnchorStacking()
-                CooldownCompanion:RefreshConfigPanel()
-            end)
-            anchorRow:AddChild(anchorBox)
-
-            local pickBtn = AceGUI:Create("Button")
-            pickBtn:SetText(L["Pick"])
-            pickBtn:SetRelativeWidth(0.24)
-            pickBtn:SetCallback("OnClick", function()
-                CS.StartPickFrame(function(name)
-                    if CS.configFrame then
-                        CS.configFrame.frame:Show()
-                    end
-                    if name then
-                        anchor.point = "TOPLEFT"
-                        anchor.relativeTo = name
-                        anchor.relativePoint = "BOTTOMLEFT"
-                        anchor.x = 0
-                        anchor.y = -5
-                        CooldownCompanion:ApplyResourceBars()
-                        CooldownCompanion:UpdateAnchorStacking()
-                    end
-                    CooldownCompanion:RefreshConfigPanel()
-                end)
-            end)
-            anchorRow:AddChild(pickBtn)
-            container:AddChild(anchorRow)
-
-            pickBtn.frame:SetScript("OnUpdate", function(self)
-                self:SetScript("OnUpdate", nil)
-                local p, rel, rp, xOfs, yOfs = self:GetPoint(1)
-                if yOfs then
-                    self:SetPoint(p, rel, rp, xOfs, yOfs - 2)
-                end
-            end)
-
             local function refreshResourceBarAnchor()
                 CooldownCompanion:ApplyResourceBars()
                 CooldownCompanion:UpdateAnchorStacking()
             end
 
-            AddAnchorDropdown(container, anchor, "point", "CENTER", refreshResourceBarAnchor, L["Anchor Point"])
-            AddAnchorDropdown(container, anchor, "relativePoint", "CENTER", refreshResourceBarAnchor, L["Relative Point"])
+            BuildIndependentAnchorTargetRow(container, anchor, refreshResourceBarAnchor)
+
+            AddAnchorDropdown(container, anchor, "point", "CENTER", refreshResourceBarAnchor, "Anchor Point")
+            AddAnchorDropdown(container, anchor, "relativePoint", "CENTER", refreshResourceBarAnchor, "Relative Point")
 
             local xSlider = AceGUI:Create("Slider")
             xSlider:SetLabel(L["X Offset"])
@@ -1389,6 +1332,29 @@ local function EnsureCustomAuraIndependentConfig(cab, settings)
     cab.independentSize.height = ClampCustomAuraIndependentDimension(cab.independentSize.height, settings and (settings.barHeight or settings.barWidth or 12) or 12)
 end
 
+local function ApplyCustomAuraBarPanelChanges(opts)
+    CooldownCompanion:ApplyResourceBars()
+    if opts and opts.updateAnchors then
+        CooldownCompanion:UpdateAnchorStacking()
+    end
+    if opts and opts.refreshConfig then
+        CooldownCompanion:RefreshConfigPanel()
+    end
+    if opts and opts.refreshLayoutPreview then
+        RefreshLayoutOrderPreview()
+    end
+end
+
+local function SetCustomAuraBarTrackedSpell(customBars, capturedIdx, spellId)
+    customBars[capturedIdx].spellID = spellId
+    if spellId then
+        customBars[capturedIdx].label = C_Spell.GetSpellName(spellId) or ""
+    else
+        customBars[capturedIdx].label = ""
+    end
+    RefreshCustomAuraBarAuraUnitForSpell(customBars[capturedIdx], spellId)
+end
+
 local function BuildCustomAuraBarAnchorSettings(container, customBars, settings, capturedIdx)
     local cab = customBars[capturedIdx]
     if not cab then return end
@@ -1625,9 +1591,10 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
         if val and not customBars[capturedIdx].trackingMode then
             customBars[capturedIdx].trackingMode = "active"
         end
-        CooldownCompanion:ApplyResourceBars()
-        CooldownCompanion:UpdateAnchorStacking()
-        CooldownCompanion:RefreshConfigPanel()
+        ApplyCustomAuraBarPanelChanges({
+            updateAnchors = true,
+            refreshConfig = true,
+        })
     end)
     container:AddChild(enableCab)
 
@@ -1661,9 +1628,10 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                 CS.customAuraBarSubTabs[capturedIdx] = nil
             end
 
-            CooldownCompanion:ApplyResourceBars()
-            CooldownCompanion:UpdateAnchorStacking()
-            CooldownCompanion:RefreshConfigPanel()
+            ApplyCustomAuraBarPanelChanges({
+                updateAnchors = true,
+                refreshConfig = true,
+            })
         end)
         container:AddChild(independentCb)
     end
@@ -1765,12 +1733,11 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
             local function onAuraBarSelect(entry)
                 CS.HideAutocomplete()
                 local bars = CooldownCompanion:GetSpecCustomAuraBars()
-                bars[capturedIdx].spellID = entry.id
-                bars[capturedIdx].label = C_Spell.GetSpellName(entry.id) or ""
-                RefreshCustomAuraBarAuraUnitForSpell(bars[capturedIdx], entry.id)
-                CooldownCompanion:ApplyResourceBars()
-                CooldownCompanion:UpdateAnchorStacking()
-                CooldownCompanion:RefreshConfigPanel()
+                SetCustomAuraBarTrackedSpell(bars, capturedIdx, entry.id)
+                ApplyCustomAuraBarPanelChanges({
+                    updateAnchors = true,
+                    refreshConfig = true,
+                })
             end
 
             spellEdit:SetCallback("OnEnterPressed", function(widget, event, text)
@@ -1779,16 +1746,11 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                 text = text:gsub("%s", "")
                 local id = tonumber(text)
                 local bars = CooldownCompanion:GetSpecCustomAuraBars()
-                bars[capturedIdx].spellID = id
-                if id then
-                    bars[capturedIdx].label = C_Spell.GetSpellName(id) or ""
-                else
-                    bars[capturedIdx].label = ""
-                end
-                RefreshCustomAuraBarAuraUnitForSpell(bars[capturedIdx], id)
-                CooldownCompanion:ApplyResourceBars()
-                CooldownCompanion:UpdateAnchorStacking()
-                CooldownCompanion:RefreshConfigPanel()
+                SetCustomAuraBarTrackedSpell(bars, capturedIdx, id)
+                ApplyCustomAuraBarPanelChanges({
+                    updateAnchors = true,
+                    refreshConfig = true,
+                })
             end)
             spellEdit:SetCallback("OnTextChanged", function(widget, event, text)
                 if text and #text >= 1 then
@@ -1819,9 +1781,10 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                     return
                 end
                 EnsureCustomAuraBarAuraUnit(customBars[capturedIdx], customBars[capturedIdx].spellID, val, true)
-                CooldownCompanion:ApplyResourceBars()
-                CooldownCompanion:UpdateAnchorStacking()
-                CooldownCompanion:RefreshConfigPanel()
+                ApplyCustomAuraBarPanelChanges({
+                    updateAnchors = true,
+                    refreshConfig = true,
+                })
             end)
             container:AddChild(auraUnitDrop)
             CreateInfoButton(auraUnitDrop.frame, auraUnitDrop.label, "LEFT", "RIGHT",
@@ -1846,9 +1809,10 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
             trackDrop:SetFullWidth(true)
             trackDrop:SetCallback("OnValueChanged", function(widget, event, val)
                 customBars[capturedIdx].trackingMode = val
-                CooldownCompanion:ApplyResourceBars()
-                CooldownCompanion:UpdateAnchorStacking()
-                CooldownCompanion:RefreshConfigPanel()
+                ApplyCustomAuraBarPanelChanges({
+                    updateAnchors = true,
+                    refreshConfig = true,
+                })
             end)
             container:AddChild(trackDrop)
 
@@ -1865,9 +1829,10 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                     customBars[capturedIdx].maxStacks = val
                 end
                 widget:SetText(tostring(customBars[capturedIdx].maxStacks or 1))
-                CooldownCompanion:ApplyResourceBars()
-                CooldownCompanion:UpdateAnchorStacking()
-                RefreshLayoutOrderPreview()
+                ApplyCustomAuraBarPanelChanges({
+                    updateAnchors = true,
+                    refreshLayoutPreview = true,
+                })
             end)
             container:AddChild(maxEdit)
             end
@@ -1885,9 +1850,10 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
             modeDrop:SetFullWidth(true)
             modeDrop:SetCallback("OnValueChanged", function(widget, event, val)
                 customBars[capturedIdx].displayMode = val
-                CooldownCompanion:ApplyResourceBars()
-                CooldownCompanion:UpdateAnchorStacking()
-                CooldownCompanion:RefreshConfigPanel()
+                ApplyCustomAuraBarPanelChanges({
+                    updateAnchors = true,
+                    refreshConfig = true,
+                })
             end)
             container:AddChild(modeDrop)
             end
@@ -2373,7 +2339,9 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                     local summaryLabel = AceGUI:Create("Label")
                     if condCount > 0 then
                         local firstCond = conditions[1]
-                        local displayIcon = firstCond.spellID and C_Spell.GetSpellTexture(firstCond.spellID)
+                        local displayIcon = not IsHeroSpecProxyCondition(firstCond)
+                            and firstCond.spellID
+                            and C_Spell.GetSpellTexture(firstCond.spellID)
                         if displayIcon then
                             summaryLabel:SetImage(displayIcon, 0.08, 0.92, 0.08, 0.92)
                             summaryLabel:SetImageSize(16, 16)
@@ -2400,7 +2368,9 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                     local currentHeroSubTreeID = CooldownCompanion._currentHeroSpecId
                     for _, cond in ipairs(conditions) do
                         local condLabel = AceGUI:Create("Label")
-                        local displayIcon = cond.spellID and C_Spell.GetSpellTexture(cond.spellID)
+                        local displayIcon = not IsHeroSpecProxyCondition(cond)
+                            and cond.spellID
+                            and C_Spell.GetSpellTexture(cond.spellID)
                         if displayIcon then
                             condLabel:SetImage(displayIcon, 0.08, 0.92, 0.08, 0.92)
                             condLabel:SetImageSize(16, 16)

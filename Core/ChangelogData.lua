@@ -7,6 +7,9 @@ local ADDON_NAME, ST = ...
 
 ST._changelogData = {
     order = {
+        "1.13",
+        "1.12.5",
+        "1.12.4",
         "1.12.3",
         "1.12.2",
         "1.12.1",
@@ -18,6 +21,39 @@ ST._changelogData = {
         "1.10.25",
     },
     entries = {
+        ["1.13"] = {
+            markdown = [[
+## New Features
+
+- **Trigger panels for compound alerts:** You can now build a trigger panel that only appears when every enabled entry meets its conditions, giving you one cleaner signal for more complex setups.
+  - Combine multiple checks on the same entry, including cooldowns, buffs, debuffs, charges, range, count text, and similar conditions, without needing duplicate rows.
+  - Choose whether the triggered result shows as a texture, a manual icon, or custom text.
+  - Add sound alerts and active effects like Pulse, Color Shift, Bounce, and Shrink / Expand where they fit.
+  - Preview the display more cleanly while editing, and get clearer tooltips and wording so trigger panel setup is easier to understand.
+]],
+        },
+        ["1.12.5"] = {
+            markdown = [[
+## Bug Fixes
+
+- **Outdoor delve load conditions:** Delve-based load conditions now recognize outdoor delves more reliably, so panels meant to appear there should show and hide correctly.
+]],
+        },
+        ["1.12.4"] = {
+            markdown = [[
+## New Features
+
+- **First time user tutorial:** New setups now get a guided walkthrough for creating their first icon panel and adding a spell. You can replay the tutorial later from the gear menu in the top right of the config.
+
+## Polish | QoL
+
+- **Player or target choice for resource aura overlays:** Resource aura overlays also received the unit specification that has been applied to aura tracking in panels and custom aura bars in order to protect the display from showing incorrect information.
+
+## Bug Fixes
+
+- **Target-based standalone auras:** Standalone aura entries that should watch your target now default there more reliably instead of being set to yourself by mistake, like Shatter for Frost Mage.
+]],
+        },
         ["1.12.3"] = {
             markdown = [[
 ## Polish | QoL

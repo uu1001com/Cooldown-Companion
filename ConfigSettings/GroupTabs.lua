@@ -24,6 +24,9 @@ local AddFontControls = ST._AddFontControls
 local AddOffsetSliders = ST._AddOffsetSliders
 local HookSliderEditBox = ST._HookSliderEditBox
 local BuildAlphaControls = ST._BuildAlphaControls
+local OpenTriggerPanelIconPicker = ST._OpenTriggerPanelIconPicker
+local ApplyEdgePositions = ST._ApplyEdgePositions
+local ApplyIconTexCoord = ST._ApplyIconTexCoord
 
 -- Imports from SectionBuilders.lua
 local BuildCooldownTextControls = ST._BuildCooldownTextControls
@@ -164,6 +167,29 @@ local TEXTURE_INDICATOR_SECTION_DEFS = {
 
 local function GetTextureIndicatorStore(group)
     return CooldownCompanion:GetTexturePanelIndicatorSettings(group, true)
+end
+
+local TRIGGER_PANEL_EFFECT_DEFS = {
+    pulse = {
+        label = "Pulse",
+        speedLabel = "Pulse Duration",
+    },
+    colorShift = {
+        label = "Color Shift",
+        speedLabel = "Shift Duration",
+    },
+    shrinkExpand = {
+        label = "Shrink / Expand",
+        speedLabel = "Cycle Duration",
+    },
+    bounce = {
+        label = "Bounce",
+        speedLabel = "Bounce Duration",
+    },
+}
+
+local function GetTriggerPanelEffectStore(group)
+    return CooldownCompanion:GetTriggerPanelEffectSettings(group, true)
 end
 
 local function GetTextureIndicatorUsedEffects(indicators, currentSectionKey)
@@ -400,9 +426,26 @@ local function AttachLiveTextureSliderRefresh(sliderWidget, applyValue)
     end)
 end
 
-local function GetTexturePanelCommitCallback(group)
+local function GetStandaloneTextureSettings(group, createIfMissing)
+    if not group then
+        return nil
+    end
+    if group.displayMode == "trigger" then
+        return CooldownCompanion:GetTriggerPanelSignalSettings(group, createIfMissing)
+    end
+    return CooldownCompanion:GetTexturePanelSettings(group, createIfMissing)
+end
+
+local function GetStandaloneTextureSelectionLabel(group, settings)
+    if not settings or not settings.sourceType then
+        return nil
+    end
+    return settings.label or tostring(settings.sourceValue)
+end
+
+local function GetStandaloneTextureCommitCallback(group)
     return function(selection)
-        local liveSettings = CooldownCompanion:GetTexturePanelSettings(group, true)
+        local liveSettings = GetStandaloneTextureSettings(group, true)
         if not liveSettings then
             return
         end
@@ -425,16 +468,22 @@ local function GetTexturePanelCommitCallback(group)
     end
 end
 
-local function OpenOrRebindTexturePanelPicker(group, settings, forceOpen)
-    if not (group and group.buttons and group.buttons[1] and CS.StartPickAuraTexture) then
+local function OpenOrRebindStandaloneTexturePicker(group, settings, forceOpen)
+    if not (group and CS.StartPickAuraTexture) then
         return
     end
 
+    local buttonIndex
+    if group.displayMode == "trigger" then
+        buttonIndex = nil
+    else
+        buttonIndex = group.buttons and group.buttons[1] and 1 or nil
+    end
     local pickerOpts = {
         groupId = CS.selectedGroup,
-        buttonIndex = 1,
+        buttonIndex = buttonIndex,
         initialSelection = settings and settings.sourceType and settings or nil,
-        callback = GetTexturePanelCommitCallback(group),
+        callback = GetStandaloneTextureCommitCallback(group),
     }
 
     if forceOpen or not (CS.IsAuraTexturePickerOpen and CS.IsAuraTexturePickerOpen()) then
@@ -442,6 +491,385 @@ local function OpenOrRebindTexturePanelPicker(group, settings, forceOpen)
     elseif CS.RebindPickAuraTexture then
         CS.RebindPickAuraTexture(pickerOpts)
     end
+end
+
+local TRIGGER_DISPLAY_TYPE_OPTIONS = {
+    texture = "Texture",
+    icon = "Icon",
+    text = "Text",
+}
+
+local TRIGGER_DISPLAY_TYPE_ORDER = {
+    "texture",
+    "icon",
+    "text",
+}
+
+local function RefreshStandaloneTriggerDisplay(groupId)
+    local groupFrame = CooldownCompanion.groupFrames and CooldownCompanion.groupFrames[groupId]
+    local button = groupFrame and groupFrame.buttons and groupFrame.buttons[1] or nil
+    if button then
+        CooldownCompanion:UpdateAuraTextureVisual(button)
+    else
+        CooldownCompanion:RefreshAllAuraTextureVisuals()
+    end
+end
+
+local function AddTriggerDisplayTypeDropdown(container, group)
+    local displayDrop = AceGUI:Create("Dropdown")
+    displayDrop:SetLabel("Display Type")
+    displayDrop:SetList(TRIGGER_DISPLAY_TYPE_OPTIONS, TRIGGER_DISPLAY_TYPE_ORDER)
+    displayDrop:SetValue(CooldownCompanion:GetTriggerPanelDisplayType(group, true))
+    displayDrop:SetFullWidth(true)
+    displayDrop:SetCallback("OnValueChanged", function(_, _, value)
+        local triggerSettings = group.triggerSettings or {}
+        group.triggerSettings = triggerSettings
+        triggerSettings.displayType = value or "texture"
+        CooldownCompanion:ClearAllAuraTexturePickerPreviews()
+        RefreshStandaloneTriggerDisplay(CS.selectedGroup)
+        CooldownCompanion:RefreshConfigPanel()
+    end)
+    container:AddChild(displayDrop)
+end
+
+local function CreateTriggerPreviewCanvas(container, height)
+    local previewGroup = AceGUI:Create("SimpleGroup")
+    previewGroup:SetFullWidth(true)
+    previewGroup:SetHeight(height)
+    previewGroup:SetLayout("Fill")
+    container:AddChild(previewGroup)
+
+    local previewFrame = CreateFrame("Frame", nil, previewGroup.frame)
+    previewFrame:SetPoint("TOP", previewGroup.frame, "TOP", 0, -2)
+    previewFrame:SetSize(TEXTURE_PREVIEW_WIDTH, height - 4)
+    appearanceTabElements[#appearanceTabElements + 1] = previewFrame
+
+    local previewShade = previewFrame:CreateTexture(nil, "BACKGROUND")
+    previewShade:SetAllPoints()
+    previewShade:SetColorTexture(0, 0, 0, 0.42)
+
+    return previewFrame
+end
+
+local function FitPreviewContentToCanvas(contentFrame, canvasFrame, contentWidth, contentHeight, padding)
+    if not contentFrame or not canvasFrame then
+        return
+    end
+
+    padding = padding or 8
+    local canvasWidth = canvasFrame:GetWidth() or TEXTURE_PREVIEW_WIDTH
+    local canvasHeight = canvasFrame:GetHeight() or 0
+    local availableWidth = math_max(1, canvasWidth - (padding * 2))
+    local availableHeight = math_max(1, canvasHeight - (padding * 2))
+    local widthScale = availableWidth / math_max(1, contentWidth or 1)
+    local heightScale = availableHeight / math_max(1, contentHeight or 1)
+    local scale = math_min(1, widthScale, heightScale)
+    contentFrame:SetScale(scale)
+end
+
+local function BuildTriggerIconAppearanceTab(container, group)
+    local settings = CooldownCompanion:GetTriggerPanelIconSettings(group, true)
+    local groupId = CS.selectedGroup
+
+    local heading = AceGUI:Create("Heading")
+    heading:SetText("Trigger Icon")
+    ColorHeading(heading)
+    heading:SetFullWidth(true)
+    container:AddChild(heading)
+
+    local previewFrame = CreateTriggerPreviewCanvas(container, TEXTURE_PREVIEW_HEIGHT + 4)
+    local iconHolder = CreateFrame("Frame", nil, previewFrame)
+    iconHolder:SetPoint("CENTER")
+    iconHolder:SetSize(DEFAULT_TEXTURE_PREVIEW_SIZE, DEFAULT_TEXTURE_PREVIEW_SIZE)
+
+    local previewBg = iconHolder:CreateTexture(nil, "BACKGROUND")
+    previewBg:SetAllPoints()
+
+    local previewIcon = iconHolder:CreateTexture(nil, "ARTWORK")
+    local previewBorders = {}
+    for index = 1, 4 do
+        previewBorders[index] = iconHolder:CreateTexture(nil, "OVERLAY")
+    end
+    local clearBtn
+
+    local placeholder = previewFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    placeholder:SetPoint("CENTER")
+    placeholder:SetJustifyH("CENTER")
+    placeholder:SetText("No icon selected")
+    placeholder:SetTextColor(0.65, 0.65, 0.65, 1)
+
+    local function RefreshIconPreview()
+        local width = settings.maintainAspectRatio and (settings.buttonSize or ST.BUTTON_SIZE)
+            or (settings.iconWidth or settings.buttonSize or ST.BUTTON_SIZE)
+        local height = settings.maintainAspectRatio and (settings.buttonSize or ST.BUTTON_SIZE)
+            or (settings.iconHeight or settings.buttonSize or ST.BUTTON_SIZE)
+        local borderSize = settings.borderSize or ST.DEFAULT_BORDER_SIZE
+        local bgColor = settings.backgroundColor or { 0, 0, 0, 0.5 }
+        local borderColor = settings.borderColor or { 0, 0, 0, 1 }
+        local tintColor = settings.iconTintColor or { 1, 1, 1, 1 }
+        local hasIcon = ST._IsValidIconTexture(settings.manualIcon)
+
+        iconHolder:SetSize(width, height)
+        previewIcon:ClearAllPoints()
+        previewIcon:SetPoint("TOPLEFT", borderSize, -borderSize)
+        previewIcon:SetPoint("BOTTOMRIGHT", -borderSize, borderSize)
+
+        if hasIcon then
+            previewBg:SetColorTexture(bgColor[1] or 0, bgColor[2] or 0, bgColor[3] or 0, bgColor[4] ~= nil and bgColor[4] or 0.5)
+            previewBg:Show()
+            for _, border in ipairs(previewBorders) do
+                border:SetColorTexture(borderColor[1] or 0, borderColor[2] or 0, borderColor[3] or 0, borderColor[4] ~= nil and borderColor[4] or 1)
+                border:Show()
+            end
+            ApplyEdgePositions(previewBorders, iconHolder, borderSize)
+            previewIcon:SetTexture(settings.manualIcon)
+            previewIcon:SetVertexColor(tintColor[1] or 1, tintColor[2] or 1, tintColor[3] or 1, tintColor[4] ~= nil and tintColor[4] or 1)
+            ApplyIconTexCoord(previewIcon, width, height)
+            previewIcon:Show()
+            placeholder:Hide()
+        else
+            previewBg:Hide()
+            for _, border in ipairs(previewBorders) do
+                border:Hide()
+            end
+            previewIcon:Hide()
+            placeholder:Show()
+        end
+
+        if clearBtn then
+            clearBtn:SetDisabled(not hasIcon)
+        end
+
+        RefreshStandaloneTriggerDisplay(groupId)
+    end
+
+    local actionRow = AceGUI:Create("SimpleGroup")
+    actionRow:SetFullWidth(true)
+    actionRow:SetLayout("Flow")
+    container:AddChild(actionRow)
+
+    local browseBtn = AceGUI:Create("Button")
+    browseBtn:SetText("Choose Icon")
+    browseBtn:SetRelativeWidth(0.49)
+    browseBtn:SetCallback("OnClick", function()
+        OpenTriggerPanelIconPicker(groupId)
+    end)
+    actionRow:AddChild(browseBtn)
+
+    clearBtn = AceGUI:Create("Button")
+    clearBtn:SetText("Clear")
+    clearBtn:SetRelativeWidth(0.49)
+    clearBtn:SetDisabled(not ST._IsValidIconTexture(settings.manualIcon))
+    clearBtn:SetCallback("OnClick", function()
+        settings.manualIcon = nil
+        RefreshIconPreview()
+        CooldownCompanion:RefreshConfigPanel()
+    end)
+    actionRow:AddChild(clearBtn)
+
+    local squareCb = AceGUI:Create("CheckBox")
+    squareCb:SetLabel("Square Icons")
+    squareCb:SetValue(settings.maintainAspectRatio ~= false)
+    squareCb:SetFullWidth(true)
+    squareCb:SetCallback("OnValueChanged", function(_, _, value)
+        settings.maintainAspectRatio = value ~= false
+        if settings.maintainAspectRatio then
+            local size = settings.buttonSize or ST.BUTTON_SIZE
+            settings.iconWidth = size
+            settings.iconHeight = size
+        end
+        RefreshIconPreview()
+        CooldownCompanion:RefreshConfigPanel()
+    end)
+    container:AddChild(squareCb)
+
+    if settings.maintainAspectRatio ~= false then
+        local sizeSlider = AceGUI:Create("Slider")
+        sizeSlider:SetLabel("Button Size")
+        sizeSlider:SetSliderValues(10, 150, 0.1)
+        sizeSlider:SetValue(settings.buttonSize or ST.BUTTON_SIZE)
+        sizeSlider:SetFullWidth(true)
+        sizeSlider:SetCallback("OnValueChanged", function(_, _, value)
+            settings.buttonSize = value
+            settings.iconWidth = value
+            settings.iconHeight = value
+            RefreshIconPreview()
+        end)
+        HookSliderEditBox(sizeSlider)
+        container:AddChild(sizeSlider)
+    else
+        local widthSlider = AceGUI:Create("Slider")
+        widthSlider:SetLabel("Icon Width")
+        widthSlider:SetSliderValues(10, 150, 0.1)
+        widthSlider:SetValue(settings.iconWidth or settings.buttonSize or ST.BUTTON_SIZE)
+        widthSlider:SetFullWidth(true)
+        widthSlider:SetCallback("OnValueChanged", function(_, _, value)
+            settings.iconWidth = value
+            RefreshIconPreview()
+        end)
+        HookSliderEditBox(widthSlider)
+        container:AddChild(widthSlider)
+
+        local heightSlider = AceGUI:Create("Slider")
+        heightSlider:SetLabel("Icon Height")
+        heightSlider:SetSliderValues(10, 150, 0.1)
+        heightSlider:SetValue(settings.iconHeight or settings.buttonSize or ST.BUTTON_SIZE)
+        heightSlider:SetFullWidth(true)
+        heightSlider:SetCallback("OnValueChanged", function(_, _, value)
+            settings.iconHeight = value
+            RefreshIconPreview()
+        end)
+        HookSliderEditBox(heightSlider)
+        container:AddChild(heightSlider)
+    end
+
+    local borderSlider = AceGUI:Create("Slider")
+    borderSlider:SetLabel("Border Size")
+    borderSlider:SetSliderValues(0, 5, 0.1)
+    borderSlider:SetValue(settings.borderSize or ST.DEFAULT_BORDER_SIZE)
+    borderSlider:SetFullWidth(true)
+    borderSlider:SetCallback("OnValueChanged", function(_, _, value)
+        settings.borderSize = value
+        RefreshIconPreview()
+    end)
+    HookSliderEditBox(borderSlider)
+    container:AddChild(borderSlider)
+
+    AddColorPicker(container, settings, "borderColor", "Border Color", { 0, 0, 0, 1 }, true, RefreshIconPreview, RefreshIconPreview)
+    AddColorPicker(container, settings, "iconTintColor", "Base Icon Color", { 1, 1, 1, 1 }, true, RefreshIconPreview, RefreshIconPreview)
+    AddColorPicker(container, settings, "backgroundColor", "Background Color", { 0, 0, 0, 0.5 }, true, RefreshIconPreview, RefreshIconPreview)
+
+    RefreshIconPreview()
+end
+
+local function BuildTriggerTextAppearanceTab(container, group)
+    local settings = CooldownCompanion:GetTriggerPanelTextSettings(group, true)
+    local groupId = CS.selectedGroup
+    local maxTextLength = CooldownCompanion.TRIGGER_PANEL_TEXT_MAX_LENGTH or 120
+    local maxTextLines = CooldownCompanion.TRIGGER_PANEL_TEXT_MAX_LINES or 4
+
+    local heading = AceGUI:Create("Heading")
+    heading:SetText("Trigger Text")
+    ColorHeading(heading)
+    heading:SetFullWidth(true)
+    container:AddChild(heading)
+
+    local previewFrame = CreateTriggerPreviewCanvas(container, 120)
+    local textHolder = CreateFrame("Frame", nil, previewFrame)
+    textHolder:SetPoint("CENTER")
+    textHolder:SetSize(1, 1)
+
+    local previewBg = textHolder:CreateTexture(nil, "BACKGROUND")
+    previewBg:SetAllPoints()
+
+    local previewBorders = {}
+    for index = 1, 4 do
+        previewBorders[index] = textHolder:CreateTexture(nil, "OVERLAY")
+    end
+
+    local previewText = textHolder:CreateFontString(nil, "OVERLAY")
+    previewText:SetJustifyV("MIDDLE")
+    previewText:SetJustifyH("CENTER")
+    previewText:SetWordWrap(false)
+    previewText:SetMaxLines(0)
+
+    local placeholder = previewFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    placeholder:SetPoint("CENTER")
+    placeholder:SetJustifyH("CENTER")
+    placeholder:SetText("No text entered")
+    placeholder:SetTextColor(0.65, 0.65, 0.65, 1)
+
+    local function RefreshTextPreview()
+        local bgColor = settings.textBgColor or { 0, 0, 0, 0 }
+        local fontColor = settings.textFontColor or { 1, 1, 1, 1 }
+        local textAlignment = settings.textAlignment or "CENTER"
+        local hasText = CooldownCompanion.HasTriggerTextValue(settings)
+        local insetX = 2
+        local insetY = 1
+
+        textHolder:SetScale(1)
+        if hasText then
+            local frameWidth, frameHeight, textWidth, textHeight, lineCount
+            frameWidth, frameHeight, insetX, insetY, textWidth, textHeight, lineCount = CooldownCompanion.GetTriggerTextDisplayMetrics(previewText, settings)
+            textHolder:SetSize(frameWidth, frameHeight)
+            textHolder:ClearAllPoints()
+            textHolder:SetPoint("CENTER", previewFrame, "CENTER", 0, 0)
+            previewText:SetSize(textWidth or math_max(1, frameWidth - (insetX * 2)), textHeight or math_max(1, frameHeight - (insetY * 2)))
+            previewText:SetWordWrap((lineCount or 1) > 1)
+            previewText:SetJustifyV((lineCount or 1) > 1 and "TOP" or "MIDDLE")
+            FitPreviewContentToCanvas(textHolder, previewFrame, frameWidth, frameHeight, 8)
+        else
+            textHolder:SetSize(1, 1)
+            textHolder:ClearAllPoints()
+            textHolder:SetPoint("CENTER", previewFrame, "CENTER", 0, 0)
+            previewText:SetSize(1, 1)
+            previewText:SetWordWrap(false)
+            previewText:SetJustifyV("MIDDLE")
+        end
+        previewBg:SetColorTexture(bgColor[1] or 0, bgColor[2] or 0, bgColor[3] or 0, bgColor[4] ~= nil and bgColor[4] or 0)
+        for _, border in ipairs(previewBorders) do
+            border:Hide()
+        end
+
+        previewText:ClearAllPoints()
+        previewText:SetPoint("TOPLEFT", textHolder, "TOPLEFT", insetX, -insetY)
+        previewText:SetPoint("BOTTOMRIGHT", textHolder, "BOTTOMRIGHT", -insetX, insetY)
+        previewText:SetJustifyH(textAlignment)
+        previewText:SetTextColor(fontColor[1] or 1, fontColor[2] or 1, fontColor[3] or 1, fontColor[4] ~= nil and fontColor[4] or 1)
+        previewText:SetShown(hasText)
+        placeholder:SetShown(not hasText)
+
+        RefreshStandaloneTriggerDisplay(groupId)
+    end
+
+    local textBox = AceGUI:Create("MultiLineEditBox")
+    textBox:SetLabel("Display Text")
+    textBox:SetFullWidth(true)
+    textBox:SetNumLines(maxTextLines)
+    textBox.button:Hide()
+    textBox:SetText(settings.value or "")
+    local function HandleTextChanged(widget, _, value)
+        local sanitized = CooldownCompanion.SanitizeTriggerPanelTextValue and CooldownCompanion.SanitizeTriggerPanelTextValue(value) or (value or "")
+        settings.value = sanitized
+        if widget and widget.SetText and widget:GetText() ~= sanitized and not widget._ccSyncingText then
+            widget._ccSyncingText = true
+            widget:SetText(sanitized)
+            widget._ccSyncingText = nil
+        end
+        RefreshTextPreview()
+    end
+    textBox:SetCallback("OnTextChanged", HandleTextChanged)
+    container:AddChild(textBox)
+
+    local limitLabel = AceGUI:Create("Label")
+    limitLabel:SetFullWidth(true)
+    limitLabel:SetText("Up to " .. maxTextLines .. " lines and " .. maxTextLength .. " total characters.")
+    limitLabel:SetColor(0.7, 0.7, 0.7)
+    container:AddChild(limitLabel)
+
+    AddFontControls(container, settings, "text", {
+        size = 12,
+        sizeMin = 6,
+        sizeMax = 72,
+        font = "Friz Quadrata TT",
+        outline = "OUTLINE",
+    }, RefreshTextPreview)
+
+    local alignDrop = AceGUI:Create("Dropdown")
+    alignDrop:SetLabel("Alignment")
+    alignDrop:SetList({ LEFT = "Left", CENTER = "Center", RIGHT = "Right" })
+    alignDrop:SetValue(settings.textAlignment or "CENTER")
+    alignDrop:SetFullWidth(true)
+    alignDrop:SetCallback("OnValueChanged", function(_, _, value)
+        settings.textAlignment = value
+        RefreshTextPreview()
+    end)
+    container:AddChild(alignDrop)
+
+    AddColorPicker(container, settings, "textFontColor", "Text Color", { 1, 1, 1, 1 }, true, RefreshTextPreview, RefreshTextPreview)
+    AddColorPicker(container, settings, "textBgColor", "Background Color", { 0, 0, 0, 0 }, true, RefreshTextPreview, RefreshTextPreview)
+
+    RefreshTextPreview()
 end
 
 local function BuildLayoutTab(container)
@@ -458,25 +886,31 @@ local function BuildLayoutTab(container)
     local style = group.style
 
     CooldownCompanion:ClearAllTextureIndicatorPreviews()
+    if CooldownCompanion.ClearAllTriggerPanelEffectPreviews then
+        CooldownCompanion:ClearAllTriggerPanelEffectPreviews()
+    end
 
-    if group.displayMode == "textures" then
-        local settings = CooldownCompanion:GetTexturePanelSettings(group, true)
+    if group.displayMode == "textures" or group.displayMode == "trigger" then
+        local settings = GetStandaloneTextureSettings(group, true)
         if not settings then
             return
         end
         local textureGroupId = CS.selectedGroup
+        local isTriggerPanel = group.displayMode == "trigger"
+        local positionHeadingText = isTriggerPanel and "Trigger Display Position" or "Texture Position"
+        local anchorLabel = isTriggerPanel and "Display Point" or "Texture Point"
 
         local function RefreshTextureVisual()
             CooldownCompanion:RefreshAllAuraTextureVisuals()
         end
 
         local heading = AceGUI:Create("Heading")
-        heading:SetText("Texture Position")
+        heading:SetText(positionHeadingText)
         ColorHeading(heading)
         heading:SetFullWidth(true)
         container:AddChild(heading)
 
-        AddAnchorDropdown(container, settings, "point", "CENTER", RefreshTextureVisual, "Texture Point")
+        AddAnchorDropdown(container, settings, "point", "CENTER", RefreshTextureVisual, anchorLabel)
         AddAnchorDropdown(container, settings, "relativePoint", "CENTER", RefreshTextureVisual, "Screen Point")
         AddOffsetSliders(container, settings, "x", "y", {
             x = 0,
@@ -531,7 +965,7 @@ local function BuildLayoutTab(container)
         })
 
         if CS.IsAuraTexturePickerOpen and CS.IsAuraTexturePickerOpen() then
-            OpenOrRebindTexturePanelPicker(group, settings, false)
+            OpenOrRebindStandaloneTexturePicker(group, settings, false)
         end
         RefreshTextureVisual()
         return
@@ -1103,7 +1537,69 @@ local function BuildTextureIndicatorSection(container, group, indicators, sectio
     container:AddChild(previewBtn)
 end
 
-local function BuildEffectsTab(container)
+local function BuildTriggerPanelEffectSection(container, effects, effectKey)
+    local config = effects and effects[effectKey]
+    local def = TRIGGER_PANEL_EFFECT_DEFS[effectKey]
+    if not config or not def then
+        return
+    end
+
+    local enableCb = AceGUI:Create("CheckBox")
+    enableCb:SetLabel(def.label)
+    enableCb:SetValue(config.enabled)
+    enableCb:SetFullWidth(true)
+    enableCb:SetCallback("OnValueChanged", function(_, _, value)
+        config.enabled = value == true
+        CooldownCompanion:RefreshAllAuraTextureVisuals()
+        CooldownCompanion:RefreshConfigPanel()
+    end)
+    container:AddChild(enableCb)
+
+    local advKey = "triggerEffect_" .. effectKey
+    local advExpanded = AddAdvancedToggle(enableCb, advKey, tabInfoButtons, config.enabled)
+    if not advExpanded or not config.enabled then
+        return
+    end
+
+    if effectKey == "colorShift" then
+        AddColorPicker(
+            container,
+            config,
+            "color",
+            "Shift Color",
+            { 1, 1, 1, 1 },
+            true,
+            function() CooldownCompanion:RefreshAllAuraTextureVisuals() end,
+            function() CooldownCompanion:RefreshAllAuraTextureVisuals() end
+        )
+    end
+
+    BuildTextureIndicatorSpeedSlider(container, config, def.speedLabel)
+end
+
+local function GetTriggerPanelEffectOrderForDisplayType(group)
+    local displayType = CooldownCompanion:GetTriggerPanelDisplayType(group, true)
+    if displayType ~= "text" then
+        return TEXTURE_INDICATOR_EFFECT_ORDER
+    end
+
+    local order = {}
+    for _, effectKey in ipairs(TEXTURE_INDICATOR_EFFECT_ORDER) do
+        if effectKey ~= "shrinkExpand" then
+            order[#order + 1] = effectKey
+        end
+    end
+    return order
+end
+
+local function UpdateSelectedGroupStyle(refreshConfig)
+    CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
+    if refreshConfig then
+        CooldownCompanion:RefreshConfigPanel()
+    end
+end
+
+local function ClearEffectsTabWidgets()
     for _, btn in ipairs(tabInfoButtons) do
         btn:ClearAllPoints()
         btn:Hide()
@@ -1116,73 +1612,94 @@ local function BuildEffectsTab(container)
         elem:SetParent(nil)
     end
     wipe(appearanceTabElements)
+end
 
-    if not CS.selectedGroup then return end
-    local group = CooldownCompanion.db.profile.groups[CS.selectedGroup]
-    if not group then return end
-    local style = group.style
-
+local function ResetEffectsTabPreviews()
     CooldownCompanion:ClearAllTextureIndicatorPreviews()
+    if CooldownCompanion.ClearAllTriggerPanelEffectPreviews then
+        CooldownCompanion:ClearAllTriggerPanelEffectPreviews()
+    end
+end
 
-    if group.displayMode == "textures" then
-        local indicators = GetTextureIndicatorStore(group)
-        if not indicators then
-            return
-        end
-
-        for _, sectionKey in ipairs(CooldownCompanion:GetTextureIndicatorSectionOrder()) do
-            BuildTextureIndicatorSection(container, group, indicators, sectionKey)
-        end
+local function BuildTriggerEffectsTab(container, group)
+    local effects = GetTriggerPanelEffectStore(group)
+    if not effects then
         return
     end
 
-    -- Branch for bar mode
-    if group.displayMode == "bars" then
-        CooldownCompanion:SetGroupProcGlowPreview(CS.selectedGroup, false)
-        CooldownCompanion:SetGroupAuraGlowPreview(CS.selectedGroup, false)
-        CooldownCompanion:SetGroupPandemicPreview(CS.selectedGroup, false)
-        CooldownCompanion:SetGroupReadyGlowPreview(CS.selectedGroup, false)
-        CooldownCompanion:SetGroupKeyPressHighlightPreview(CS.selectedGroup, false)
-        BuildBarEffectsTab(container, group, style)
+    local anyEnabled = false
+    local effectOrder = GetTriggerPanelEffectOrderForDisplayType(group)
+    for _, effectKey in ipairs(effectOrder) do
+        BuildTriggerPanelEffectSection(container, effects, effectKey)
+        if effects[effectKey] and effects[effectKey].enabled then
+            anyEnabled = true
+        end
+    end
+
+    local previewBtn = AceGUI:Create("Button")
+    previewBtn:SetText("Preview Effects (3s)")
+    previewBtn:SetFullWidth(true)
+    previewBtn:SetDisabled(not anyEnabled)
+    previewBtn:SetCallback("OnClick", function()
+        CooldownCompanion:PlayTriggerPanelEffectsPreview(CS.selectedGroup, 3)
+    end)
+    container:AddChild(previewBtn)
+end
+
+local function BuildTextureEffectsTab(container, group)
+    local indicators = GetTextureIndicatorStore(group)
+    if not indicators then
         return
     end
 
-    -- ================================================================
-    -- Proc Glow enable toggle
-    -- ================================================================
+    for _, sectionKey in ipairs(CooldownCompanion:GetTextureIndicatorSectionOrder()) do
+        BuildTextureIndicatorSection(container, group, indicators, sectionKey)
+    end
+end
+
+local function BuildBarModeEffects(container, group, style)
+    CooldownCompanion:SetGroupProcGlowPreview(CS.selectedGroup, false)
+    CooldownCompanion:SetGroupAuraGlowPreview(CS.selectedGroup, false)
+    CooldownCompanion:SetGroupPandemicPreview(CS.selectedGroup, false)
+    CooldownCompanion:SetGroupReadyGlowPreview(CS.selectedGroup, false)
+    CooldownCompanion:SetGroupKeyPressHighlightPreview(CS.selectedGroup, false)
+    BuildBarEffectsTab(container, group, style)
+end
+
+local function BuildProcGlowSection(container, group, style)
     local procEnableCb = AceGUI:Create("CheckBox")
     procEnableCb:SetLabel(L["Show Proc Glow"])
     procEnableCb:SetValue(style.procGlowStyle ~= "none")
     procEnableCb:SetFullWidth(true)
     procEnableCb:SetCallback("OnValueChanged", function(widget, event, val)
         style.procGlowStyle = val and "glow" or "none"
-        CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
-        CooldownCompanion:RefreshConfigPanel()
+        UpdateSelectedGroupStyle(true)
     end)
     container:AddChild(procEnableCb)
 
     local procAdvExpanded, procAdvBtn = AddAdvancedToggle(procEnableCb, "procGlow", tabInfoButtons, style.procGlowStyle ~= "none")
-    -- Skip promote for aura-tracked buttons (Show Active Aura Glow covers this)
     local procBtnData = CS.selectedButton and group.buttons[CS.selectedButton]
     if not (procBtnData and procBtnData.isPassive) then
         CreateCheckboxPromoteButton(procEnableCb, procAdvBtn, "procGlow", group, style)
     end
 
-    if procAdvExpanded and style.procGlowStyle ~= "none" then
+    if not (procAdvExpanded and style.procGlowStyle ~= "none") then
+        CooldownCompanion:SetGroupProcGlowPreview(CS.selectedGroup, false)
+        return
+    end
+
     local procCombatCb = AceGUI:Create("CheckBox")
     procCombatCb:SetLabel(L["Show Only In Combat"])
     procCombatCb:SetValue(style.procGlowCombatOnly or false)
     procCombatCb:SetFullWidth(true)
     procCombatCb:SetCallback("OnValueChanged", function(widget, event, val)
         style.procGlowCombatOnly = val
-        CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
+        UpdateSelectedGroupStyle()
     end)
     container:AddChild(procCombatCb)
     ApplyCheckboxIndent(procCombatCb, 20)
 
-    BuildProcGlowControls(container, style, function()
-        CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
-    end)
+    BuildProcGlowControls(container, style, UpdateSelectedGroupStyle)
 
     local procPreviewBtn = AceGUI:Create("Button")
     procPreviewBtn:SetText(L["Preview Proc Glow (3s)"])
@@ -1191,35 +1708,34 @@ local function BuildEffectsTab(container)
         CooldownCompanion:PlayGroupProcGlowPreview(CS.selectedGroup, 3)
     end)
     container:AddChild(procPreviewBtn)
-    else
-    CooldownCompanion:SetGroupProcGlowPreview(CS.selectedGroup, false)
-    end -- procAdvExpanded
+end
 
-    -- ================================================================
-    -- Show Aura Glow enable toggle
-    -- ================================================================
+local function BuildAuraGlowSection(container, group, style)
     local auraEnableCb = AceGUI:Create("CheckBox")
     auraEnableCb:SetLabel(L["Show Aura Glow"])
     auraEnableCb:SetValue(style.auraGlowStyle ~= "none")
     auraEnableCb:SetFullWidth(true)
     auraEnableCb:SetCallback("OnValueChanged", function(widget, event, val)
         style.auraGlowStyle = val and "pixel" or "none"
-        CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
-        CooldownCompanion:RefreshConfigPanel()
+        UpdateSelectedGroupStyle(true)
     end)
     container:AddChild(auraEnableCb)
 
     local auraAdvExpanded, auraAdvBtn = AddAdvancedToggle(auraEnableCb, "auraGlow", tabInfoButtons, style.auraGlowStyle ~= "none")
     CreateCheckboxPromoteButton(auraEnableCb, auraAdvBtn, "auraIndicator", group, style)
 
-    if auraAdvExpanded and style.auraGlowStyle ~= "none" then
+    if not (auraAdvExpanded and style.auraGlowStyle ~= "none") then
+        CooldownCompanion:SetGroupAuraGlowPreview(CS.selectedGroup, false)
+        return
+    end
+
     local auraCombatCb = AceGUI:Create("CheckBox")
     auraCombatCb:SetLabel(L["Show Only In Combat"])
     auraCombatCb:SetValue(style.auraGlowCombatOnly or false)
     auraCombatCb:SetFullWidth(true)
     auraCombatCb:SetCallback("OnValueChanged", function(widget, event, val)
         style.auraGlowCombatOnly = val
-        CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
+        UpdateSelectedGroupStyle()
     end)
     container:AddChild(auraCombatCb)
     ApplyCheckboxIndent(auraCombatCb, 20)
@@ -1230,14 +1746,12 @@ local function BuildEffectsTab(container)
     auraInvertCb:SetFullWidth(true)
     auraInvertCb:SetCallback("OnValueChanged", function(widget, event, val)
         style.auraGlowInvert = val
-        CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
+        UpdateSelectedGroupStyle()
     end)
     container:AddChild(auraInvertCb)
     ApplyCheckboxIndent(auraInvertCb, 20)
 
-    BuildAuraIndicatorControls(container, style, function()
-        CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
-    end)
+    BuildAuraIndicatorControls(container, style, UpdateSelectedGroupStyle)
 
     local auraPreviewBtn = AceGUI:Create("Button")
     auraPreviewBtn:SetText(L["Preview Aura Glow (3s)"])
@@ -1246,42 +1760,39 @@ local function BuildEffectsTab(container)
         CooldownCompanion:PlayGroupAuraGlowPreview(CS.selectedGroup, 3)
     end)
     container:AddChild(auraPreviewBtn)
-    else
-    CooldownCompanion:SetGroupAuraGlowPreview(CS.selectedGroup, false)
-    end -- auraAdvExpanded
+end
 
-    -- ================================================================
-    -- Pandemic Glow
-    -- ================================================================
+local function BuildPandemicGlowSection(container, group, style)
     local pandemicGlowCb = AceGUI:Create("CheckBox")
     pandemicGlowCb:SetLabel(L["Show Pandemic Glow"])
     pandemicGlowCb:SetValue(style.showPandemicGlow ~= false)
     pandemicGlowCb:SetFullWidth(true)
     pandemicGlowCb:SetCallback("OnValueChanged", function(widget, event, val)
         style.showPandemicGlow = val
-        CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
-        CooldownCompanion:RefreshConfigPanel()
+        UpdateSelectedGroupStyle(true)
     end)
     container:AddChild(pandemicGlowCb)
 
     local pandemicAdvExpanded, pandemicAdvBtn = AddAdvancedToggle(pandemicGlowCb, "pandemicGlow", tabInfoButtons, style.showPandemicGlow ~= false)
     CreateCheckboxPromoteButton(pandemicGlowCb, pandemicAdvBtn, "pandemicGlow", group, style)
 
-    if pandemicAdvExpanded and style.showPandemicGlow ~= false then
+    if not (pandemicAdvExpanded and style.showPandemicGlow ~= false) then
+        CooldownCompanion:SetGroupPandemicPreview(CS.selectedGroup, false)
+        return
+    end
+
     local pandemicCombatCb = AceGUI:Create("CheckBox")
     pandemicCombatCb:SetLabel(L["Show Only In Combat"])
     pandemicCombatCb:SetValue(style.pandemicGlowCombatOnly or false)
     pandemicCombatCb:SetFullWidth(true)
     pandemicCombatCb:SetCallback("OnValueChanged", function(widget, event, val)
         style.pandemicGlowCombatOnly = val
-        CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
+        UpdateSelectedGroupStyle()
     end)
     container:AddChild(pandemicCombatCb)
     ApplyCheckboxIndent(pandemicCombatCb, 20)
 
-    BuildPandemicGlowControls(container, style, function()
-        CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
-    end)
+    BuildPandemicGlowControls(container, style, UpdateSelectedGroupStyle)
 
     local pandemicPreviewBtn = AceGUI:Create("Button")
     pandemicPreviewBtn:SetText(L["Preview Pandemic Glow (3s)"])
@@ -1290,21 +1801,16 @@ local function BuildEffectsTab(container)
         CooldownCompanion:PlayGroupPandemicPreview(CS.selectedGroup, 3)
     end)
     container:AddChild(pandemicPreviewBtn)
-    else
-    CooldownCompanion:SetGroupPandemicPreview(CS.selectedGroup, false)
-    end -- pandemicAdvExpanded
+end
 
-    -- ================================================================
-    -- Ready Glow (glow while off cooldown)
-    -- ================================================================
+local function BuildReadyGlowSection(container, group, style)
     local readyEnableCb = AceGUI:Create("CheckBox")
     readyEnableCb:SetLabel(L["Show Ready Glow"])
     readyEnableCb:SetValue(style.readyGlowStyle and style.readyGlowStyle ~= "none")
     readyEnableCb:SetFullWidth(true)
     readyEnableCb:SetCallback("OnValueChanged", function(widget, event, val)
         style.readyGlowStyle = val and "solid" or "none"
-        CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
-        CooldownCompanion:RefreshConfigPanel()
+        UpdateSelectedGroupStyle(true)
     end)
     container:AddChild(readyEnableCb)
 
@@ -1315,14 +1821,18 @@ local function BuildEffectsTab(container)
         {"Adds a glow to spells/items that are not on cooldown.", 1, 1, 1, true},
     }, tabInfoButtons)
 
-    if readyAdvExpanded and style.readyGlowStyle and style.readyGlowStyle ~= "none" then
+    if not (readyAdvExpanded and style.readyGlowStyle and style.readyGlowStyle ~= "none") then
+        CooldownCompanion:SetGroupReadyGlowPreview(CS.selectedGroup, false)
+        return
+    end
+
     local readyCombatCb = AceGUI:Create("CheckBox")
     readyCombatCb:SetLabel(L["Show Only In Combat"])
     readyCombatCb:SetValue(style.readyGlowCombatOnly or false)
     readyCombatCb:SetFullWidth(true)
     readyCombatCb:SetCallback("OnValueChanged", function(widget, event, val)
         style.readyGlowCombatOnly = val
-        CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
+        UpdateSelectedGroupStyle()
     end)
     container:AddChild(readyCombatCb)
     ApplyCheckboxIndent(readyCombatCb, 20)
@@ -1333,7 +1843,7 @@ local function BuildEffectsTab(container)
     readyChargesCb:SetFullWidth(true)
     readyChargesCb:SetCallback("OnValueChanged", function(widget, event, val)
         style.readyGlowOnlyAtMaxCharges = val == true
-        CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
+        UpdateSelectedGroupStyle()
         if (style.readyGlowDuration or 0) > 0 then
             if val then
                 PrimeReadyGlowCappedChargeTransitions(CS.selectedGroup)
@@ -1356,7 +1866,7 @@ local function BuildEffectsTab(container)
     readyDurCb:SetFullWidth(true)
     readyDurCb:SetCallback("OnValueChanged", function(widget, event, val)
         style.readyGlowDuration = val and 3 or 0
-        CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
+        UpdateSelectedGroupStyle()
         if val then
             if style.readyGlowOnlyAtMaxCharges then
                 PrimeReadyGlowCappedChargeTransitions(CS.selectedGroup)
@@ -1378,14 +1888,12 @@ local function BuildEffectsTab(container)
         readyDurSlider:SetFullWidth(true)
         readyDurSlider:SetCallback("OnValueChanged", function(widget, event, val)
             style.readyGlowDuration = val
-            CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
+            UpdateSelectedGroupStyle()
         end)
         container:AddChild(readyDurSlider)
     end
 
-    BuildReadyGlowControls(container, style, function()
-        CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
-    end)
+    BuildReadyGlowControls(container, style, UpdateSelectedGroupStyle)
 
     local readyPreviewBtn = AceGUI:Create("Button")
     readyPreviewBtn:SetText("Preview Ready Glow Style (3s)")
@@ -1394,21 +1902,16 @@ local function BuildEffectsTab(container)
         CooldownCompanion:PlayGroupReadyGlowPreview(CS.selectedGroup, 3)
     end)
     container:AddChild(readyPreviewBtn)
-    else
-    CooldownCompanion:SetGroupReadyGlowPreview(CS.selectedGroup, false)
-    end -- readyAdvExpanded
+end
 
-    -- ================================================================
-    -- Key Press Highlight (glow while keybind is held)
-    -- ================================================================
+local function BuildKeyPressHighlightSection(container, group, style)
     local kphEnableCb = AceGUI:Create("CheckBox")
     kphEnableCb:SetLabel(L["Show Key Press Highlight"])
     kphEnableCb:SetValue(style.keyPressHighlightStyle and style.keyPressHighlightStyle ~= "none")
     kphEnableCb:SetFullWidth(true)
     kphEnableCb:SetCallback("OnValueChanged", function(widget, event, val)
         style.keyPressHighlightStyle = val and "solid" or "none"
-        CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
-        CooldownCompanion:RefreshConfigPanel()
+        UpdateSelectedGroupStyle(true)
     end)
     container:AddChild(kphEnableCb)
 
@@ -1419,21 +1922,23 @@ local function BuildEffectsTab(container)
         {L["Shows a glow overlay on buttons while their action bar keybind is physically held down."], 1, 1, 1, true},
     }, tabInfoButtons)
 
-    if kphAdvExpanded and style.keyPressHighlightStyle and style.keyPressHighlightStyle ~= "none" then
+    if not (kphAdvExpanded and style.keyPressHighlightStyle and style.keyPressHighlightStyle ~= "none") then
+        CooldownCompanion:SetGroupKeyPressHighlightPreview(CS.selectedGroup, false)
+        return
+    end
+
     local kphCombatCb = AceGUI:Create("CheckBox")
     kphCombatCb:SetLabel(L["Show Only In Combat"])
     kphCombatCb:SetValue(style.keyPressHighlightCombatOnly or false)
     kphCombatCb:SetFullWidth(true)
     kphCombatCb:SetCallback("OnValueChanged", function(widget, event, val)
         style.keyPressHighlightCombatOnly = val
-        CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
+        UpdateSelectedGroupStyle()
     end)
     container:AddChild(kphCombatCb)
     ApplyCheckboxIndent(kphCombatCb, 20)
 
-    BuildKeyPressHighlightControls(container, style, function()
-        CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
-    end)
+    BuildKeyPressHighlightControls(container, style, UpdateSelectedGroupStyle)
 
     local kphPreviewBtn = AceGUI:Create("Button")
     kphPreviewBtn:SetText(L["Preview Key Press Highlight (3s)"])
@@ -1442,9 +1947,39 @@ local function BuildEffectsTab(container)
         CooldownCompanion:PlayGroupKeyPressHighlightPreview(CS.selectedGroup, 3)
     end)
     container:AddChild(kphPreviewBtn)
-    else
-    CooldownCompanion:SetGroupKeyPressHighlightPreview(CS.selectedGroup, false)
-    end -- kphAdvExpanded
+end
+
+local function BuildEffectsTab(container)
+    ClearEffectsTabWidgets()
+
+    if not CS.selectedGroup then return end
+    local group = CooldownCompanion.db.profile.groups[CS.selectedGroup]
+    if not group then return end
+    local style = group.style
+
+    ResetEffectsTabPreviews()
+
+    if group.displayMode == "trigger" then
+        BuildTriggerEffectsTab(container, group)
+        return
+    end
+
+    if group.displayMode == "textures" then
+        BuildTextureEffectsTab(container, group)
+        return
+    end
+
+    if group.displayMode == "bars" then
+        BuildBarModeEffects(container, group, style)
+        return
+    end
+
+    BuildProcGlowSection(container, group, style)
+    BuildAuraGlowSection(container, group, style)
+
+    BuildPandemicGlowSection(container, group, style)
+    BuildReadyGlowSection(container, group, style)
+    BuildKeyPressHighlightSection(container, group, style)
 
     -- ================================================================
     -- Desaturate on Cooldown
@@ -1634,9 +2169,25 @@ local function BuildAppearanceTab(container)
     local style = group.style
 
     CooldownCompanion:ClearAllTextureIndicatorPreviews()
+    if CooldownCompanion.ClearAllTriggerPanelEffectPreviews then
+        CooldownCompanion:ClearAllTriggerPanelEffectPreviews()
+    end
 
-    if group.displayMode == "textures" then
-        local settings = CooldownCompanion:GetTexturePanelSettings(group, true)
+    if group.displayMode == "trigger" then
+        AddTriggerDisplayTypeDropdown(container, group)
+        local displayType = CooldownCompanion:GetTriggerPanelDisplayType(group, true)
+        if displayType == "icon" then
+            BuildTriggerIconAppearanceTab(container, group)
+            return
+        elseif displayType == "text" then
+            BuildTriggerTextAppearanceTab(container, group)
+            return
+        end
+    end
+
+    if group.displayMode == "textures" or group.displayMode == "trigger" then
+        local isTriggerPanel = group.displayMode == "trigger"
+        local settings = GetStandaloneTextureSettings(group, true)
         if not settings then
             return
         end
@@ -1658,19 +2209,21 @@ local function BuildAppearanceTab(container)
         end
 
         local heading = AceGUI:Create("Heading")
-        heading:SetText("Texture Panel")
+        heading:SetText(isTriggerPanel and "Trigger Texture" or "Texture Panel")
         ColorHeading(heading)
         heading:SetFullWidth(true)
         container:AddChild(heading)
 
-        CreateInfoButton(heading.frame, heading.label, "LEFT", "RIGHT", 4, 0, {
-            "Texture Panel",
-            {"This panel shows one standalone texture on your screen.", 1, 1, 1, true},
-            " ",
-            {"Its single entry decides when that texture appears.", 1, 1, 1, true},
-        }, tabInfoButtons)
+        if not isTriggerPanel then
+            CreateInfoButton(heading.frame, heading.label, "LEFT", "RIGHT", 4, 0, {
+                "Texture Panel",
+                {"This panel shows one standalone texture on your screen.", 1, 1, 1, true},
+                " ",
+                {"Its single entry decides when that texture appears.", 1, 1, 1, true},
+            }, tabInfoButtons)
+        end
 
-        if not buttonData then
+        if not buttonData and not isTriggerPanel then
             local emptyLabel = AceGUI:Create("Label")
             emptyLabel:SetFullWidth(true)
             emptyLabel:SetText("|cff888888Add one entry in Column 2 first. The texture browser will open after that.|r")
@@ -1682,7 +2235,7 @@ local function BuildAppearanceTab(container)
             return
         end
 
-        local selectionLabel = CooldownCompanion:GetTexturePanelSelectionLabel(group)
+        local selectionLabel = GetStandaloneTextureSelectionLabel(group, settings)
 
         local previewGroup = AceGUI:Create("SimpleGroup")
         previewGroup:SetFullWidth(true)
@@ -1729,7 +2282,7 @@ local function BuildAppearanceTab(container)
         browseBtn:SetText("Browse / Change")
         browseBtn:SetRelativeWidth(0.49)
         browseBtn:SetCallback("OnClick", function()
-            OpenOrRebindTexturePanelPicker(group, settings, true)
+            OpenOrRebindStandaloneTexturePicker(group, settings, true)
         end)
         actionRow:AddChild(browseBtn)
 
@@ -1739,26 +2292,28 @@ local function BuildAppearanceTab(container)
         clearBtn:SetRelativeWidth(0.49)
         clearBtn:SetCallback("OnClick", function()
             CooldownCompanion:ClearAllAuraTexturePickerPreviews()
-            GetTexturePanelCommitCallback(group)(nil)
+            GetStandaloneTextureCommitCallback(group)(nil)
         end)
         actionRow:AddChild(clearBtn)
 
         if not selectionLabel then
-            local emptyStateLabel = AceGUI:Create("Label")
-            emptyStateLabel:SetFullWidth(true)
-            emptyStateLabel:SetText("|cff888888Pick a texture to show the rest of the display controls.|r")
-            container:AddChild(emptyStateLabel)
+            if not isTriggerPanel then
+                local emptyStateLabel = AceGUI:Create("Label")
+                emptyStateLabel:SetFullWidth(true)
+                emptyStateLabel:SetText("|cff888888Pick a texture to show the rest of the display controls.|r")
+                container:AddChild(emptyStateLabel)
+            end
 
             local shouldOpenPicker = CS.pendingTexturePickerOpen == CS.selectedGroup
             if shouldOpenPicker then
                 CS.pendingTexturePickerOpen = nil
                 C_Timer.After(0, function()
                     if CS.selectedGroup == groupId and CS.panelSettingsTab == "appearance" then
-                        OpenOrRebindTexturePanelPicker(group, settings, true)
+                        OpenOrRebindStandaloneTexturePicker(group, settings, true)
                     end
                 end)
             elseif CS.IsAuraTexturePickerOpen and CS.IsAuraTexturePickerOpen() then
-                OpenOrRebindTexturePanelPicker(group, settings, false)
+                OpenOrRebindStandaloneTexturePicker(group, settings, false)
             end
 
             RefreshTextureVisual()
@@ -1871,11 +2426,11 @@ local function BuildAppearanceTab(container)
             CS.pendingTexturePickerOpen = nil
             C_Timer.After(0, function()
                 if CS.selectedGroup == groupId and CS.panelSettingsTab == "appearance" then
-                    OpenOrRebindTexturePanelPicker(group, settings, true)
+                    OpenOrRebindStandaloneTexturePicker(group, settings, true)
                 end
             end)
         elseif CS.IsAuraTexturePickerOpen and CS.IsAuraTexturePickerOpen() then
-            OpenOrRebindTexturePanelPicker(group, settings, false)
+            OpenOrRebindStandaloneTexturePicker(group, settings, false)
         end
 
         RefreshTextureVisual()
@@ -2353,6 +2908,29 @@ local function BuildContainerGeneralTab(scroll, containerId)
 
     if not layoutCollapsed then
         container.anchor = CooldownCompanion:NormalizeContainerAnchor(container.anchor)
+        local function ApplyContainerOffset(axis, value)
+            local oldValue = tonumber(container.anchor[axis]) or 0
+            container.anchor[axis] = value
+
+            local containerFrame = CooldownCompanion.containerFrames and CooldownCompanion.containerFrames[containerId]
+            if containerFrame then
+                CooldownCompanion:AnchorContainerFrame(containerFrame, container.anchor)
+            end
+
+            if CooldownCompanion.SyncGroupedStandalonePreviewSettings then
+                local deltaX, deltaY = 0, 0
+                if axis == "x" then
+                    deltaX = value - oldValue
+                else
+                    deltaY = value - oldValue
+                end
+                CooldownCompanion:SyncGroupedStandalonePreviewSettings(containerId, deltaX, deltaY)
+            end
+
+            if containerFrame and CooldownCompanion.RefreshContainerWrapper then
+                CooldownCompanion:RefreshContainerWrapper(containerId)
+            end
+        end
 
         -- X Offset
         local xSlider = AceGUI:Create("Slider")
@@ -2360,12 +2938,8 @@ local function BuildContainerGeneralTab(scroll, containerId)
         xSlider:SetSliderValues(-2000, 2000, 0.1)
         xSlider:SetValue(container.anchor.x or 0)
         xSlider:SetFullWidth(true)
-        xSlider:SetCallback("OnValueChanged", function(widget, event, val)
-            container.anchor.x = val
-            local containerFrame = CooldownCompanion.containerFrames and CooldownCompanion.containerFrames[containerId]
-            if containerFrame then
-                CooldownCompanion:AnchorContainerFrame(containerFrame, container.anchor)
-            end
+        xSlider:SetCallback("OnValueChanged", function(_, _, val)
+            ApplyContainerOffset("x", val)
         end)
         HookSliderEditBox(xSlider)
         scroll:AddChild(xSlider)
@@ -2376,12 +2950,8 @@ local function BuildContainerGeneralTab(scroll, containerId)
         ySlider:SetSliderValues(-2000, 2000, 0.1)
         ySlider:SetValue(container.anchor.y or 0)
         ySlider:SetFullWidth(true)
-        ySlider:SetCallback("OnValueChanged", function(widget, event, val)
-            container.anchor.y = val
-            local containerFrame = CooldownCompanion.containerFrames and CooldownCompanion.containerFrames[containerId]
-            if containerFrame then
-                CooldownCompanion:AnchorContainerFrame(containerFrame, container.anchor)
-            end
+        ySlider:SetCallback("OnValueChanged", function(_, _, val)
+            ApplyContainerOffset("y", val)
         end)
         HookSliderEditBox(ySlider)
         scroll:AddChild(ySlider)

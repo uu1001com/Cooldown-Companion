@@ -15,6 +15,7 @@ local IsNeverTrackableSpell = ST._IsNeverTrackableSpell
 local ShouldSuppressSpellbookEntry = ST._ShouldSuppressSpellbookEntry
 local GetButtonIcon = ST._GetButtonIcon
 local CDM_VIEWER_NAMES = ST._CDM_VIEWER_NAMES
+local NotifyTutorialAction = ST._NotifyTutorialAction
 
 -- After a successful add, set selection state to the new button so the
 -- next RefreshConfigPanel shows its settings in Column 3.
@@ -45,6 +46,14 @@ local function IsTexturePanelTarget(groupId)
         and CooldownCompanion.db.profile.groups
         and CooldownCompanion.db.profile.groups[groupId]
     return group and group.displayMode == "textures"
+end
+
+local function IsTriggerPanelTarget(groupId)
+    local group = groupId and CooldownCompanion.db
+        and CooldownCompanion.db.profile
+        and CooldownCompanion.db.profile.groups
+        and CooldownCompanion.db.profile.groups[groupId]
+    return group and group.displayMode == "trigger"
 end
 
 -- File-local state
@@ -108,7 +117,10 @@ local function TryAddSpell(input, isPetSpell, forceAura)
             return false
         end
         -- Multi-CDM-child: if passive/proc spell has multiple CDM entries, auto-add one button per child
-        if passiveOrProc and not IsTexturePanelTarget(CS.selectedGroup) then
+        if passiveOrProc
+            and not IsTexturePanelTarget(CS.selectedGroup)
+            and not IsTriggerPanelTarget(CS.selectedGroup)
+        then
             local allChildren = CooldownCompanion.viewerAuraAllChildren[spellId]
             if allChildren and #allChildren > 1 then
                 local count = #allChildren
@@ -697,6 +709,13 @@ local function OnAutocompleteSelect(entry)
         added = TryAddSpell(tostring(entry.id), entry.isPetSpell, entry.forceAura)
     end
     if added then
+        if NotifyTutorialAction and CS.selectedGroup and CS.selectedButton then
+            NotifyTutorialAction("inline_add_succeeded", {
+                groupId = CS.selectedGroup,
+                buttonIndex = CS.selectedButton,
+                rawInput = entry.name,
+            })
+        end
         CS.newInput = ""
         CS.pendingEditBoxFocus = true
         CooldownCompanion:RefreshConfigPanel()

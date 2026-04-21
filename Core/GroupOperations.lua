@@ -54,6 +54,13 @@ end
 
 -- Re-apply all media after a SharedMedia pack registers new fonts/textures
 function CooldownCompanion:RefreshAllMedia()
+    -- SharedMedia registrations from other addons can fire during startup before
+    -- the aura texture runtime has finished attaching its visual methods.
+    if type(self.UpdateAuraTextureVisual) ~= "function"
+        or type(self.HideAuraTextureVisual) ~= "function" then
+        return
+    end
+
     self:RefreshAllGroups()
     self:ApplyResourceBars()
     self:ApplyCastBarSettings()
@@ -115,6 +122,303 @@ function CooldownCompanion:GetParentContainer(groupOrGroupId)
     if not group or not group.parentContainerId then return nil end
     local containers = self.db.profile.groupContainers
     return containers and containers[group.parentContainerId]
+end
+
+function CooldownCompanion:IsContainerUnlockPreviewActive(containerOrContainerId)
+    local container = containerOrContainerId
+    local containerId = nil
+
+    if self._combatForcedLock then
+        return false
+    end
+
+    if type(containerOrContainerId) == "number" then
+        containerId = containerOrContainerId
+        container = self.db.profile.groupContainers and self.db.profile.groupContainers[containerId]
+    elseif type(containerOrContainerId) == "table" then
+        for id, candidate in pairs(self.db.profile.groupContainers or {}) do
+            if candidate == containerOrContainerId then
+                containerId = id
+                break
+            end
+        end
+    end
+
+    if not container then
+        return false
+    end
+    if container.locked ~= false then
+        return false
+    end
+    if containerId and not self:IsContainerVisibleToCurrentChar(containerId) then
+        return false
+    end
+
+    return true
+end
+
+local function ForceCombatMouseLock(frame)
+    if not frame then
+        return
+    end
+
+    local canChangeProtectedState = not frame.CanChangeProtectedState or frame:CanChangeProtectedState()
+    if frame.EnableMouse and canChangeProtectedState then
+        frame:EnableMouse(false)
+    end
+    if frame.SetMouseClickEnabled and canChangeProtectedState then
+        frame:SetMouseClickEnabled(false)
+    end
+    if frame.SetMouseMotionEnabled and canChangeProtectedState then
+        frame:SetMouseMotionEnabled(false)
+    end
+end
+
+local function CanSafelyChangeFrameVisibility(frame)
+    if not frame then
+        return false
+    end
+    if not InCombatLockdown() then
+        return true
+    end
+    if frame.CanChangeProtectedState then
+        return frame:CanChangeProtectedState()
+    end
+    return not (frame.IsProtected and frame:IsProtected())
+end
+
+local function SuppressFrameVisibilityForCombat(frame)
+    if not frame then
+        return
+    end
+
+    if CanSafelyChangeFrameVisibility(frame) then
+        frame:Hide()
+        return
+    end
+
+    if frame.GetAlpha and frame._combatForcedAlpha == nil then
+        frame._combatForcedAlpha = frame:GetAlpha()
+    end
+    if frame.SetAlpha then
+        frame:SetAlpha(0)
+    end
+end
+
+local function RestoreFrameVisibilityAfterCombat(frame)
+    if not frame then
+        return
+    end
+
+    if frame._combatForcedAlpha ~= nil and frame.SetAlpha then
+        frame:SetAlpha(frame._combatForcedAlpha)
+    end
+    frame._combatForcedAlpha = nil
+end
+
+function CooldownCompanion:BeginCombatForcedLock()
+    if self._combatForcedLock then
+        return false
+    end
+
+    local snapshot = {
+        containers = {},
+        groups = {},
+        hadUnlocked = false,
+    }
+
+    for containerId, container in pairs(self.db.profile.groupContainers or {}) do
+        if container
+            and container.locked == false
+            and self:IsContainerVisibleToCurrentChar(containerId)
+        then
+            snapshot.containers[containerId] = true
+            snapshot.hadUnlocked = true
+        end
+    end
+
+    for groupId, group in pairs(self.db.profile.groups or {}) do
+        if group
+            and group.locked == false
+            and self:IsGroupVisibleToCurrentChar(groupId)
+        then
+            snapshot.groups[groupId] = true
+            snapshot.hadUnlocked = true
+        end
+    end
+
+    self._combatForcedLock = true
+    self._combatForcedLockSnapshot = snapshot
+
+    for groupId, frame in pairs(self.groupFrames or {}) do
+        local group = self.db and self.db.profile and self.db.profile.groups and self.db.profile.groups[groupId]
+        local active = group and self:IsGroupActive(groupId, {
+            group = group,
+            checkCharVisibility = true,
+            checkLoadConditions = true,
+            requireButtons = true,
+        }) or false
+
+        if frame._dragInProgress then
+            frame._dragCancelPending = true
+            if not frame:IsProtected() then
+                frame:StopMovingOrSizing()
+            end
+            frame._dragInProgress = nil
+        end
+        frame._combatForcedHidden = not active or nil
+        SuppressFrameVisibilityForCombat(frame.dragHandle)
+        SuppressFrameVisibilityForCombat(frame.coordLabel)
+        SuppressFrameVisibilityForCombat(frame.nudger)
+        ForceCombatMouseLock(frame)
+        ForceCombatMouseLock(frame.dragHandle)
+        ForceCombatMouseLock(frame.nudger)
+        for _, button in ipairs(frame.buttons or {}) do
+            local host = button and button.auraTextureHost or nil
+            if host then
+                if host._isDragging then
+                    host._dragCancelPending = true
+                    if not host:IsProtected() then
+                        host:StopMovingOrSizing()
+                    end
+                    host._isDragging = nil
+                end
+                host._dragEnabled = false
+                SuppressFrameVisibilityForCombat(host.dragHandle)
+                SuppressFrameVisibilityForCombat(host.coordLabel)
+                SuppressFrameVisibilityForCombat(host.nudger)
+                if host.auraTextureOutlineFill then
+                    host.auraTextureOutlineFill:Hide()
+                end
+                for _, edge in ipairs(host.auraTextureOutlineEdges or {}) do
+                    edge:Hide()
+                end
+            end
+            if not active and self.HideAuraTextureVisual then
+                self:HideAuraTextureVisual(button)
+            end
+        end
+
+        if active then
+            local alphaState = self.alphaState and self.alphaState[groupId]
+            local frameAlpha = (group and group.baselineAlpha) or 1
+            if alphaState and alphaState.currentAlpha ~= nil then
+                frameAlpha = alphaState.currentAlpha
+            end
+            frame:SetAlpha(frameAlpha)
+        elseif frame:IsProtected() then
+            frame:SetAlpha(0)
+        else
+            frame:Hide()
+        end
+    end
+
+    if self.containerFrames then
+        for containerId, frame in pairs(self.containerFrames) do
+            if frame._dragInProgress then
+                frame._dragCancelPending = true
+                if not frame:IsProtected() then
+                    frame:StopMovingOrSizing()
+                end
+                frame._dragInProgress = nil
+            end
+            self:UpdateContainerDragHandle(containerId, true)
+        end
+    end
+
+    return snapshot.hadUnlocked
+end
+
+function CooldownCompanion:EndCombatForcedLock()
+    if not self._combatForcedLock then
+        return nil
+    end
+
+    local snapshot = self._combatForcedLockSnapshot
+    self._combatForcedLock = nil
+    self._combatForcedLockSnapshot = nil
+
+    for _, frame in pairs(self.groupFrames or {}) do
+        frame._combatForcedHidden = nil
+        RestoreFrameVisibilityAfterCombat(frame.dragHandle)
+        RestoreFrameVisibilityAfterCombat(frame.coordLabel)
+        RestoreFrameVisibilityAfterCombat(frame.nudger)
+        for _, button in ipairs(frame.buttons or {}) do
+            local host = button and button.auraTextureHost or nil
+            RestoreFrameVisibilityAfterCombat(host and host.dragHandle or nil)
+            RestoreFrameVisibilityAfterCombat(host and host.coordLabel or nil)
+            RestoreFrameVisibilityAfterCombat(host and host.nudger or nil)
+        end
+    end
+
+    for _, frame in pairs(self.containerFrames or {}) do
+        RestoreFrameVisibilityAfterCombat(frame.dragHandle)
+        RestoreFrameVisibilityAfterCombat(frame.dragHandle and frame.dragHandle.header or nil)
+        RestoreFrameVisibilityAfterCombat(frame.coordLabel)
+        RestoreFrameVisibilityAfterCombat(frame.nudger)
+        for _, label in pairs(frame._containerPanelLabels or {}) do
+            RestoreFrameVisibilityAfterCombat(label)
+        end
+    end
+
+    return snapshot
+end
+
+function CooldownCompanion:IsGroupVisibleInUnlockPreview(groupId, opts)
+    opts = opts or {}
+
+    local group = opts.group or self.db.profile.groups[groupId]
+    if not (group and group.parentContainerId) then
+        return false
+    end
+
+    local container = opts.container or self:GetParentContainer(group)
+    if not self:IsContainerUnlockPreviewActive(container) then
+        return false
+    end
+
+    if not (group.buttons and #group.buttons > 0) then
+        return false
+    end
+
+    local groupFrame = opts.groupFrame
+    if groupFrame == nil and groupId then
+        groupFrame = self.groupFrames and self.groupFrames[groupId] or nil
+    end
+    if groupFrame and (not groupFrame.buttons or #groupFrame.buttons == 0) then
+        return false
+    end
+
+    local checkCharVisibility = opts.checkCharVisibility
+    if checkCharVisibility == nil then
+        checkCharVisibility = true
+    end
+    if checkCharVisibility and groupId and not self:IsGroupVisibleToCurrentChar(groupId) then
+        return false
+    end
+
+    local effectiveSpecs = self:GetEffectiveSpecs(group)
+    if effectiveSpecs and next(effectiveSpecs) then
+        if not (self._currentSpecId and effectiveSpecs[self._currentSpecId]) then
+            return false
+        end
+    end
+
+    return true
+end
+
+function CooldownCompanion:GetContainerUnlockPreviewPanels(containerId)
+    local previewPanels = {}
+    local panels = self:GetPanels(containerId)
+    for _, panelInfo in ipairs(panels) do
+        if self:IsGroupVisibleInUnlockPreview(panelInfo.groupId, {
+            group = panelInfo.group,
+            checkCharVisibility = true,
+        }) then
+            previewPanels[#previewPanels + 1] = panelInfo
+        end
+    end
+    return previewPanels
 end
 
 function CooldownCompanion:GetEffectiveSpecs(group)
@@ -473,6 +777,13 @@ function CooldownCompanion:IsGroupActive(groupId, opts)
 
     -- If this panel has a parent container, check container-level state first
     local container = self:GetParentContainer(group)
+    if container and self:IsContainerUnlockPreviewActive(container) then
+        return self:IsGroupVisibleInUnlockPreview(groupId, {
+            group = group,
+            container = container,
+            checkCharVisibility = opts.checkCharVisibility,
+        })
+    end
     if container then
         if container.enabled == false then return false end
         if group.enabled == false then return false end
@@ -549,7 +860,7 @@ function CooldownCompanion:IsGroupAvailableForPanelAnchorTarget(groupId)
     local group = self.db.profile.groups[groupId]
     if not group then return false end
     if not group.parentContainerId then return false end
-    if group.displayMode == "textures" then return false end
+    if group.displayMode == "textures" or group.displayMode == "trigger" then return false end
 
     local container = self:GetParentContainer(group)
     if container and container.isGlobal and not container.anchorEligible then return false end
@@ -1068,6 +1379,9 @@ function CooldownCompanion:RefreshAllGroups()
     end
 
     self:FinalizeContainerAnchorsToScreenOffsets()
+    if self.RefreshAllContainerWrappers then
+        self:RefreshAllContainerWrappers()
+    end
 end
 
 -- Refresh only frame-level visibility/load-state without rebuilding buttons.
@@ -1168,6 +1482,9 @@ function CooldownCompanion:RefreshAllGroupsVisibilityOnly()
     end
 
     self:FinalizeContainerAnchorsToScreenOffsets()
+    if self.RefreshAllContainerWrappers then
+        self:RefreshAllContainerWrappers()
+    end
 end
 
 -- Fully unload a group: save/clear button OnUpdate scripts, remove from
@@ -1217,6 +1534,8 @@ function CooldownCompanion:UnloadGroup(groupId)
     else
         frame:Hide()
     end
+    frame._triggerSoundInitialized = nil
+    frame._triggerSoundWasVisible = nil
     self._dormantFrames = self._dormantFrames or {}
     self._dormantFrames[groupId] = frame
     self.groupFrames[groupId] = nil
@@ -1351,7 +1670,25 @@ end
 function CooldownCompanion:UpdateContainerDragHandle(containerId, locked)
     local cFrame = self.containerFrames and self.containerFrames[containerId]
     if cFrame and cFrame.dragHandle then
-        cFrame.dragHandle:SetShown(not locked)
+        local effectiveLocked = locked or self._combatForcedLock
+        if effectiveLocked then
+            if self.ClearContainerUnlockState then
+                self:ClearContainerUnlockState(containerId)
+            end
+            SuppressFrameVisibilityForCombat(cFrame.dragHandle)
+            SuppressFrameVisibilityForCombat(cFrame.dragHandle and cFrame.dragHandle.header or nil)
+            SuppressFrameVisibilityForCombat(cFrame.coordLabel)
+            SuppressFrameVisibilityForCombat(cFrame.nudger)
+            if cFrame._containerPanelLabels then
+                for _, label in pairs(cFrame._containerPanelLabels) do
+                    SuppressFrameVisibilityForCombat(label)
+                end
+            end
+        elseif self.RefreshContainerWrapper then
+            self:RefreshContainerWrapper(containerId)
+        else
+            cFrame.dragHandle:Show()
+        end
     end
 end
 
@@ -1376,6 +1713,7 @@ function CooldownCompanion:LockAllFrames()
             self:UpdateContainerDragHandle(containerId, true)
         end
     end
+    self:RefreshAllGroups()
 end
 
 function CooldownCompanion:UnlockAllFrames()
@@ -1384,7 +1722,7 @@ function CooldownCompanion:UnlockAllFrames()
         if frame then
             self:UpdateGroupClickthrough(groupId)
             local group = self.db.profile.groups[groupId]
-            local panelUnlocked = group and group.locked == false
+            local panelUnlocked = group and group.locked == false and not self._combatForcedLock
             if frame.dragHandle then
                 if panelUnlocked then
                     frame.dragHandle:Show()
@@ -1402,11 +1740,39 @@ function CooldownCompanion:UnlockAllFrames()
             self:UpdateContainerDragHandle(containerId, not container or container.locked)
         end
     end
+    self:RefreshAllGroups()
 end
 
-------------------------------------------------------------------------
 -- TALENT NODE CACHE (for per-button talent conditions)
 ------------------------------------------------------------------------
+
+function CooldownCompanion:GetHeroSubTreeRootNode(configID, treeID, heroSubTreeID)
+    if not configID or not treeID or not heroSubTreeID then
+        return nil, nil
+    end
+
+    local nodeIDs = C_Traits.GetTreeNodes(treeID)
+    if not nodeIDs then
+        return nil, nil
+    end
+
+    local bestNodeID, bestNodeInfo = nil, nil
+    for _, nodeID in ipairs(nodeIDs) do
+        local nodeInfo = C_Traits.GetNodeInfo(configID, nodeID)
+        if nodeInfo
+            and nodeInfo.subTreeID == heroSubTreeID
+            and nodeInfo.type ~= Enum.TraitNodeType.SubTreeSelection then
+            if not bestNodeInfo
+                or nodeInfo.posY < bestNodeInfo.posY
+                or (nodeInfo.posY == bestNodeInfo.posY and nodeInfo.posX < bestNodeInfo.posX) then
+                bestNodeID = nodeID
+                bestNodeInfo = nodeInfo
+            end
+        end
+    end
+
+    return bestNodeID, bestNodeInfo
+end
 
 -- Rebuild the runtime talent node cache from the active talent config.
 -- Called on TRAIT_CONFIG_UPDATED, PLAYER_ENTERING_WORLD, spec changes.
@@ -1426,9 +1792,14 @@ function CooldownCompanion:RebuildTalentNodeCache()
     local treeID = C_ClassTalents.GetTraitTreeForSpec(specID)
     if not treeID then return end
 
+    local activeHeroSubTreeID = self._currentHeroSpecId or C_ClassTalents.GetActiveHeroTalentSpec()
+    local heroRootNodeID = nil
+    if activeHeroSubTreeID then
+        heroRootNodeID = self:GetHeroSubTreeRootNode(configID, treeID, activeHeroSubTreeID)
+    end
+
     local nodeIDs = C_Traits.GetTreeNodes(treeID)
     if not nodeIDs then return end
-    local activeHeroSubTreeID = self._currentHeroSpecId or C_ClassTalents.GetActiveHeroTalentSpec()
 
     for _, nodeID in ipairs(nodeIDs) do
         local nodeInfo = C_Traits.GetNodeInfo(configID, nodeID)
@@ -1440,7 +1811,10 @@ function CooldownCompanion:RebuildTalentNodeCache()
                 or (
                     activeHeroSubTreeID
                     and nodeInfo.subTreeID == activeHeroSubTreeID
-                    and nodeInfo.type == Enum.TraitNodeType.Selection
+                    and (
+                        nodeInfo.type == Enum.TraitNodeType.Selection
+                        or nodeID == heroRootNodeID
+                    )
                 )
             )
         if includeNode then
@@ -1475,6 +1849,16 @@ function CooldownCompanion:IsTalentConditionMet(buttonData)
         cache = self._talentNodeCache
     end
 
+    local function IsHeroSpecProxyCondition(cond)
+        return type(cond) == "table"
+            and cond.nodeID ~= nil
+            and cond.heroSubTreeID ~= nil
+            and cond.entryID == nil
+            and type(cond.name) == "string"
+            and type(cond.heroName) == "string"
+            and cond.name == cond.heroName
+    end
+
     for _, cond in ipairs(conditions) do
         if cond.classID and self._playerClassID and cond.classID ~= self._playerClassID then
             return false
@@ -1484,26 +1868,44 @@ function CooldownCompanion:IsTalentConditionMet(buttonData)
             return false
         end
 
+        local activeHeroSubTreeID = nil
         if cond.heroSubTreeID then
-            local activeHeroSubTreeID = self._currentHeroSpecId or C_ClassTalents.GetActiveHeroTalentSpec()
+            activeHeroSubTreeID = self._currentHeroSpecId or C_ClassTalents.GetActiveHeroTalentSpec()
+        end
+
+        if IsHeroSpecProxyCondition(cond) then
+            local show = cond.show or "taken"
+            local heroIsActive = activeHeroSubTreeID ~= nil and cond.heroSubTreeID == activeHeroSubTreeID
+            if show == "not_taken" then
+                if heroIsActive then
+                    return false
+                end
+            else
+                if not heroIsActive then
+                    return false
+                end
+            end
+        elseif cond.heroSubTreeID then
             if cond.heroSubTreeID ~= activeHeroSubTreeID then
                 return false
             end
         end
 
-        local entry = cache and cache[cond.nodeID] or nil
-        local isTaken = entry and entry.activeRank > 0 or false
+        if not IsHeroSpecProxyCondition(cond) then
+            local entry = cache and cache[cond.nodeID] or nil
+            local isTaken = entry and entry.activeRank > 0 or false
 
-        -- For choice nodes: if a specific entryID is required, verify it matches
-        if isTaken and cond.entryID then
-            isTaken = (entry.activeEntryID == cond.entryID)
-        end
+            -- For choice nodes: if a specific entryID is required, verify it matches
+            if isTaken and cond.entryID then
+                isTaken = (entry.activeEntryID == cond.entryID)
+            end
 
-        local show = cond.show or "taken"
-        if show == "not_taken" then
-            if isTaken then return false end
-        else
-            if not isTaken then return false end
+            local show = cond.show or "taken"
+            if show == "not_taken" then
+                if isTaken then return false end
+            else
+                if not isTaken then return false end
+            end
         end
     end
 

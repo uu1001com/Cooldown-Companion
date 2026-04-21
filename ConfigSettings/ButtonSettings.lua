@@ -58,13 +58,27 @@ local BuildTextBackgroundControls = ST._BuildTextBackgroundControls
 
 local tabInfoButtons = CS.tabInfoButtons
 local appearanceTabElements = CS.appearanceTabElements
+local RefreshButtonSettingsMultiSelect = ST._RefreshButtonSettingsMultiSelect
+local RefreshPanelMultiSelect = ST._RefreshPanelMultiSelect
+local BuildOverridesTab = ST._BuildOverridesTab
 local SOUND_ALERT_NONE_OPTION_KEY = "None" -- Keep in sync with Core/SoundAlerts.lua SOUND_NONE_KEY.
 
 local function GroupUsesTexturePanelEntries(group)
     return group and (group.displayMode or "icons") == "textures"
 end
 
+local function GroupUsesTriggerPanelEntries(group)
+    return group and group.displayMode == "trigger"
+end
+
 local function BuildButtonSettingsTabs(group)
+    if GroupUsesTriggerPanelEntries(group) then
+        return {
+            { value = "settings", text = "Condition" },
+            { value = "soundalerts", text = "Sound Alerts" },
+        }
+    end
+
     local tabs = {
         { value = "settings", text = "Settings" },
         { value = "soundalerts", text = "Sound Alerts" },
@@ -113,6 +127,7 @@ local function ResetSoundPreviewRow(item)
     if previewBtn then
         previewBtn:SetShown(false)
         previewBtn._cdcButtonData = nil
+        previewBtn._cdcGroup = nil
         previewBtn._cdcSoundValue = nil
         previewBtn:ClearAllPoints()
     end
@@ -122,7 +137,7 @@ local function ResetSoundPreviewRow(item)
     item.text:SetPoint("BOTTOMRIGHT", item.frame, "BOTTOMRIGHT", SOUND_PREVIEW_TEXT_RIGHT_OFFSET, 0)
 end
 
-local function ConfigureSoundPreviewRow(item, buttonData)
+local function ConfigureSoundPreviewRow(item, buttonData, group)
     if not (item and item.frame and item.text) then return end
 
     if not item._cdcSoundPreviewCleanupInstalled then
@@ -152,7 +167,10 @@ local function ConfigureSoundPreviewRow(item, buttonData)
         previewBtn:SetScript("OnClick", function(self)
             local previewValue = self._cdcSoundValue
             local previewButtonData = self._cdcButtonData
-            if previewValue and previewValue ~= SOUND_ALERT_NONE_OPTION_KEY and previewButtonData then
+            local previewGroup = self._cdcGroup
+            if previewValue and previewValue ~= SOUND_ALERT_NONE_OPTION_KEY and previewGroup then
+                CooldownCompanion:PreviewTriggerPanelSoundAlertSelection(previewGroup, previewValue)
+            elseif previewValue and previewValue ~= SOUND_ALERT_NONE_OPTION_KEY and previewButtonData then
                 CooldownCompanion:PreviewSoundAlertSelection(previewButtonData, previewValue)
             end
         end)
@@ -164,6 +182,7 @@ local function ConfigureSoundPreviewRow(item, buttonData)
     previewBtn:ClearAllPoints()
     previewBtn:SetPoint("RIGHT", item.frame, "RIGHT", SOUND_PREVIEW_BUTTON_RIGHT_OFFSET, 0)
     previewBtn._cdcButtonData = buttonData
+    previewBtn._cdcGroup = group
 
     local previewValue = item.userdata and item.userdata.value
     local hasPreview = previewValue and previewValue ~= SOUND_ALERT_NONE_OPTION_KEY
@@ -229,9 +248,381 @@ local function EnsureAuraUnitChoice(buttonData, isHarmful, unit)
     end
 end
 
+local function SetupWrappedStatusLabel(scroll, label, text, justifyH)
+    label:SetFullWidth(true)
+    label:SetJustifyH(justifyH or "LEFT")
+    local contentWidth = scroll.content and scroll.content:GetWidth()
+    if contentWidth and contentWidth > 0 then
+        label:SetWidth(math.max(1, contentWidth - 20))
+    end
+    label:SetText(text)
+end
+
+local function BuildAuraTrackingSettingsSection(scroll, buttonData, infoButtons, options)
+    options = options or {}
+    if buttonData.type ~= "spell" then
+        return
+    end
+
+    local group = CooldownCompanion.db.profile.groups[CS.selectedGroup]
+    if not group then
+        return
+    end
+
+    local isHarmful = C_Spell.IsSpellHarmful(buttonData.id)
+    local cdmEnabled = C_CVar.GetCVarBool("cooldownViewerEnabled") == true
+    local viewerFrame = cdmEnabled and CooldownCompanion:ResolveButtonAuraViewerFrame(buttonData) or nil
+    local hasViewerFrame = viewerFrame ~= nil
+    local allowPassiveManualRecovery = options.allowPassiveManualRecovery == true
+    local showAuraToggle = options.showAuraToggle == true
+    local showAuraIconToggle = options.showAuraIconToggle == true
+    local showAuraStateLabelWhenToggleHidden = options.showAuraStateLabelWhenToggleHidden == true
+    local useCollapse = options.useCollapse == true
+    local showHeading = options.showHeading ~= false
+
+    -- Auto-enable aura tracking for viewer-backed spells.
+    if hasViewerFrame and buttonData.auraTracking == nil then
+        buttonData.auraTracking = true
+        local overrideBuffs = CooldownCompanion.ABILITY_BUFF_OVERRIDES[buttonData.id]
+        if overrideBuffs and not buttonData.auraSpellID then
+            buttonData.auraSpellID = overrideBuffs
+        end
+        EnsureAuraUnitChoice(buttonData, isHarmful)
+        CooldownCompanion:RefreshGroupFrame(CS.selectedGroup)
+    end
+
+    local auraStatus = CooldownCompanion:ResolveAuraTrackingConfigStatus(
+        buttonData,
+        cdmEnabled,
+        viewerFrame
+    )
+    local auraConfigReady = auraStatus.ready == true
+    local auraFoundButUntracked = auraStatus.state == "associatedAuraNotTracked"
+    local auraTrackedButUnavailable = auraStatus.state == "trackedAuraUnavailable"
+    local auraInactiveColorCode = auraFoundButUntracked and "|cffffff00" or "|cffff0000"
+    local isAuraEntry = buttonData.addedAs == "aura"
+
+    if showHeading then
+        local auraHeading = AceGUI:Create("Heading")
+        auraHeading:SetText("Aura Tracking")
+        ColorHeading(auraHeading)
+        auraHeading:SetFullWidth(true)
+        scroll:AddChild(auraHeading)
+
+        local auraHeadingInfoBtn = CreateInfoButton(auraHeading.frame, auraHeading.label, "LEFT", "RIGHT", 4, 0, {
+            "Aura Tracking",
+            {"Shows the tracked aura's remaining duration on the cooldown swipe instead of the spell's normal cooldown.", 1, 1, 1, true},
+            " ",
+            "Requires:",
+            {"- Blizzard Cooldown Manager (CDM) must be enabled.", 1, 1, 1, true},
+            {"- In Edit Mode, the CDM Buffs/Debuffs visibility setting must be set to Always Visible.", 1, 1, 1, true},
+            {"- The aura you want must be tracked in CDM as a Tracked Buff or Tracked Bar, not only as a cooldown.", 1, 1, 1, true},
+            " ",
+            "Can:",
+            {"- Read aura data only from Player or Target.", 1, 1, 1, true},
+            " ",
+            "Cannot:",
+            {"- Track auras that are not present in Blizzard CDM.", 1, 1, 1, true},
+            " ",
+            {"If you do not want CDM visible on your screen, use the CDM hide toggle in the top-right of the config.", 1, 1, 1, true},
+            " ",
+            {"Using other CDM-related addons alongside Cooldown Companion may interfere with aura tracking.", 1, 1, 1, true},
+        }, infoButtons)
+
+        if useCollapse then
+            local auraCollapsed = CS.collapsedSections[options.collapsedKey]
+            local auraCollapseBtn = AttachCollapseButton(auraHeading, auraCollapsed, function()
+                CS.collapsedSections[options.collapsedKey] = not CS.collapsedSections[options.collapsedKey]
+                CooldownCompanion:RefreshConfigPanel()
+            end)
+            auraCollapseBtn:ClearAllPoints()
+            auraCollapseBtn:SetPoint("LEFT", auraHeadingInfoBtn, "RIGHT", 4, 0)
+            auraHeading.right:ClearAllPoints()
+            auraHeading.right:SetPoint("RIGHT", auraHeading.frame, "RIGHT", -3, 0)
+            auraHeading.right:SetPoint("LEFT", auraCollapseBtn, "RIGHT", 4, 0)
+            if auraCollapsed then
+                return
+            end
+        else
+            auraHeading.right:ClearAllPoints()
+            auraHeading.right:SetPoint("RIGHT", auraHeading.frame, "RIGHT", -3, 0)
+            auraHeading.right:SetPoint("LEFT", auraHeadingInfoBtn, "RIGHT", 4, 0)
+        end
+    end
+
+    if buttonData.cdmChildSlot then
+        local slotLabel = AceGUI:Create("Label")
+        local allChildren = CooldownCompanion.viewerAuraAllChildren[buttonData.id]
+        local slotChild = allChildren and allChildren[buttonData.cdmChildSlot]
+        local oid = slotChild and slotChild.cooldownInfo and slotChild.cooldownInfo.overrideSpellID
+        local slotText = L["|cff88bbddCDM Slot: "] .. buttonData.cdmChildSlot .. "|r"
+        if oid and oid ~= buttonData.id then
+            local info = C_Spell.GetSpellInfo(oid)
+            if info and info.name then
+                slotText = slotText .. " (" .. info.name .. ")"
+            end
+        end
+        slotLabel:SetText(slotText)
+        slotLabel:SetFullWidth(true)
+        scroll:AddChild(slotLabel)
+    end
+
+    local auraLabel = "Aura Tracking"
+    auraLabel = auraLabel .. (auraConfigReady and ": |cff00ff00Active|r" or ": " .. auraInactiveColorCode .. "Inactive|r")
+
+    if showAuraToggle and not buttonData.isPassive and not isAuraEntry then
+        local auraCb = AceGUI:Create("CheckBox")
+        auraCb:SetLabel(auraLabel)
+        auraCb:SetValue(buttonData.auraTracking == true)
+        auraCb:SetFullWidth(true)
+        auraCb:SetCallback("OnValueChanged", function(_, _, value)
+            buttonData.auraTracking = value and true or false
+            if value then
+                EnsureAuraUnitChoice(buttonData, isHarmful)
+            end
+            CooldownCompanion:RefreshGroupFrame(CS.selectedGroup)
+            CooldownCompanion:RefreshConfigPanel()
+        end)
+        scroll:AddChild(auraCb)
+    elseif showAuraStateLabelWhenToggleHidden then
+        local auraStateLabel = AceGUI:Create("Label")
+        auraStateLabel:SetText(auraLabel)
+        auraStateLabel:SetFullWidth(true)
+        scroll:AddChild(auraStateLabel)
+    end
+
+    local showAuraDetails = buttonData.isPassive or isAuraEntry or buttonData.auraTracking == true
+    if not showAuraDetails then
+        return
+    end
+
+    local allowManualAuraConfig = not buttonData.isPassive or allowPassiveManualRecovery
+
+    local function StartAuraSpellOverridePicker()
+        local grp = CS.selectedGroup
+        local btn = CS.selectedButton
+        CS.StartPickCDM(function(spellID)
+            if CS.configFrame then
+                CS.configFrame.frame:Show()
+            end
+            if spellID then
+                local groups = CooldownCompanion.db.profile.groups
+                local selectedGroup = groups[grp]
+                if selectedGroup and selectedGroup.buttons and selectedGroup.buttons[btn] then
+                    selectedGroup.buttons[btn].auraSpellID = tostring(spellID)
+                    if selectedGroup.buttons[btn].auraTracking then
+                        EnsureAuraUnitChoice(selectedGroup.buttons[btn], isHarmful)
+                    end
+                end
+            end
+            CooldownCompanion:RefreshGroupFrame(grp)
+            CooldownCompanion:RefreshConfigPanel()
+        end)
+    end
+
+    if allowManualAuraConfig then
+        local auraEditBox = AceGUI:Create("EditBox")
+        if auraEditBox.editbox.Instructions then
+            auraEditBox.editbox.Instructions:Hide()
+        end
+        auraEditBox:SetLabel("Spell ID Override")
+        auraEditBox:SetText(buttonData.auraSpellID and tostring(buttonData.auraSpellID) or "")
+        auraEditBox:SetFullWidth(true)
+        auraEditBox:SetCallback("OnEnterPressed", function(widget, _, text)
+            text = text:gsub("%s", "")
+            if text ~= "" then
+                for token in text:gmatch("[^,]+") do
+                    if not tonumber(token) then
+                        CooldownCompanion:Print("Invalid spell ID: " .. token)
+                        widget:SetText(buttonData.auraSpellID and tostring(buttonData.auraSpellID) or "")
+                        return
+                    end
+                end
+            end
+            buttonData.auraSpellID = text ~= "" and text or nil
+            if buttonData.auraTracking then
+                EnsureAuraUnitChoice(buttonData, isHarmful)
+            end
+            CooldownCompanion:RefreshGroupFrame(CS.selectedGroup)
+            CooldownCompanion:RefreshConfigPanel()
+        end)
+        scroll:AddChild(auraEditBox)
+
+        CreateInfoButton(auraEditBox.frame, auraEditBox.frame, "TOPLEFT", "TOPLEFT", auraEditBox.label:GetStringWidth() + 4, -2, {
+            "Spell ID Override",
+            {"Most spells are tracked automatically, but some abilities apply a buff or debuff with a different spell ID than the ability itself. If tracking isn't working, enter the buff/debuff spell ID here. Use commas for multiple IDs (e.g. 48517,48518 for both Eclipse forms).\n\nUse \"Pick CDM\" below to visually select a spell from the Cooldown Manager.", 1, 1, 1, true},
+        }, infoButtons)
+
+        local overrideCdmSpacer = AceGUI:Create("Label")
+        overrideCdmSpacer:SetText(" ")
+        overrideCdmSpacer:SetFullWidth(true)
+        scroll:AddChild(overrideCdmSpacer)
+
+        if not IsValidAuraUnit(buttonData.auraUnit) then
+            buttonData.auraUnit = GetDefaultAuraUnit(isHarmful)
+        end
+
+        local auraUnitDrop = AceGUI:Create("Dropdown")
+        auraUnitDrop:SetLabel("Aura Unit")
+        auraUnitDrop:SetList({
+            player = "Player",
+            target = "Target",
+        }, { "player", "target" })
+        auraUnitDrop:SetValue(buttonData.auraUnit)
+        auraUnitDrop:SetFullWidth(true)
+        auraUnitDrop:SetCallback("OnValueChanged", function(_, _, value)
+            if value ~= "player" and value ~= "target" then
+                return
+            end
+            EnsureAuraUnitChoice(buttonData, isHarmful, value)
+            CooldownCompanion:RefreshGroupFrame(CS.selectedGroup)
+            CooldownCompanion:RefreshConfigPanel()
+        end)
+        scroll:AddChild(auraUnitDrop)
+        CreateInfoButton(auraUnitDrop.frame, auraUnitDrop.label, "LEFT", "RIGHT", 4, 0, {
+            "Aura Unit",
+            {"This controls where the tracked aura is expected to exist. Use Target for debuffs on your target, or Player for buffs/procs on yourself, even if the button's spell is something else.", 1, 1, 1, true},
+        }, infoButtons)
+
+        local auraUnitSpacer = AceGUI:Create("Label")
+        auraUnitSpacer:SetText(" ")
+        auraUnitSpacer:SetFullWidth(true)
+        scroll:AddChild(auraUnitSpacer)
+    end
+
+    local cdmToggleBtn = AceGUI:Create("Button")
+    cdmToggleBtn:SetText(cdmEnabled and L["Blizzard CDM: |cff00ff00Active|r"] or L["Blizzard CDM: |cffff0000Inactive|r"])
+    cdmToggleBtn:SetFullWidth(true)
+    cdmToggleBtn:SetCallback("OnClick", function()
+        local current = C_CVar.GetCVarBool("cooldownViewerEnabled") == true
+        C_CVar.SetCVar("cooldownViewerEnabled", current and "0" or "1")
+        CooldownCompanion:RefreshConfigPanel()
+        if not current then
+            C_Timer.After(0.2, function()
+                CooldownCompanion:BuildViewerAuraMap()
+                CooldownCompanion:RefreshConfigPanel()
+            end)
+        end
+    end)
+    scroll:AddChild(cdmToggleBtn)
+
+    local cdmRow = AceGUI:Create("SimpleGroup")
+    cdmRow:SetFullWidth(true)
+    cdmRow:SetLayout("Flow")
+
+    local openCdmBtn = AceGUI:Create("Button")
+    openCdmBtn:SetText("CDM Settings")
+    openCdmBtn:SetRelativeWidth(allowManualAuraConfig and 0.5 or 1.0)
+    openCdmBtn:SetCallback("OnClick", function()
+        if CooldownViewerSettings then
+            CooldownViewerSettings:TogglePanel()
+        end
+    end)
+    cdmRow:AddChild(openCdmBtn)
+
+    if allowManualAuraConfig then
+        local pickCDMBtn = AceGUI:Create("Button")
+        pickCDMBtn:SetText("Pick CDM")
+        pickCDMBtn:SetRelativeWidth(0.5)
+        pickCDMBtn:SetCallback("OnClick", StartAuraSpellOverridePicker)
+        pickCDMBtn:SetCallback("OnEnter", function(widget)
+            GameTooltip:SetOwner(widget.frame, "ANCHOR_TOP")
+            GameTooltip:AddLine("Pick from Cooldown Manager")
+            GameTooltip:AddLine("Shows a list of Tracked Buff/Tracked Bar auras currently tracked in the Cooldown Manager. Click one to populate the Spell ID Override.", 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        pickCDMBtn:SetCallback("OnLeave", function()
+            GameTooltip:Hide()
+        end)
+        cdmRow:AddChild(pickCDMBtn)
+    end
+
+    scroll:AddChild(cdmRow)
+
+    local auraStatusSpacer1 = AceGUI:Create("Label")
+    auraStatusSpacer1:SetText(" ")
+    auraStatusSpacer1:SetFullWidth(true)
+    scroll:AddChild(auraStatusSpacer1)
+
+    local auraStatusLabel = AceGUI:Create("Label")
+    if auraConfigReady then
+        SetupWrappedStatusLabel(scroll, auraStatusLabel, "|cff00ff00Aura tracking is active and ready.|r", "CENTER")
+    else
+        SetupWrappedStatusLabel(scroll, auraStatusLabel, (auraFoundButUntracked and "|cffffff00" or "|cffff0000") .. "Aura tracking is not ready.|r", "CENTER")
+    end
+    scroll:AddChild(auraStatusLabel)
+
+    local auraStatusSpacer2 = AceGUI:Create("Label")
+    auraStatusSpacer2:SetText(" ")
+    auraStatusSpacer2:SetFullWidth(true)
+    scroll:AddChild(auraStatusSpacer2)
+
+    if auraStatus.state == "cdmDisabled" then
+        local cdmDisabledLabel = AceGUI:Create("Label")
+        SetupWrappedStatusLabel(scroll, cdmDisabledLabel, "|cff888888Blizzard Cooldown Manager is disabled. Enable it above to allow aura tracking.|r")
+        scroll:AddChild(cdmDisabledLabel)
+        local cdmDisabledSpacer = AceGUI:Create("Label")
+        cdmDisabledSpacer:SetText(" ")
+        cdmDisabledSpacer:SetFullWidth(true)
+        scroll:AddChild(cdmDisabledSpacer)
+    elseif auraStatus.state == "noAssociatedAura" then
+        local noAuraLabel = AceGUI:Create("Label")
+        SetupWrappedStatusLabel(scroll, noAuraLabel, "|cff888888No associated aura was found for this spell. Use the Spell ID Override above if you want to link it to a specific CDM-trackable aura.|r")
+        scroll:AddChild(noAuraLabel)
+        local noAuraSpacer = AceGUI:Create("Label")
+        noAuraSpacer:SetText(" ")
+        noAuraSpacer:SetFullWidth(true)
+        scroll:AddChild(noAuraSpacer)
+    elseif auraTrackedButUnavailable then
+        local viewerUnavailableLabel = AceGUI:Create("Label")
+        SetupWrappedStatusLabel(
+            scroll,
+            viewerUnavailableLabel,
+            "|cff888888An associated aura is tracked in Blizzard CDM, but its Buffs/Debuffs viewer is not currently readable. Set the CDM Buffs/Debuffs visibility to Always Visible.|r"
+        )
+        scroll:AddChild(viewerUnavailableLabel)
+        local viewerUnavailableSpacer = AceGUI:Create("Label")
+        viewerUnavailableSpacer:SetText(" ")
+        viewerUnavailableSpacer:SetFullWidth(true)
+        scroll:AddChild(viewerUnavailableSpacer)
+    end
+
+    if auraStatus.state == "associatedAuraNotTracked" then
+        local auraDisabledLabel = AceGUI:Create("Label")
+        SetupWrappedStatusLabel(scroll, auraDisabledLabel, "|cff888888An associated aura was found, but it is not being currently tracked in Blizzard CDM as a Tracked Buff or Tracked Bar.|r")
+        scroll:AddChild(auraDisabledLabel)
+        local auraDisabledSpacer = AceGUI:Create("Label")
+        auraDisabledSpacer:SetText(" ")
+        auraDisabledSpacer:SetFullWidth(true)
+        scroll:AddChild(auraDisabledSpacer)
+    end
+
+    if hasViewerFrame and buttonData.auraTracking and not IsValidAuraUnit(buttonData.auraUnit) then
+        -- Preserve explicit player/target choices, but repair legacy invalid values.
+        buttonData.auraUnit = GetDefaultAuraUnit(isHarmful)
+    end
+
+    if showAuraIconToggle and buttonData.auraTracking and not buttonData.isPassive then
+        local auraIconCb = AceGUI:Create("CheckBox")
+        auraIconCb:SetLabel(L["Show Aura Icon"])
+        auraIconCb:SetValue(buttonData.auraShowAuraIcon == true)
+        auraIconCb:SetFullWidth(true)
+        auraIconCb:SetCallback("OnValueChanged", function(_, _, value)
+            buttonData.auraShowAuraIcon = value and true or nil
+            CooldownCompanion:RefreshGroupFrame(CS.selectedGroup)
+        end)
+        scroll:AddChild(auraIconCb)
+        CreateInfoButton(auraIconCb.frame, auraIconCb.checkbg, "LEFT", "RIGHT",
+            auraIconCb.text:GetStringWidth() + 4, 0, {
+            L["Show Aura Icon"],
+            {L["When enabled, the button icon changes to show the tracked aura's icon while the aura is active. When the aura expires, the normal spell icon is restored.\n\nUseful when the tracked aura has a different icon than the ability itself."], 1, 1, 1, true},
+        }, infoButtons)
+    end
+end
+
 local function BuildSpellSoundAlertsSection(scroll, buttonData, infoButtons)
     local soundHeading = AceGUI:Create("Heading")
-    soundHeading:SetText(L["Sound Alerts"])
+    soundHeading:SetText("Sound Alerts")
     ColorHeading(soundHeading)
     soundHeading:SetHeight(22)
     soundHeading:SetFullWidth(true)
@@ -246,8 +637,8 @@ local function BuildSpellSoundAlertsSection(scroll, buttonData, infoButtons)
     scroll:AddChild(soundHeading)
 
     local soundInfoBtn = CreateInfoButton(soundHeading.frame, soundHeading.label, "LEFT", "RIGHT", 4, 0, {
-        L["Sound Alerts"],
-        {L["Sound alerts are played through the Master channel and follow your game's Master volume setting."], 1, 1, 1, true},
+        "Sound Alerts",
+        {"Sound alerts are played through the Master channel and follow your game's Master volume setting.", 1, 1, 1, true},
     }, infoButtons)
     soundHeading.right:ClearAllPoints()
     soundHeading.right:SetPoint("RIGHT", soundHeading.frame, "RIGHT", -3, 0)
@@ -256,7 +647,7 @@ local function BuildSpellSoundAlertsSection(scroll, buttonData, infoButtons)
     local validEvents = CooldownCompanion:GetScopedValidSoundAlertEventsForButton(buttonData)
     if not validEvents then
         local noEvents = AceGUI:Create("Label")
-        noEvents:SetText(L["|cff888888No alertable sound events are available for this button under its current entry type, tracking mode, and Blizzard Cooldown Manager mapping.|r"])
+        noEvents:SetText("|cff888888No alertable sound events are available for this button under its current entry type, tracking mode, and Blizzard Cooldown Manager mapping.|r")
         noEvents:SetFullWidth(true)
         scroll:AddChild(noEvents)
         return
@@ -303,7 +694,7 @@ end
 local function BuildSpellSoundAlertsTab(scroll, buttonData, infoButtons)
     if buttonData.type ~= "spell" then
         local notSpellLabel = AceGUI:Create("Label")
-        notSpellLabel:SetText(L["|cff888888Sound alerts are available for spell buttons only.|r"])
+        notSpellLabel:SetText("|cff888888Sound alerts are available for spell buttons only.|r")
         notSpellLabel:SetFullWidth(true)
         scroll:AddChild(notSpellLabel)
         return
@@ -312,358 +703,226 @@ local function BuildSpellSoundAlertsTab(scroll, buttonData, infoButtons)
     BuildSpellSoundAlertsSection(scroll, buttonData, infoButtons)
 end
 
+local function BuildTriggerPanelSoundAlertsTab(scroll, group, buttonData, infoButtons)
+    if not (group and group.displayMode == "trigger") then
+        return
+    end
+
+    local soundHeading = AceGUI:Create("Heading")
+    soundHeading:SetText("Sound Alerts")
+    ColorHeading(soundHeading)
+    soundHeading:SetHeight(22)
+    soundHeading:SetFullWidth(true)
+    soundHeading.label:ClearAllPoints()
+    soundHeading.label:SetPoint("CENTER", soundHeading.frame, "CENTER", 0, 2)
+    soundHeading.left:ClearAllPoints()
+    soundHeading.left:SetPoint("LEFT", soundHeading.frame, "LEFT", 3, 0)
+    soundHeading.left:SetPoint("RIGHT", soundHeading.label, "LEFT", -5, 0)
+    soundHeading.right:ClearAllPoints()
+    soundHeading.right:SetPoint("RIGHT", soundHeading.frame, "RIGHT", -3, 0)
+    soundHeading.right:SetPoint("LEFT", soundHeading.label, "RIGHT", 5, 0)
+    scroll:AddChild(soundHeading)
+
+    local soundInfoBtn = CreateInfoButton(soundHeading.frame, soundHeading.label, "LEFT", "RIGHT", 4, 0, {
+        "Sound Alerts",
+        {"Plays when the trigger texture appears. This is panel-level and not tied to any one condition. Uses the Master channel and follows your game's Master volume setting.", 1, 1, 1, true},
+    }, infoButtons)
+    soundHeading.right:ClearAllPoints()
+    soundHeading.right:SetPoint("RIGHT", soundHeading.frame, "RIGHT", -3, 0)
+    soundHeading.right:SetPoint("LEFT", soundInfoBtn, "RIGHT", 4, 0)
+
+    local soundOptions = CooldownCompanion:GetSoundAlertOptions()
+    local soundOptionOrder = BuildSortedSoundOptionOrder(soundOptions)
+
+    local row = AceGUI:Create("SimpleGroup")
+    row:SetFullWidth(true)
+    row:SetLayout("Flow")
+
+    local soundDrop = AceGUI:Create("Dropdown")
+    soundDrop:SetLabel(CooldownCompanion:GetTriggerPanelSoundAlertEventLabel("onShow"))
+    soundDrop:SetList(soundOptions, soundOptionOrder)
+    soundDrop:SetValue(CooldownCompanion:GetTriggerPanelSoundAlertSelection(group, "onShow"))
+    soundDrop:SetFullWidth(true)
+    soundDrop:SetCallback("OnOpened", function(widget)
+        if not widget.pullout then return end
+        for _, item in widget.pullout:IterateItems() do
+            ConfigureSoundPreviewRow(item, buttonData, group)
+        end
+    end)
+    soundDrop:SetCallback("OnValueChanged", function(_, _, value)
+        CooldownCompanion:SetTriggerPanelSoundAlertEvent(group, "onShow", value)
+    end)
+
+    row:AddChild(soundDrop)
+    scroll:AddChild(row)
+end
+
+local function CreateCenteredSubHeading(text)
+    local heading = AceGUI:Create("Heading")
+    heading:SetText(text)
+    ColorHeading(heading)
+    heading:SetHeight(22)
+    heading:SetFullWidth(true)
+    heading.label:ClearAllPoints()
+    heading.label:SetPoint("CENTER", heading.frame, "CENTER", 0, 2)
+    heading.left:ClearAllPoints()
+    heading.left:SetPoint("LEFT", heading.frame, "LEFT", 3, 0)
+    heading.left:SetPoint("RIGHT", heading.label, "LEFT", -5, 0)
+    heading.right:ClearAllPoints()
+    heading.right:SetPoint("RIGHT", heading.frame, "RIGHT", -3, 0)
+    heading.right:SetPoint("LEFT", heading.label, "RIGHT", 5, 0)
+    return heading
+end
+
+local function BuildTriggerConditionSettings(scroll, buttonData, infoButtons)
+    local group = CooldownCompanion.db.profile.groups[CS.selectedGroup]
+    if not group then
+        return
+    end
+
+    CooldownCompanion:NormalizeTriggerConditionRowData(buttonData)
+    local clauses = CooldownCompanion:GetTriggerConditionClauses(buttonData)
+
+    local auraSettingsAttached = false
+    for clauseIndex, clause in ipairs(clauses) do
+        scroll:AddChild(CreateCenteredSubHeading("Condition " .. clauseIndex))
+
+        local row = AceGUI:Create("SimpleGroup")
+        row:SetFullWidth(true)
+        row:SetLayout("Flow")
+
+        local excludedKeys = {}
+        for otherIndex, otherClause in ipairs(clauses) do
+            if otherIndex ~= clauseIndex then
+                excludedKeys[#excludedKeys + 1] = otherClause.key
+            end
+        end
+
+        local checkOptions, checkOrder = CooldownCompanion:GetTriggerConditionTypeOptions(buttonData, excludedKeys)
+        local checkDrop = AceGUI:Create("Dropdown")
+        checkDrop:SetLabel("Check")
+        checkDrop:SetList(checkOptions, checkOrder)
+        checkDrop:SetValue(clause.key)
+        checkDrop:SetFullWidth(true)
+        checkDrop:SetCallback("OnValueChanged", function(_, _, value)
+            CooldownCompanion:SetTriggerConditionKey(buttonData, clauseIndex, value)
+            CooldownCompanion:RefreshGroupFrame(CS.selectedGroup)
+            CooldownCompanion:RefreshConfigPanel()
+        end)
+        row:AddChild(checkDrop)
+
+        local expectedOptions, expectedOrder = CooldownCompanion:GetTriggerConditionExpectedOptions(clause.key)
+        local stateDrop = AceGUI:Create("Dropdown")
+        stateDrop:SetLabel("State")
+        stateDrop:SetList(expectedOptions, expectedOrder)
+        stateDrop:SetValue(CooldownCompanion:GetTriggerConditionStateValue(buttonData, clauseIndex))
+        stateDrop:SetFullWidth(true)
+        stateDrop:SetCallback("OnValueChanged", function(_, _, value)
+            CooldownCompanion:SetTriggerConditionStateValue(buttonData, value, clauseIndex)
+            CooldownCompanion:RefreshGroupFrame(CS.selectedGroup)
+            CooldownCompanion:RefreshConfigPanel()
+        end)
+        row:AddChild(stateDrop)
+
+        scroll:AddChild(row)
+
+        local function AddRemoveConditionRow()
+            local removeRow = AceGUI:Create("SimpleGroup")
+            removeRow:SetFullWidth(true)
+            removeRow:SetLayout("Flow")
+
+            local removeBtn = AceGUI:Create("Button")
+            removeBtn:SetText("Remove Condition")
+            removeBtn:SetFullWidth(true)
+            removeBtn:SetCallback("OnClick", function()
+                if CooldownCompanion:RemoveTriggerConditionClause(buttonData, clauseIndex) then
+                    CooldownCompanion:RefreshGroupFrame(CS.selectedGroup)
+                    CooldownCompanion:RefreshConfigPanel()
+                end
+            end)
+            removeRow:AddChild(removeBtn)
+            scroll:AddChild(removeRow)
+        end
+
+        local hasInlineAuraSettings = clause.key == "auraActive"
+            and not auraSettingsAttached
+            and buttonData.type == "spell"
+            and (buttonData.auraTracking == true or buttonData.isPassive == true or buttonData.addedAs == "aura")
+
+        if #clauses > 1 and not hasInlineAuraSettings then
+            AddRemoveConditionRow()
+        end
+
+        if hasInlineAuraSettings then
+            BuildAuraTrackingSettingsSection(scroll, buttonData, infoButtons, {
+                allowPassiveManualRecovery = true,
+                showAuraToggle = false,
+                showAuraIconToggle = false,
+                showAuraStateLabelWhenToggleHidden = false,
+                showHeading = false,
+                useCollapse = false,
+            })
+            auraSettingsAttached = true
+
+            if #clauses > 1 then
+                AddRemoveConditionRow()
+            end
+        end
+
+        local conditionSpacer = AceGUI:Create("Label")
+        conditionSpacer:SetText(" ")
+        conditionSpacer:SetFullWidth(true)
+        scroll:AddChild(conditionSpacer)
+    end
+
+    local usedKeys = {}
+    for _, clause in ipairs(clauses) do
+        usedKeys[#usedKeys + 1] = clause.key
+    end
+    local addOptions, addOrder = CooldownCompanion:GetTriggerConditionTypeOptions(buttonData, usedKeys)
+    if #addOrder > 0 then
+        scroll:AddChild(CreateCenteredSubHeading("Add Condition"))
+
+        local addRow = AceGUI:Create("SimpleGroup")
+        addRow:SetFullWidth(true)
+        addRow:SetLayout("Flow")
+
+        local addDrop = AceGUI:Create("Dropdown")
+        addDrop:SetLabel("New Condition")
+        addDrop:SetList(addOptions, addOrder)
+        addDrop:SetValue(addOrder[1])
+        addDrop:SetFullWidth(true)
+        addRow:AddChild(addDrop)
+
+        local addBtn = AceGUI:Create("Button")
+        addBtn:SetText("Add Condition")
+        addBtn:SetFullWidth(true)
+        addBtn:SetCallback("OnClick", function()
+            if CooldownCompanion:AddTriggerConditionClause(buttonData, addDrop:GetValue()) then
+                CooldownCompanion:RefreshGroupFrame(CS.selectedGroup)
+                CooldownCompanion:RefreshConfigPanel()
+            end
+        end)
+        addRow:AddChild(addBtn)
+
+        scroll:AddChild(addRow)
+    end
+
+end
+
 local function BuildSpellSettings(scroll, buttonData, infoButtons)
     local group = CooldownCompanion.db.profile.groups[CS.selectedGroup]
     if not group then return end
 
-    local isHarmful = buttonData.type == "spell" and C_Spell.IsSpellHarmful(buttonData.id)
-    local cdmEnabled = C_CVar.GetCVarBool("cooldownViewerEnabled") == true
-    local viewerFrame = cdmEnabled and CooldownCompanion:ResolveButtonAuraViewerFrame(buttonData) or nil
-    local hasViewerFrame = viewerFrame ~= nil
-    -- Auto-enable aura tracking for viewer-backed spells
-    if hasViewerFrame and buttonData.auraTracking == nil then
-        buttonData.auraTracking = true
-        local overrideBuffs = CooldownCompanion.ABILITY_BUFF_OVERRIDES[buttonData.id]
-        if overrideBuffs and not buttonData.auraSpellID then
-            buttonData.auraSpellID = overrideBuffs
-        end
-        EnsureAuraUnitChoice(buttonData, isHarmful)
-        CooldownCompanion:RefreshGroupFrame(CS.selectedGroup)
-    end
-
-    local auraStatus = CooldownCompanion:ResolveAuraTrackingConfigStatus(
-        buttonData,
-        cdmEnabled,
-        viewerFrame
-    )
-    local auraConfigReady = auraStatus.ready == true
-    local auraFoundButUntracked = auraStatus.state == "associatedAuraNotTracked"
-    local auraTrackedButUnavailable = auraStatus.state == "trackedAuraUnavailable"
-    local auraInactiveColorCode = auraFoundButUntracked and "|cffffff00" or "|cffff0000"
-    local function SetupWrappedStatusLabel(label, text, justifyH)
-        label:SetFullWidth(true)
-        label:SetJustifyH(justifyH or "LEFT")
-        local contentWidth = scroll.content and scroll.content:GetWidth()
-        if contentWidth and contentWidth > 0 then
-            label:SetWidth(math.max(1, contentWidth - 20))
-        end
-        label:SetText(text)
-    end
-
     if buttonData.type == "spell" then
-    local auraHeading = AceGUI:Create("Heading")
-    auraHeading:SetText(L["Aura Tracking"])
-    ColorHeading(auraHeading)
-    auraHeading:SetFullWidth(true)
-    scroll:AddChild(auraHeading)
-
-    local auraHeadingInfoBtn = CreateInfoButton(auraHeading.frame, auraHeading.label, "LEFT", "RIGHT", 4, 0, {
-        "Aura Tracking",
-        {"Shows the tracked aura's remaining duration on the cooldown swipe instead of the spell's normal cooldown.", 1, 1, 1, true},
-        " ",
-        "Requires:",
-        {"- Blizzard Cooldown Manager (CDM) must be enabled.", 1, 1, 1, true},
-        {"- In Edit Mode, the CDM Buffs/Debuffs visibility setting must be set to Always Visible.", 1, 1, 1, true},
-        {"- The aura you want must be tracked in CDM as a Tracked Buff or Tracked Bar, not only as a cooldown.", 1, 1, 1, true},
-        " ",
-        "Can:",
-        {"- Read aura data only from Player or Target.", 1, 1, 1, true},
-        " ",
-        "Cannot:",
-        {"- Track auras that are not present in Blizzard CDM.", 1, 1, 1, true},
-        " ",
-        {"If you do not want CDM visible on your screen, use the CDM hide toggle in the top-right of the config.", 1, 1, 1, true},
-        " ",
-        {"Using other CDM-related addons alongside Cooldown Companion may interfere with aura tracking.", 1, 1, 1, true},
-    }, infoButtons)
-
-    local auraKey = CS.selectedGroup .. "_" .. CS.selectedButton .. "_aura"
-    local auraCollapsed = CS.collapsedSections[auraKey]
-
-    local auraCollapseBtn = AttachCollapseButton(auraHeading, auraCollapsed, function()
-        CS.collapsedSections[auraKey] = not CS.collapsedSections[auraKey]
-        CooldownCompanion:RefreshConfigPanel()
-    end)
-    auraCollapseBtn:ClearAllPoints()
-    auraCollapseBtn:SetPoint("LEFT", auraHeadingInfoBtn, "RIGHT", 4, 0)
-    auraHeading.right:ClearAllPoints()
-    auraHeading.right:SetPoint("RIGHT", auraHeading.frame, "RIGHT", -3, 0)
-    auraHeading.right:SetPoint("LEFT", auraCollapseBtn, "RIGHT", 4, 0)
-
-
-    if not auraCollapsed then
-
-    -- CDM slot label for multi-entry spells (read-only info)
-    if buttonData.cdmChildSlot then
-        local slotLabel = AceGUI:Create("Label")
-        local allChildren = CooldownCompanion.viewerAuraAllChildren[buttonData.id]
-        local slotChild = allChildren and allChildren[buttonData.cdmChildSlot]
-        local oid = slotChild and slotChild.cooldownInfo and slotChild.cooldownInfo.overrideSpellID
-        local slotText = L["|cff88bbddCDM Slot: "] .. buttonData.cdmChildSlot .. "|r"
-        if oid and oid ~= buttonData.id then
-            local info = C_Spell.GetSpellInfo(oid)
-            if info and info.name then
-                slotText = slotText .. " (" .. info.name .. ")"
-            end
-        end
-        slotLabel:SetText(slotText)
-        slotLabel:SetFullWidth(true)
-        scroll:AddChild(slotLabel)
-    end
-
-    local isAuraEntry = buttonData.addedAs == "aura"
-
-    -- Track buff/debuff duration toggle (hidden for passives and aura entries — forced on)
-    if not buttonData.isPassive and not isAuraEntry then
-    local auraCb = AceGUI:Create("CheckBox")
-    local auraLabel = L["Aura Tracking"]
-    local auraActive = auraConfigReady
-    auraLabel = auraLabel .. (auraActive and ": |cff00ff00Active|r" or ": " .. auraInactiveColorCode .. "Inactive|r")
-    auraCb:SetLabel(auraLabel)
-    auraCb:SetValue(buttonData.auraTracking == true)
-    auraCb:SetFullWidth(true)
-    auraCb:SetCallback("OnValueChanged", function(widget, event, val)
-        buttonData.auraTracking = val and true or false
-        if val then
-            EnsureAuraUnitChoice(buttonData, isHarmful)
-        end
-        CooldownCompanion:RefreshGroupFrame(CS.selectedGroup)
-        CooldownCompanion:RefreshConfigPanel()
-    end)
-    scroll:AddChild(auraCb)
-
-    end -- not buttonData.isPassive and not aura entry
-
-    local showAuraDetails = buttonData.isPassive or isAuraEntry or buttonData.auraTracking == true
-
-    if showAuraDetails then
-    local function StartAuraSpellOverridePicker()
-        local grp = CS.selectedGroup
-        local btn = CS.selectedButton
-        CS.StartPickCDM(function(spellID)
-            if CS.configFrame then
-                CS.configFrame.frame:Show()
-            end
-            if spellID then
-                local groups = CooldownCompanion.db.profile.groups
-                local g = groups[grp]
-                if g and g.buttons and g.buttons[btn] then
-                    g.buttons[btn].auraSpellID = tostring(spellID)
-                    if g.buttons[btn].auraTracking then
-                        EnsureAuraUnitChoice(g.buttons[btn], isHarmful)
-                    end
-                end
-            end
-            CooldownCompanion:RefreshGroupFrame(grp)
-            CooldownCompanion:RefreshConfigPanel()
-        end)
-    end
-
-    -- Spell ID Override row (hidden for passive aura buttons)
-    if not buttonData.isPassive then
-    local auraEditBox = AceGUI:Create("EditBox")
-    if auraEditBox.editbox.Instructions then auraEditBox.editbox.Instructions:Hide() end
-    auraEditBox:SetLabel(L["Spell ID Override"])
-    auraEditBox:SetText(buttonData.auraSpellID and tostring(buttonData.auraSpellID) or "")
-    auraEditBox:SetFullWidth(true)
-    auraEditBox:SetCallback("OnEnterPressed", function(widget, event, text)
-        text = text:gsub("%s", "")
-        if text ~= "" then
-            for token in text:gmatch("[^,]+") do
-                if not tonumber(token) then
-                    CooldownCompanion:Print(L["Invalid spell ID: "] .. token)
-                    widget:SetText(buttonData.auraSpellID and tostring(buttonData.auraSpellID) or "")
-                    return
-                end
-            end
-        end
-        buttonData.auraSpellID = text ~= "" and text or nil
-        if buttonData.auraTracking then
-            EnsureAuraUnitChoice(buttonData, isHarmful)
-        end
-        CooldownCompanion:RefreshGroupFrame(CS.selectedGroup)
-        CooldownCompanion:RefreshConfigPanel()
-    end)
-    scroll:AddChild(auraEditBox)
-
-    CreateInfoButton(auraEditBox.frame, auraEditBox.frame, "TOPLEFT", "TOPLEFT", auraEditBox.label:GetStringWidth() + 4, -2, {
-        "Spell ID Override",
-        {"Most spells are tracked automatically, but some abilities apply a buff or debuff with a different spell ID than the ability itself. If tracking isn't working, enter the buff/debuff spell ID here. Use commas for multiple IDs (e.g. 48517,48518 for both Eclipse forms).\n\nUse \"Pick CDM\" below to visually select a spell from the Cooldown Manager.", 1, 1, 1, true},
-    }, infoButtons)
-
-    local overrideCdmSpacer = AceGUI:Create("Label")
-    overrideCdmSpacer:SetText(" ")
-    overrideCdmSpacer:SetFullWidth(true)
-    scroll:AddChild(overrideCdmSpacer)
-
-    if not IsValidAuraUnit(buttonData.auraUnit) then
-        buttonData.auraUnit = GetDefaultAuraUnit(isHarmful)
-    end
-
-    local auraUnitDrop = AceGUI:Create("Dropdown")
-    auraUnitDrop:SetLabel("Aura Unit")
-    auraUnitDrop:SetList({
-        player = "Player",
-        target = "Target",
-    }, {"player", "target"})
-    auraUnitDrop:SetValue(buttonData.auraUnit)
-    auraUnitDrop:SetFullWidth(true)
-    auraUnitDrop:SetCallback("OnValueChanged", function(widget, event, val)
-        if val ~= "player" and val ~= "target" then
-            return
-        end
-        EnsureAuraUnitChoice(buttonData, isHarmful, val)
-        CooldownCompanion:RefreshGroupFrame(CS.selectedGroup)
-        CooldownCompanion:RefreshConfigPanel()
-    end)
-    scroll:AddChild(auraUnitDrop)
-    CreateInfoButton(auraUnitDrop.frame, auraUnitDrop.label, "LEFT", "RIGHT",
-        4, 0, {
-        "Aura Unit",
-        {"This controls where the tracked aura is expected to exist. Use Target for debuffs on your target, or Player for buffs/procs on yourself, even if the button's spell is something else.", 1, 1, 1, true},
-    }, infoButtons)
-
-    local auraUnitSpacer = AceGUI:Create("Label")
-    auraUnitSpacer:SetText(" ")
-    auraUnitSpacer:SetFullWidth(true)
-    scroll:AddChild(auraUnitSpacer)
-    end -- not buttonData.isPassive (Spell ID Override)
-
-    local cdmToggleBtn = AceGUI:Create("Button")
-    cdmToggleBtn:SetText(cdmEnabled and L["Blizzard CDM: |cff00ff00Active|r"] or L["Blizzard CDM: |cffff0000Inactive|r"])
-    cdmToggleBtn:SetFullWidth(true)
-    cdmToggleBtn:SetCallback("OnClick", function()
-        local current = C_CVar.GetCVarBool("cooldownViewerEnabled") == true
-        C_CVar.SetCVar("cooldownViewerEnabled", current and "0" or "1")
-        CooldownCompanion:RefreshConfigPanel()
-        if not current then
-            C_Timer.After(0.2, function()
-                CooldownCompanion:BuildViewerAuraMap()
-                CooldownCompanion:RefreshConfigPanel()
-            end)
-        end
-    end)
-    scroll:AddChild(cdmToggleBtn)
-
-    local cdmRow = AceGUI:Create("SimpleGroup")
-    cdmRow:SetFullWidth(true)
-    cdmRow:SetLayout("Flow")
-
-    local openCdmBtn = AceGUI:Create("Button")
-    openCdmBtn:SetText(L["CDM Settings"])
-    openCdmBtn:SetRelativeWidth(buttonData.isPassive and 1.0 or 0.5)
-    openCdmBtn:SetCallback("OnClick", function()
-        if CooldownViewerSettings then
-            CooldownViewerSettings:TogglePanel()
-        end
-    end)
-    cdmRow:AddChild(openCdmBtn)
-
-    if not buttonData.isPassive then
-        local pickCDMBtn = AceGUI:Create("Button")
-        pickCDMBtn:SetText("Pick CDM")
-        pickCDMBtn:SetRelativeWidth(0.5)
-        pickCDMBtn:SetCallback("OnClick", StartAuraSpellOverridePicker)
-        pickCDMBtn:SetCallback("OnEnter", function(widget)
-            GameTooltip:SetOwner(widget.frame, "ANCHOR_TOP")
-            GameTooltip:AddLine("Pick from Cooldown Manager")
-            GameTooltip:AddLine("Shows a list of Tracked Buff/Tracked Bar auras currently tracked in the Cooldown Manager. Click one to populate the Spell ID Override.", 1, 1, 1, true)
-            GameTooltip:Show()
-        end)
-        pickCDMBtn:SetCallback("OnLeave", function()
-            GameTooltip:Hide()
-        end)
-        cdmRow:AddChild(pickCDMBtn)
-    end
-
-    scroll:AddChild(cdmRow)
-
-    local auraStatusSpacer1 = AceGUI:Create("Label")
-    auraStatusSpacer1:SetText(" ")
-    auraStatusSpacer1:SetFullWidth(true)
-    scroll:AddChild(auraStatusSpacer1)
-
-    local auraStatusLabel = AceGUI:Create("Label")
-    if auraConfigReady then
-        SetupWrappedStatusLabel(auraStatusLabel, "|cff00ff00Aura tracking is active and ready.|r", "CENTER")
-    else
-        SetupWrappedStatusLabel(auraStatusLabel, (auraFoundButUntracked and "|cffffff00" or "|cffff0000") .. "Aura tracking is not ready.|r", "CENTER")
-    end
-    scroll:AddChild(auraStatusLabel)
-
-    local auraStatusSpacer2 = AceGUI:Create("Label")
-    auraStatusSpacer2:SetText(" ")
-    auraStatusSpacer2:SetFullWidth(true)
-    scroll:AddChild(auraStatusSpacer2)
-
-    if auraStatus.state == "cdmDisabled" then
-        local cdmDisabledLabel = AceGUI:Create("Label")
-        SetupWrappedStatusLabel(cdmDisabledLabel, "|cff888888Blizzard Cooldown Manager is disabled. Enable it above to allow aura tracking.|r")
-        scroll:AddChild(cdmDisabledLabel)
-        local cdmDisabledSpacer = AceGUI:Create("Label")
-        cdmDisabledSpacer:SetText(" ")
-        cdmDisabledSpacer:SetFullWidth(true)
-        scroll:AddChild(cdmDisabledSpacer)
-    elseif auraStatus.state == "noAssociatedAura" then
-        local noAuraLabel = AceGUI:Create("Label")
-        SetupWrappedStatusLabel(noAuraLabel, "|cff888888No associated aura was found for this spell. Use the Spell ID Override above if you want to link it to a specific CDM-trackable aura.|r")
-        scroll:AddChild(noAuraLabel)
-        local noAuraSpacer = AceGUI:Create("Label")
-        noAuraSpacer:SetText(" ")
-        noAuraSpacer:SetFullWidth(true)
-        scroll:AddChild(noAuraSpacer)
-    elseif auraTrackedButUnavailable then
-        local viewerUnavailableLabel = AceGUI:Create("Label")
-        SetupWrappedStatusLabel(
-            viewerUnavailableLabel,
-            "|cff888888An associated aura is tracked in Blizzard CDM, but its Buffs/Debuffs viewer is not currently readable. Set the CDM Buffs/Debuffs visibility to Always Visible.|r"
-        )
-        scroll:AddChild(viewerUnavailableLabel)
-        local viewerUnavailableSpacer = AceGUI:Create("Label")
-        viewerUnavailableSpacer:SetText(" ")
-        viewerUnavailableSpacer:SetFullWidth(true)
-        scroll:AddChild(viewerUnavailableSpacer)
-    end
-
-    if auraStatus.state == "associatedAuraNotTracked" then
-        local auraDisabledLabel = AceGUI:Create("Label")
-        SetupWrappedStatusLabel(auraDisabledLabel, "|cff888888An associated aura was found, but it is not being currently tracked in Blizzard CDM as a Tracked Buff or Tracked Bar.|r")
-        scroll:AddChild(auraDisabledLabel)
-        local auraDisabledSpacer = AceGUI:Create("Label")
-        auraDisabledSpacer:SetText(" ")
-        auraDisabledSpacer:SetFullWidth(true)
-        scroll:AddChild(auraDisabledSpacer)
-    end
-
-    if hasViewerFrame and buttonData.auraTracking then
-            -- Migrate any legacy/invalid auraUnit to the spell-type default,
-            -- but preserve explicit player/target choices regardless of spell.
-            if not IsValidAuraUnit(buttonData.auraUnit) then
-                buttonData.auraUnit = GetDefaultAuraUnit(isHarmful)
-            end
-
-    end -- hasViewerFrame and auraTracking
-
-    if buttonData.auraTracking and not buttonData.isPassive then
-        local auraIconCb = AceGUI:Create("CheckBox")
-        auraIconCb:SetLabel(L["Show Aura Icon"])
-        auraIconCb:SetValue(buttonData.auraShowAuraIcon == true)
-        auraIconCb:SetFullWidth(true)
-        auraIconCb:SetCallback("OnValueChanged", function(widget, event, val)
-            buttonData.auraShowAuraIcon = val and true or nil
-            CooldownCompanion:RefreshGroupFrame(CS.selectedGroup)
-        end)
-        scroll:AddChild(auraIconCb)
-        CreateInfoButton(auraIconCb.frame, auraIconCb.checkbg, "LEFT", "RIGHT",
-            auraIconCb.text:GetStringWidth() + 4, 0, {
-            L["Show Aura Icon"],
-            {L["When enabled, the button icon changes to show the tracked aura's icon while the aura is active. When the aura expires, the normal spell icon is restored.\n\nUseful when the tracked aura has a different icon than the ability itself."], 1, 1, 1, true},
-        }, infoButtons)
-    end
-    end -- showAuraDetails
-
-    end -- not auraCollapsed
-
+        BuildAuraTrackingSettingsSection(scroll, buttonData, infoButtons, {
+            allowPassiveManualRecovery = false,
+            showAuraToggle = true,
+            showAuraIconToggle = true,
+            showAuraStateLabelWhenToggleHidden = false,
+            useCollapse = true,
+            collapsedKey = CS.selectedGroup .. "_" .. CS.selectedButton .. "_aura",
+        })
     end -- buttonData.type == "spell"
 
     -- Charge text settings now live in group Appearance tab (with per-button overrides)
@@ -799,428 +1058,6 @@ end
 ------------------------------------------------------------------------
 -- BUTTON SETTINGS COLUMN: Refresh
 ------------------------------------------------------------------------
--- Multi-select content for button settings (delete/move selected, optional batch visibility)
-local function RefreshButtonSettingsMultiSelect(scroll, multiCount, multiIndices, uniformType)
-    -- Clean up info buttons from previous render
-    for _, btn in ipairs(CS.buttonSettingsInfoButtons) do
-        btn:ClearAllPoints()
-        btn:Hide()
-        btn:SetParent(nil)
-    end
-    wipe(CS.buttonSettingsInfoButtons)
-
-    local heading = AceGUI:Create("Heading")
-    heading:SetText(multiCount .. " Selected")
-    ColorHeading(heading)
-    heading:SetFullWidth(true)
-    scroll:AddChild(heading)
-
-    local dupBtn = AceGUI:Create("Button")
-    dupBtn:SetText(L["Duplicate Selected"])
-    dupBtn:SetFullWidth(true)
-    dupBtn:SetCallback("OnClick", function()
-        local sourceGroupId = CS.selectedGroup
-        local group = CooldownCompanion.db.profile.groups[sourceGroupId]
-        if not group then return end
-        local sorted = {}
-        for _, idx in ipairs(multiIndices) do table.insert(sorted, idx) end
-        table.sort(sorted, function(a, b) return a > b end)
-        for _, idx in ipairs(sorted) do
-            local copy = CopyTable(group.buttons[idx])
-            table.insert(group.buttons, idx + 1, copy)
-        end
-        CooldownCompanion:RefreshGroupFrame(sourceGroupId)
-        CS.selectedButton = nil
-        wipe(CS.selectedButtons)
-        CooldownCompanion:RefreshConfigPanel()
-    end)
-    scroll:AddChild(dupBtn)
-
-    local spacer1 = AceGUI:Create("Label")
-    spacer1:SetText(" ")
-    spacer1:SetFullWidth(true)
-    local font, _, flags = spacer1.label:GetFont()
-    spacer1:SetFont(font, 3, flags or "")
-    scroll:AddChild(spacer1)
-
-    local moveBtn = AceGUI:Create("Button")
-    moveBtn:SetText(L["Move Selected"])
-    moveBtn:SetFullWidth(true)
-    moveBtn:SetCallback("OnClick", function()
-        local moveMenuFrame = _G["CDCMoveMenu"]
-        if not moveMenuFrame then
-            moveMenuFrame = CreateFrame("Frame", L["CDCMoveMenu"], UIParent, "UIDropDownMenuTemplate")
-        end
-        local sourceGroupId = CS.selectedGroup
-        local indices = multiIndices
-        local db = CooldownCompanion.db.profile
-        UIDropDownMenu_Initialize(moveMenuFrame, function(self, level)
-            local containers = db.groupContainers or {}
-            local folderGroups, looseGroups = {}, {}
-            for id, group in pairs(db.groups) do
-                if id ~= sourceGroupId and CooldownCompanion:IsGroupVisibleToCurrentChar(id) then
-                    local gName = group.name or (L["Group "] .. id)
-                    local cid = group.parentContainerId
-                    local container = cid and containers[cid]
-                    local fid = container and container.folderId
-                    if fid and db.folders[fid] then
-                        folderGroups[fid] = folderGroups[fid] or {}
-                        table.insert(folderGroups[fid], { id = id, name = gName })
-                    else
-                        table.insert(looseGroups, { id = id, name = gName })
-                    end
-                end
-            end
-            local sortedFolders = {}
-            for fid, folder in pairs(db.folders) do
-                if folderGroups[fid] then
-                    table.insert(sortedFolders, { id = fid, name = folder.name or (L["Folder "] .. fid), order = CooldownCompanion:GetOrderForSpec(folder, CooldownCompanion._currentSpecId, fid) })
-                end
-            end
-            table.sort(sortedFolders, function(a, b) return a.order < b.order end)
-            local hasFolders = #sortedFolders > 0
-            for _, folder in ipairs(sortedFolders) do
-                local hdr = UIDropDownMenu_CreateInfo()
-                hdr.text = folder.name
-                hdr.isTitle = true
-                hdr.notCheckable = true
-                UIDropDownMenu_AddButton(hdr, level)
-                table.sort(folderGroups[folder.id], function(a, b) return a.name < b.name end)
-                for _, g in ipairs(folderGroups[folder.id]) do
-                    local info = UIDropDownMenu_CreateInfo()
-                    info.text = g.name
-                    info.func = function()
-                        for _, idx in ipairs(indices) do
-                            table.insert(db.groups[g.id].buttons, db.groups[sourceGroupId].buttons[idx])
-                        end
-                        table.sort(indices, function(a, b) return a > b end)
-                        for _, idx in ipairs(indices) do
-                            table.remove(db.groups[sourceGroupId].buttons, idx)
-                        end
-                        CooldownCompanion:RefreshGroupFrame(g.id)
-                        CooldownCompanion:RefreshGroupFrame(sourceGroupId)
-                        CS.selectedButton = nil
-                        wipe(CS.selectedButtons)
-                        CooldownCompanion:RefreshConfigPanel()
-                        CloseDropDownMenus()
-                    end
-                    UIDropDownMenu_AddButton(info, level)
-                end
-            end
-            if #looseGroups > 0 then
-                if hasFolders then
-                    local hdr = UIDropDownMenu_CreateInfo()
-                    hdr.text = L["No Folder"]
-                    hdr.isTitle = true
-                    hdr.notCheckable = true
-                    UIDropDownMenu_AddButton(hdr, level)
-                end
-                table.sort(looseGroups, function(a, b) return a.name < b.name end)
-                for _, g in ipairs(looseGroups) do
-                    local info = UIDropDownMenu_CreateInfo()
-                    info.text = g.name
-                    info.func = function()
-                        for _, idx in ipairs(indices) do
-                            table.insert(db.groups[g.id].buttons, db.groups[sourceGroupId].buttons[idx])
-                        end
-                        table.sort(indices, function(a, b) return a > b end)
-                        for _, idx in ipairs(indices) do
-                            table.remove(db.groups[sourceGroupId].buttons, idx)
-                        end
-                        CooldownCompanion:RefreshGroupFrame(g.id)
-                        CooldownCompanion:RefreshGroupFrame(sourceGroupId)
-                        CS.selectedButton = nil
-                        wipe(CS.selectedButtons)
-                        CooldownCompanion:RefreshConfigPanel()
-                        CloseDropDownMenus()
-                    end
-                    UIDropDownMenu_AddButton(info, level)
-                end
-            end
-        end, "MENU")
-        moveMenuFrame:SetFrameStrata("FULLSCREEN_DIALOG")
-        ToggleDropDownMenu(1, nil, moveMenuFrame, "cursor", 0, 0)
-    end)
-    scroll:AddChild(moveBtn)
-
-    local spacer2 = AceGUI:Create("Label")
-    spacer2:SetText(" ")
-    spacer2:SetFullWidth(true)
-    local font2, _, flags2 = spacer2.label:GetFont()
-    spacer2:SetFont(font2, 3, flags2 or "")
-    scroll:AddChild(spacer2)
-
-    local delBtn = AceGUI:Create("Button")
-    delBtn:SetText(L["Delete Selected"])
-    delBtn:SetFullWidth(true)
-    delBtn:SetCallback("OnClick", function()
-        CS.ShowPopupAboveConfig("CDC_DELETE_SELECTED_BUTTONS", multiCount,
-            { groupId = CS.selectedGroup, indices = multiIndices })
-    end)
-    scroll:AddChild(delBtn)
-
-    -- Batch visibility settings when all selected share the same type
-    if uniformType then
-        local group = CooldownCompanion.db.profile.groups[CS.selectedGroup]
-        if group then
-            local visSpacer = AceGUI:Create("Label")
-            visSpacer:SetText(" ")
-            visSpacer:SetFullWidth(true)
-            scroll:AddChild(visSpacer)
-
-            -- Use the first selected button as a representative for non-batch reads
-            local repData = group.buttons[multiIndices[1]]
-            if repData then
-                ST._BuildVisibilitySettings(scroll, repData, CS.buttonSettingsInfoButtons, {
-                    group = group,
-                    uniformType = uniformType,
-                })
-                if CooldownCompanion.db.profile.hideInfoButtons then
-                    for _, btn in ipairs(CS.buttonSettingsInfoButtons) do btn:Hide() end
-                end
-            end
-        end
-    end
-end
-
-------------------------------------------------------------------------
--- PANEL MULTI-SELECT: Batch operations UI
-------------------------------------------------------------------------
-local function RefreshPanelMultiSelect(scroll, multiCount, multiPanelIds)
-    local db = CooldownCompanion.db.profile
-    local containerId = CS.selectedContainer
-
-    local heading = AceGUI:Create("Heading")
-    heading:SetText(multiCount .. L[" Panels Selected"])
-    ColorHeading(heading)
-    heading:SetFullWidth(true)
-    scroll:AddChild(heading)
-
-    -- Helper: add a thin spacer
-    local function AddSpacer()
-        local sp = AceGUI:Create("Label")
-        sp:SetText(" ")
-        sp:SetFullWidth(true)
-        local f, _, fl = sp.label:GetFont()
-        sp:SetFont(f, 3, fl or "")
-        scroll:AddChild(sp)
-    end
-
-    -- Enable / Disable All
-    local anyDisabled = false
-    for _, pid in ipairs(multiPanelIds) do
-        local p = db.groups[pid]
-        if p and p.enabled == false then anyDisabled = true; break end
-    end
-    local enableBtn = AceGUI:Create("Button")
-    enableBtn:SetText(anyDisabled and L["Enable All"] or L["Disable All"])
-    enableBtn:SetFullWidth(true)
-    enableBtn:SetCallback("OnClick", function()
-        for _, pid in ipairs(multiPanelIds) do
-            local p = db.groups[pid]
-            if p then
-                if anyDisabled then
-                    p.enabled = nil
-                else
-                    p.enabled = false
-                end
-                CooldownCompanion:RefreshGroupFrame(pid)
-            end
-        end
-        CooldownCompanion:RefreshConfigPanel()
-    end)
-    scroll:AddChild(enableBtn)
-
-    AddSpacer()
-
-    -- Lock / Unlock All
-    local anyUnlocked = false
-    for _, pid in ipairs(multiPanelIds) do
-        local p = db.groups[pid]
-        if p and p.locked == false then anyUnlocked = true; break end
-    end
-    local lockBtn = AceGUI:Create("Button")
-    lockBtn:SetText(anyUnlocked and L["Lock All"] or L["Unlock All"])
-    lockBtn:SetFullWidth(true)
-    lockBtn:SetCallback("OnClick", function()
-        if anyUnlocked then
-            -- Lock all
-            for _, pid in ipairs(multiPanelIds) do
-                local p = db.groups[pid]
-                if p then
-                    p.locked = nil
-                    CooldownCompanion:RefreshGroupFrame(pid)
-                end
-            end
-        else
-            -- Unlock all
-            for _, pid in ipairs(multiPanelIds) do
-                local p = db.groups[pid]
-                if p then
-                    p.locked = false
-                    CooldownCompanion:RefreshGroupFrame(pid)
-                end
-            end
-        end
-        CooldownCompanion:RefreshConfigPanel()
-    end)
-    scroll:AddChild(lockBtn)
-
-    AddSpacer()
-
-    -- Duplicate Selected
-    local dupBtn = AceGUI:Create("Button")
-    dupBtn:SetText(L["Duplicate Selected"])
-    dupBtn:SetFullWidth(true)
-    dupBtn:SetCallback("OnClick", function()
-        for _, pid in ipairs(multiPanelIds) do
-            CooldownCompanion:DuplicatePanel(containerId, pid)
-        end
-        wipe(CS.selectedPanels)
-        CooldownCompanion:RefreshConfigPanel()
-    end)
-    scroll:AddChild(dupBtn)
-
-    AddSpacer()
-
-    -- Move to Group
-    local hasOtherContainer = false
-    for cid, _ in pairs(db.groupContainers) do
-        if cid ~= containerId and CooldownCompanion:IsContainerVisibleToCurrentChar(cid) then
-            hasOtherContainer = true
-            break
-        end
-    end
-    if hasOtherContainer then
-        local moveBtn = AceGUI:Create("Button")
-        moveBtn:SetText(L["Move to Group"])
-        moveBtn:SetFullWidth(true)
-        moveBtn:SetCallback("OnClick", function()
-            local moveMenuFrame = _G["CDCPanelMultiMoveMenu"]
-            if not moveMenuFrame then
-                moveMenuFrame = CreateFrame("Frame", L["CDCPanelMultiMoveMenu"], UIParent, "UIDropDownMenuTemplate")
-            end
-            UIDropDownMenu_Initialize(moveMenuFrame, function(self, level)
-                local containers = db.groupContainers or {}
-                local folderContainers, looseContainers = {}, {}
-                for cid, ctr in pairs(containers) do
-                    if cid ~= containerId and CooldownCompanion:IsContainerVisibleToCurrentChar(cid) then
-                        local cName = ctr.name or (L["Group "] .. cid)
-                        local fid = ctr.folderId
-                        if fid and db.folders[fid] then
-                            folderContainers[fid] = folderContainers[fid] or {}
-                            table.insert(folderContainers[fid], { id = cid, name = cName, order = CooldownCompanion:GetOrderForSpec(ctr, CooldownCompanion._currentSpecId, cid) })
-                        else
-                            table.insert(looseContainers, { id = cid, name = cName, order = CooldownCompanion:GetOrderForSpec(ctr, CooldownCompanion._currentSpecId, cid) })
-                        end
-                    end
-                end
-                local sortedFolders = {}
-                for fid, folder in pairs(db.folders) do
-                    if folderContainers[fid] then
-                        table.insert(sortedFolders, { id = fid, name = folder.name or (L["Folder "] .. fid), order = CooldownCompanion:GetOrderForSpec(folder, CooldownCompanion._currentSpecId, fid) })
-                    end
-                end
-                table.sort(sortedFolders, function(a, b) return a.order < b.order end)
-                local hasFolders = #sortedFolders > 0
-                for _, folder in ipairs(sortedFolders) do
-                    local hdr = UIDropDownMenu_CreateInfo()
-                    hdr.text = folder.name
-                    hdr.isTitle = true
-                    hdr.notCheckable = true
-                    UIDropDownMenu_AddButton(hdr, level)
-                    table.sort(folderContainers[folder.id], function(a, b) return a.order < b.order end)
-                    for _, c in ipairs(folderContainers[folder.id]) do
-                        local info = UIDropDownMenu_CreateInfo()
-                        info.text = c.name
-                        info.notCheckable = true
-                        info.func = function()
-                            CloseDropDownMenus()
-                            for _, pid in ipairs(multiPanelIds) do
-                                CooldownCompanion:MovePanel(pid, c.id)
-                            end
-                            wipe(CS.selectedPanels)
-                            CS.selectedContainer = c.id
-                            CooldownCompanion:RefreshConfigPanel()
-                        end
-                        UIDropDownMenu_AddButton(info, level)
-                    end
-                end
-                if #looseContainers > 0 then
-                    if hasFolders then
-                        local hdr = UIDropDownMenu_CreateInfo()
-                        hdr.text = L["No Folder"]
-                        hdr.isTitle = true
-                        hdr.notCheckable = true
-                        UIDropDownMenu_AddButton(hdr, level)
-                    end
-                    table.sort(looseContainers, function(a, b) return a.order < b.order end)
-                    for _, c in ipairs(looseContainers) do
-                        local info = UIDropDownMenu_CreateInfo()
-                        info.text = c.name
-                        info.notCheckable = true
-                        info.func = function()
-                            CloseDropDownMenus()
-                            for _, pid in ipairs(multiPanelIds) do
-                                CooldownCompanion:MovePanel(pid, c.id)
-                            end
-                            wipe(CS.selectedPanels)
-                            CS.selectedContainer = c.id
-                            CooldownCompanion:RefreshConfigPanel()
-                        end
-                        UIDropDownMenu_AddButton(info, level)
-                    end
-                end
-            end, "MENU")
-            moveMenuFrame:SetFrameStrata("FULLSCREEN_DIALOG")
-            ToggleDropDownMenu(1, nil, moveMenuFrame, "cursor", 0, 0)
-        end)
-        scroll:AddChild(moveBtn)
-
-        AddSpacer()
-    end
-
-    -- Export Selected
-    local exportBtn = AceGUI:Create("Button")
-    exportBtn:SetText(L["Export Selected"])
-    exportBtn:SetFullWidth(true)
-    exportBtn:SetCallback("OnClick", function()
-        local containerData = BuildContainerExportData(db.groupContainers[containerId])
-        local exportPanels = {}
-        for _, pid in ipairs(multiPanelIds) do
-            local p = db.groups[pid]
-            if p then
-                local panelData = BuildGroupExportData(p)
-                panelData._originalGroupId = pid
-                exportPanels[#exportPanels + 1] = panelData
-            end
-        end
-        local payload = {
-            type = "container",
-            version = 1,
-            container = containerData,
-            panels = exportPanels,
-            _originalContainerId = containerId,
-        }
-        local exportString = EncodeExportData(payload)
-        CS.ShowPopupAboveConfig("CDC_EXPORT_GROUP", nil, { exportString = exportString })
-    end)
-    scroll:AddChild(exportBtn)
-
-    AddSpacer()
-
-    -- Delete Selected
-    local delBtn = AceGUI:Create("Button")
-    delBtn:SetText(L["Delete Selected"])
-    delBtn:SetFullWidth(true)
-    delBtn:SetCallback("OnClick", function()
-        local ids = {}
-        for _, pid in ipairs(multiPanelIds) do ids[#ids + 1] = pid end
-        CS.ShowPopupAboveConfig("CDC_DELETE_SELECTED_PANELS", multiCount,
-            { containerId = containerId, panelIds = ids })
-    end)
-    scroll:AddChild(delBtn)
-end
 
 local function RefreshButtonSettingsColumn()
     local cf = CS.configFrame
@@ -1278,7 +1115,11 @@ local function RefreshButtonSettingsColumn()
         local group = CooldownCompanion.db.profile.groups[CS.selectedGroup]
         bsCol.bsTabGroup:SetTabs(BuildButtonSettingsTabs(group))
 
-        if GroupUsesTexturePanelEntries(group) and CS.buttonSettingsTab == "overrides" then
+        if GroupUsesTriggerPanelEntries(group)
+            and CS.buttonSettingsTab ~= "settings"
+            and CS.buttonSettingsTab ~= "soundalerts" then
+            CS.buttonSettingsTab = "settings"
+        elseif GroupUsesTexturePanelEntries(group) and CS.buttonSettingsTab == "overrides" then
             CS.buttonSettingsTab = "settings"
         end
 
@@ -1287,427 +1128,13 @@ local function RefreshButtonSettingsColumn()
         bsCol.bsTabGroup:SelectTab(CS.buttonSettingsTab or "settings")
     else
         bsCol.bsTabGroup.frame:Hide()
-        if bsCol.bsPlaceholder then bsCol.bsPlaceholder:Show() end
-    end
-end
-
-------------------------------------------------------------------------
--- OVERRIDES TAB (per-button style overrides)
-------------------------------------------------------------------------
-local function BuildOverridesTab(scroll, buttonData, infoButtons)
-    local group = CooldownCompanion.db.profile.groups[CS.selectedGroup]
-    if not group then return end
-
-    local displayMode = group.displayMode or "icons"
-
-    -- Per-button text format override (text mode only)
-    if displayMode == "text" then
-        local fmtHeading = AceGUI:Create("Heading")
-        fmtHeading:SetText(L["Format Override"])
-        ColorHeading(fmtHeading)
-        fmtHeading:SetFullWidth(true)
-        scroll:AddChild(fmtHeading)
-
-        local fmtInfo = CreateInfoButton(fmtHeading.frame, fmtHeading.label, "LEFT", "RIGHT", 4, 0, {
-            {L["Per-Button Format Override"], 1, 0.82, 0, true},
-            " ",
-            {L["Overrides the group format string for this button only."], 1, 1, 1},
-            {L["Clear the override to revert to the group default."], 1, 1, 1},
-        }, infoButtons)
-        fmtHeading.right:ClearAllPoints()
-        fmtHeading.right:SetPoint("RIGHT", fmtHeading.frame, "RIGHT", -3, 0)
-        fmtHeading.right:SetPoint("LEFT", fmtInfo, "RIGHT", 4, 0)
-
-        local effectiveFmt = buttonData.textFormat or group.style.textFormat or "{name}  {status}"
-
-        -- Preview label
-        local preSpacer = AceGUI:Create("Label")
-        preSpacer:SetText(" ")
-        preSpacer:SetFullWidth(true)
-        scroll:AddChild(preSpacer)
-
-        local fmtPreview = AceGUI:Create("Label")
-        fmtPreview:SetText(ST._RenderFormatPreview(effectiveFmt, group.style))
-        fmtPreview:SetFullWidth(true)
-        fmtPreview:SetFontObject(GameFontHighlight)
-        fmtPreview:SetJustifyH("CENTER")
-        scroll:AddChild(fmtPreview)
-
-        local postSpacer = AceGUI:Create("Label")
-        postSpacer:SetText(" ")
-        postSpacer:SetFullWidth(true)
-        scroll:AddChild(postSpacer)
-
-        -- "Using group default" note or tag summary
-        if not buttonData.textFormat then
-            local defaultNote = AceGUI:Create("Label")
-            defaultNote:SetText(L["|cff888888Using group default|r"])
-            defaultNote:SetFullWidth(true)
-            defaultNote:SetFontObject(GameFontHighlightSmall)
-            scroll:AddChild(defaultNote)
-        else
-            local summaryParts = ST._BuildFormatSummary(effectiveFmt)
-            for _, line in ipairs(summaryParts) do
-                local fmtSummary = AceGUI:Create("Label")
-                fmtSummary:SetText(line)
-                fmtSummary:SetFullWidth(true)
-                fmtSummary:SetFontObject(GameFontHighlightSmall)
-                scroll:AddChild(fmtSummary)
-            end
-        end
-
-        local btnSpacer = AceGUI:Create("Label")
-        btnSpacer:SetText(" ")
-        btnSpacer:SetFullWidth(true)
-        scroll:AddChild(btnSpacer)
-
-        -- Edit button
-        local editBtn = AceGUI:Create("Button")
-        editBtn:SetText(L["Edit Format Override"])
-        editBtn:SetFullWidth(true)
-        editBtn:SetCallback("OnClick", function()
-            ST._OpenFormatEditor(group.style, CS.selectedGroup, {
-                title = L["Button Format Override"],
-                saveTarget = buttonData,
-                defaultFormat = group.style.textFormat or "{name}  {status}",
-            })
-        end)
-        scroll:AddChild(editBtn)
-
-        -- Clear button (only when override exists)
-        if buttonData.textFormat then
-            local clearBtn = AceGUI:Create("Button")
-            clearBtn:SetText(L["Clear Override"])
-            clearBtn:SetFullWidth(true)
-            clearBtn:SetCallback("OnClick", function()
-                buttonData.textFormat = nil
-                CooldownCompanion:RefreshGroupFrame(CS.selectedGroup)
-                CooldownCompanion:RefreshConfigPanel()
-            end)
-            scroll:AddChild(clearBtn)
-        end
-    end
-
-    -- Check if any style overrides exist
-    if not buttonData.overrideSections or not next(buttonData.overrideSections) then
-        if displayMode ~= "text" then
-            local noOverridesLabel = AceGUI:Create("Label")
-            noOverridesLabel:SetText("|cff888888No appearance overrides are currently set.\n\nIf you want to override a setting for this specific button, click the |A:Crosshair_VehichleCursor_32:0:0|a badge next to the associated panel level setting while this button is selected.|r")
-            noOverridesLabel:SetFullWidth(true)
-            scroll:AddChild(noOverridesLabel)
-        end
-        return
-    end
-
-    local overrides = buttonData.styleOverrides
-    if not overrides then return end
-
-    local function GetEffectiveOverrideValue(key)
-        local val = overrides[key]
-        if val ~= nil then
-            return val
-        end
-        return group.style and group.style[key]
-    end
-
-    local refreshCallback = function()
-        CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
-    end
-
-    -- Ordered list of sections to display (maintain consistent ordering)
-    local sectionOrder = {
-        "borderSettings", "cooldownText", "auraText", "auraStackText",
-        "keybindText", "chargeText", "desaturation", "cooldownSwipe", "showGCDSwipe", "showOutOfRange", "showTooltips",
-        "lossOfControl", "unusableDimming", "iconTint", "assistedHighlight", "procGlow", "pandemicGlow", "auraIndicator", "readyGlow", "keyPressHighlight",
-        "barColors", "barNameText", "barReadyText", "pandemicBar", "barActiveAura",
-        "textFont", "textColors", "textBackground",
-    }
-
-    -- Map of section IDs to builder functions
-    local sectionBuilders = {
-        borderSettings = BuildBorderControls,
-        cooldownText = BuildCooldownTextControls,
-        auraText = BuildAuraTextControls,
-        auraStackText = BuildAuraStackTextControls,
-        keybindText = BuildKeybindTextControls,
-        chargeText = BuildChargeTextControls,
-        desaturation = BuildDesaturationControls,
-        cooldownSwipe = BuildCooldownSwipeControls,
-        showGCDSwipe = BuildShowGCDSwipeControls,
-        showOutOfRange = BuildShowOutOfRangeControls,
-        showTooltips = BuildShowTooltipsControls,
-        lossOfControl = BuildLossOfControlControls,
-        unusableDimming = BuildUnusableDimmingControls,
-        iconTint = function(container, styleTable, onChange)
-            BuildIconTintControls(container, styleTable, onChange)
-            BuildBackgroundColorControls(container, styleTable, onChange)
-        end,
-        assistedHighlight = BuildAssistedHighlightControls,
-        procGlow = BuildProcGlowControls,
-        pandemicGlow = BuildPandemicGlowControls,
-        auraIndicator = BuildAuraIndicatorControls,
-        readyGlow = BuildReadyGlowControls,
-        keyPressHighlight = BuildKeyPressHighlightControls,
-        barColors = BuildBarColorsControls,
-        barNameText = BuildBarNameTextControls,
-        barReadyText = BuildBarReadyTextControls,
-        pandemicBar = function(container, styleTable, onChange, opts)
-            BuildPandemicBarControls(container, styleTable, onChange, opts)
-            -- Only show pulse controls when the pandemic indicator is enabled
-            local panEnabled = styleTable.showPandemicGlow
-            if panEnabled == nil and opts and opts.fallbackStyle then
-                panEnabled = opts.fallbackStyle.showPandemicGlow
-            end
-            if panEnabled ~= false then
-                BuildPandemicBarPulseControls(container, styleTable, onChange, opts)
-            end
-        end,
-        barActiveAura = function(container, styleTable, onChange, opts)
-            BuildBarActiveAuraControls(container, styleTable, onChange, opts)
-            -- Only show pulse controls when the aura indicator is enabled
-            local auraEffect = styleTable.barAuraEffect
-            if auraEffect == nil and opts and opts.fallbackStyle then
-                auraEffect = opts.fallbackStyle.barAuraEffect
-            end
-            if (auraEffect or "none") ~= "none" then
-                BuildBarAuraPulseControls(container, styleTable, onChange, opts)
-            end
-        end,
-        textFont = BuildTextFontControls,
-        textColors = BuildTextColorsControls,
-        textBackground = BuildTextBackgroundControls,
-    }
-
-    -- Detect no-cooldown spells to skip irrelevant override sections
-    local isNoCooldownSpell = false
-    if buttonData.type == "spell" and not buttonData.isPassive and not UsesChargeBehavior(buttonData) then
-        local baseCd = GetSpellBaseCooldown(buttonData.id)
-        isNoCooldownSpell = (not baseCd or baseCd == 0) and not HasTooltipCooldown(buttonData.id)
-    end
-
-    for _, sectionId in ipairs(sectionOrder) do
-        if buttonData.overrideSections[sectionId] then
-            -- Skip readyGlow/desaturation for no-CD spells (meaningless — never triggers)
-            if isNoCooldownSpell and (sectionId == "readyGlow" or sectionId == "desaturation") then
-                -- skip
-            else
-            local sectionDef = ST.OVERRIDE_SECTIONS[sectionId]
-            -- Skip sections not applicable to current display mode
-            if sectionDef and sectionDef.modes[displayMode] then
-                local heading = AceGUI:Create("Heading")
-                heading:SetText(sectionDef.label)
-                ColorHeading(heading)
-                heading:SetFullWidth(true)
-                scroll:AddChild(heading)
-
-                local overrideKey = CS.selectedGroup .. "_" .. CS.selectedButton .. "_override_" .. sectionId
-                local overrideCollapsed = CS.collapsedSections[overrideKey]
-
-                AttachCollapseButton(heading, overrideCollapsed, function()
-                    CS.collapsedSections[overrideKey] = not CS.collapsedSections[overrideKey]
-                    CooldownCompanion:RefreshConfigPanel()
-                end)
-
-                local revertBtn = CreateRevertButton(heading, buttonData, sectionId)
-                table.insert(infoButtons, revertBtn)
-
-                if not overrideCollapsed then
-                local builder = sectionBuilders[sectionId]
-                if builder then
-                    -- Combat-only key mapping
-                    local combatOnlyKey
-                    if sectionId == "procGlow" then
-                        combatOnlyKey = "procGlowCombatOnly"
-                    elseif sectionId == "auraIndicator" or sectionId == "barActiveAura" then
-                        combatOnlyKey = "auraGlowCombatOnly"
-                    elseif sectionId == "pandemicGlow" or sectionId == "pandemicBar" then
-                        combatOnlyKey = "pandemicGlowCombatOnly"
-                    elseif sectionId == "readyGlow" then
-                        combatOnlyKey = "readyGlowCombatOnly"
-                    elseif sectionId == "assistedHighlight" then
-                        combatOnlyKey = "assistedHighlightCombatOnly"
-                    elseif sectionId == "keyPressHighlight" then
-                        combatOnlyKey = "keyPressHighlightCombatOnly"
-                    end
-
-                    -- Assisted highlight: combat-only stays inline (no parent enable toggle)
-                    if sectionId == "assistedHighlight" and combatOnlyKey then
-                        local combatCb = AceGUI:Create("CheckBox")
-                        combatCb:SetLabel(L["Show Only In Combat"])
-                        combatCb:SetValue(overrides[combatOnlyKey] or false)
-                        combatCb:SetFullWidth(true)
-                        combatCb:SetCallback("OnValueChanged", function(widget, event, val)
-                            overrides[combatOnlyKey] = val
-                            CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
-                        end)
-                        scroll:AddChild(combatCb)
-                        ApplyCheckboxIndent(combatCb, 20)
-                    end
-
-                    -- For glow sections with a parent enable toggle, nest sub-toggles via callback
-                    local afterEnableCallback
-                    if combatOnlyKey and sectionId ~= "assistedHighlight" then
-                        afterEnableCallback = function(cont)
-                            local combatCb = AceGUI:Create("CheckBox")
-                            combatCb:SetLabel(L["Show Only In Combat"])
-                            combatCb:SetValue(overrides[combatOnlyKey] or false)
-                            combatCb:SetFullWidth(true)
-                            combatCb:SetCallback("OnValueChanged", function(widget, event, val)
-                                overrides[combatOnlyKey] = val
-                                CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
-                            end)
-                            cont:AddChild(combatCb)
-                            ApplyCheckboxIndent(combatCb, 20)
-
-                            if sectionId == "auraIndicator" then
-                                local auraInvertCb = AceGUI:Create("CheckBox")
-                                auraInvertCb:SetLabel(L["Show When Missing"])
-                                auraInvertCb:SetValue(overrides.auraGlowInvert or false)
-                                auraInvertCb:SetFullWidth(true)
-                                auraInvertCb:SetCallback("OnValueChanged", function(widget, event, val)
-                                    overrides.auraGlowInvert = val
-                                    CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
-                                end)
-                                cont:AddChild(auraInvertCb)
-                                ApplyCheckboxIndent(auraInvertCb, 20)
-                            end
-
-                            if sectionId == "readyGlow" then
-                                local cappedCb = AceGUI:Create("CheckBox")
-                                cappedCb:SetLabel("Glow When Charges Are Capped")
-                                cappedCb:SetValue(GetEffectiveOverrideValue("readyGlowOnlyAtMaxCharges") or false)
-                                cappedCb:SetFullWidth(true)
-                                cappedCb:SetCallback("OnValueChanged", function(widget, event, val)
-                                    overrides.readyGlowOnlyAtMaxCharges = val == true
-                                    CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
-                                    if (GetEffectiveOverrideValue("readyGlowDuration") or 0) > 0 then
-                                        if val then
-                                            PrimeSelectedReadyGlowCappedChargeTransition(CS.selectedGroup, CS.selectedButton)
-                                        else
-                                            PrimeSelectedReadyGlowNormalTransition(CS.selectedGroup, CS.selectedButton)
-                                        end
-                                    end
-                                    CooldownCompanion:UpdateAllCooldowns()
-                                end)
-                                cont:AddChild(cappedCb)
-                                ApplyCheckboxIndent(cappedCb, 20)
-                                CreateInfoButton(cappedCb.frame, cappedCb.checkbg, "LEFT", "RIGHT", cappedCb.text:GetStringWidth() + 6, 0, {
-                                    "Glow When Charges Are Capped",
-                                    {"When this toggle is enabled, the glow will only appear for charge based spells when at max charges.", 1, 1, 1, true},
-                                }, infoButtons)
-
-                                local durCb = AceGUI:Create("CheckBox")
-                                durCb:SetLabel("Auto-Hide After Duration")
-                                durCb:SetValue((GetEffectiveOverrideValue("readyGlowDuration") or 0) > 0)
-                                durCb:SetFullWidth(true)
-                                durCb:SetCallback("OnValueChanged", function(widget, event, val)
-                                    overrides.readyGlowDuration = val and 3 or 0
-                                    CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
-                                    if val then
-                                        if GetEffectiveOverrideValue("readyGlowOnlyAtMaxCharges") then
-                                            PrimeSelectedReadyGlowCappedChargeTransition(CS.selectedGroup, CS.selectedButton)
-                                        else
-                                            PrimeSelectedReadyGlowNormalTransition(CS.selectedGroup, CS.selectedButton)
-                                        end
-                                    end
-                                    CooldownCompanion:UpdateAllCooldowns()
-                                    CooldownCompanion:RefreshConfigPanel()
-                                end)
-                                cont:AddChild(durCb)
-                                ApplyCheckboxIndent(durCb, 20)
-
-                                if (GetEffectiveOverrideValue("readyGlowDuration") or 0) > 0 then
-                                    local durSlider = AceGUI:Create("Slider")
-                                    durSlider:SetLabel(L["Duration (seconds)"])
-                                    durSlider:SetSliderValues(0.5, 5, 0.5)
-                                    durSlider:SetValue(GetEffectiveOverrideValue("readyGlowDuration") or 3)
-                                    durSlider:SetFullWidth(true)
-                                    durSlider:SetCallback("OnValueChanged", function(widget, event, val)
-                                        overrides.readyGlowDuration = val
-                                        CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
-                                        CooldownCompanion:RefreshConfigPanel()
-                                    end)
-                                    cont:AddChild(durSlider)
-                                end
-                            end
-                        end
-                    end
-
-                    builder(scroll, overrides, refreshCallback, {
-                        isOverride = true,
-                        fallbackStyle = group.style,
-                        afterEnableCallback = afterEnableCallback,
-                    })
-                    if sectionId == "procGlow" and overrides.procGlowStyle ~= "none" then
-                        local procPreviewBtn = AceGUI:Create("Button")
-                        procPreviewBtn:SetText(L["Preview Proc Glow (3s)"])
-                        procPreviewBtn:SetFullWidth(true)
-                        procPreviewBtn:SetCallback("OnClick", function()
-                            if CS.selectedGroup and CS.selectedButton then
-                                CooldownCompanion:PlayProcGlowPreview(CS.selectedGroup, CS.selectedButton, 3)
-                            end
-                        end)
-                        scroll:AddChild(procPreviewBtn)
-                    elseif sectionId == "auraIndicator" and overrides.auraGlowStyle ~= "none" then
-                        local auraPreviewBtn = AceGUI:Create("Button")
-                        auraPreviewBtn:SetText(L["Preview Aura Glow (3s)"])
-                        auraPreviewBtn:SetFullWidth(true)
-                        auraPreviewBtn:SetCallback("OnClick", function()
-                            if CS.selectedGroup and CS.selectedButton then
-                                CooldownCompanion:PlayAuraGlowPreview(CS.selectedGroup, CS.selectedButton, 3)
-                            end
-                        end)
-                        scroll:AddChild(auraPreviewBtn)
-                    elseif sectionId == "pandemicGlow" and GetEffectiveOverrideValue("showPandemicGlow") ~= false then
-                        local pandemicPreviewBtn = AceGUI:Create("Button")
-                        pandemicPreviewBtn:SetText(L["Preview Pandemic Glow (3s)"])
-                        pandemicPreviewBtn:SetFullWidth(true)
-                        pandemicPreviewBtn:SetCallback("OnClick", function()
-                            if CS.selectedGroup and CS.selectedButton then
-                                CooldownCompanion:PlayPandemicPreview(CS.selectedGroup, CS.selectedButton, 3)
-                            end
-                        end)
-                        scroll:AddChild(pandemicPreviewBtn)
-                    elseif sectionId == "barActiveAura" then
-                        local auraActivePreviewBtn = AceGUI:Create("Button")
-                        auraActivePreviewBtn:SetText("Preview Active Aura Effects (3s)")
-                        auraActivePreviewBtn:SetFullWidth(true)
-                        auraActivePreviewBtn:SetCallback("OnClick", function()
-                            if CS.selectedGroup and CS.selectedButton then
-                                CooldownCompanion:PlayBarAuraActivePreview(CS.selectedGroup, CS.selectedButton, 3)
-                            end
-                        end)
-                        scroll:AddChild(auraActivePreviewBtn)
-                    elseif sectionId == "pandemicBar" then
-                        local pandemicPreviewBtn = AceGUI:Create("Button")
-                        pandemicPreviewBtn:SetText("Preview Pandemic Effects (3s)")
-                        pandemicPreviewBtn:SetFullWidth(true)
-                        pandemicPreviewBtn:SetCallback("OnClick", function()
-                            if CS.selectedGroup and CS.selectedButton then
-                                CooldownCompanion:PlayPandemicPreview(CS.selectedGroup, CS.selectedButton, 3)
-                            end
-                        end)
-                        scroll:AddChild(pandemicPreviewBtn)
-                    elseif sectionId == "readyGlow" and overrides.readyGlowStyle and overrides.readyGlowStyle ~= "none" then
-                        local readyPreviewBtn = AceGUI:Create("Button")
-                        readyPreviewBtn:SetText("Preview Ready Glow Style (3s)")
-                        readyPreviewBtn:SetFullWidth(true)
-                        readyPreviewBtn:SetCallback("OnClick", function()
-                            if CS.selectedGroup and CS.selectedButton then
-                                CooldownCompanion:PlayReadyGlowPreview(CS.selectedGroup, CS.selectedButton, 3)
-                            end
-                        end)
-                        scroll:AddChild(readyPreviewBtn)
-                    end
-
-                end
-                end
-            end
-            end -- isNoCooldownSpell gate
+        if bsCol.bsPlaceholder then
+            local group = CS.selectedGroup and CooldownCompanion.db.profile.groups[CS.selectedGroup]
+            bsCol.bsPlaceholder:SetText(GroupUsesTriggerPanelEntries(group) and "Select an entry to configure" or "Select a spell or item to configure")
+            bsCol.bsPlaceholder:Show()
         end
     end
 end
-
 
 local function ConfigureInlineEditBoxInstructions(editBoxWidget, placeholderText, currentValue)
     local editFrame = editBoxWidget.editbox
@@ -1837,3 +1264,5 @@ ST._BuildCustomNameSection = BuildCustomNameSection
 ST._BuildCustomKeybindSection = BuildCustomKeybindSection
 ST._BuildOverridesTab = BuildOverridesTab
 ST._BuildSpellSoundAlertsTab = BuildSpellSoundAlertsTab
+ST._BuildTriggerPanelSoundAlertsTab = BuildTriggerPanelSoundAlertsTab
+ST._BuildTriggerConditionSettings = BuildTriggerConditionSettings
