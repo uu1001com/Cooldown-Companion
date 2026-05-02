@@ -12,6 +12,7 @@ local GetTime = GetTime
 local tonumber = tonumber
 local tostring = tostring
 local ipairs = ipairs
+local type = type
 local wipe = wipe
 local issecretvalue = issecretvalue
 local math_max = math.max
@@ -110,6 +111,12 @@ local function ClearConditionalVisualPreviewFields(button)
     button._conditionalOutOfRangePreview = nil
     button._conditionalReadyPreview = nil
     button._conditionalBarAuraActivePreview = nil
+end
+
+local function HideIconFillForHiddenButton(button)
+    if not (button and button.iconFill) then return end
+    button.iconFill:Hide()
+    button.iconFill:SetScript("OnUpdate", nil)
 end
 
 local function ApplyChargeTextColor(button, buttonData, style, usesChargeBehavior)
@@ -315,6 +322,115 @@ local function GetViewerNameFontString(viewerFrame)
     return bar and bar.Name or nil
 end
 
+local function CreateAuraDisplayNameState(button)
+    return {
+        priorReadableName = button and button._auraDisplayName or nil,
+        priorSecretTextActive = button and button._isText and button._textSecretNameActive == true or false,
+    }
+end
+
+local function RecordAuraDisplayName(state, auraData)
+    if not (state and auraData) then return end
+    local auraName = auraData.name
+    if issecretvalue(auraName) then
+        state.secretName = auraName
+        state.hasSecretName = true
+        state.nameApplied = true
+        return true
+    elseif auraName and auraName ~= "" then
+        state.readableName = auraName
+        state.nameApplied = true
+        return true
+    end
+end
+
+local function GetReadableAuraSpellID(auraData)
+    local spellID = auraData and auraData.spellId
+    if spellID and not issecretvalue(spellID) then
+        return spellID
+    end
+end
+
+local function PreserveSecretAuraTextRender(state)
+    if not (state and state.priorSecretTextActive) then return end
+    state.preserveSecretTextRender = true
+    state.nameApplied = true
+end
+
+local function PreserveAuraDisplayNameDuringGrace(state)
+    if not state then return end
+    if state.priorReadableName then
+        state.readableName = state.priorReadableName
+        state.nameApplied = true
+    elseif state.priorSecretTextActive then
+        PreserveSecretAuraTextRender(state)
+    end
+end
+
+local function RestoreBaseDisplayName(button, buttonData)
+    if not (button and button.nameText and buttonData) or buttonData.customName then
+        return
+    end
+
+    local restoreSpellID = button._displaySpellId or buttonData.id
+    local baseName = buttonData.name
+    if buttonData.type == "spell" then
+        baseName = C_Spell.GetSpellName(restoreSpellID) or baseName
+    elseif buttonData.type == "item" then
+        baseName = C_Item.GetItemNameByID(buttonData.id) or baseName
+    end
+
+    if baseName then
+        button.nameText:SetText(baseName)
+    end
+end
+
+local function CommitAuraDisplayName(button, buttonData, viewerFrame, auraOverrideActive, state)
+    if auraOverrideActive then
+        if state and state.readableName then
+            button._auraDisplayName = state.readableName
+            if button.nameText and not buttonData.customName then
+                button.nameText:SetText(state.readableName)
+                button._auraNameOverrideActive = true
+            end
+        elseif state and state.hasSecretName then
+            if button.nameText and not buttonData.customName then
+                button.nameText:SetText(state.secretName)
+                button._auraNameOverrideActive = true
+            end
+        elseif state and state.preserveSecretTextRender then
+            button._auraNameOverrideActive = true
+        end
+
+        if viewerFrame then
+            local viewerName = GetViewerNameFontString(viewerFrame)
+            if not (state and state.nameApplied) and button.nameText and not buttonData.customName and viewerName and viewerName.GetText then
+                -- Pass through the CDM-rendered text directly; avoid calling viewer mixin methods
+                -- from tainted code (they can execute secret-value logic internally).
+                button.nameText:SetText(viewerName:GetText())
+            end
+            -- Multi-slot buttons read their icon from the viewer's Icon widget.
+            -- Event-driven UpdateButtonIcon calls can race with the CDM viewer's
+            -- internal icon update on transforms (e.g. Diabolic Ritual), so re-sync
+            -- the icon every tick to ensure it reflects the viewer's current state.
+            if buttonData.cdmChildSlot then
+                CooldownCompanion:UpdateButtonIcon(button)
+            end
+            button._viewerAuraVisualsActive = true
+        end
+    elseif button._viewerAuraVisualsActive or button._auraNameOverrideActive then
+        button._viewerAuraVisualsActive = nil
+        button._auraNameOverrideActive = nil
+        RestoreBaseDisplayName(button, buttonData)
+        -- Multi-slot buttons got their icon from per-tick viewer reads while
+        -- the aura was active. Now that the aura has dropped, re-sync the icon
+        -- to the viewer's current (base) state.
+        if buttonData.cdmChildSlot then
+            CooldownCompanion:UpdateButtonIcon(button)
+        end
+    end
+end
+
 -- Hidden scratch CooldownFrame for probing DurationObject activity.
 -- DurationObject:IsZero() returns a secret boolean in tainted contexts;
 -- feeding the object to a Cooldown widget and checking IsShown() yields
@@ -330,6 +446,55 @@ local function DurationObjectShowsCooldown(durationObj)
     local shown = scratchCooldown:IsShown()
     scratchCooldown:SetCooldown(0, 0)
     return shown
+end
+
+local function GetReadableDurationRemaining(durationObj)
+    if not durationObj then
+        return nil
+    end
+
+    if durationObj:HasSecretValues() then
+        return nil
+    end
+
+    local remaining = durationObj:GetRemainingDuration()
+    if remaining == nil then
+        return nil
+    end
+
+    if issecretvalue(remaining) then
+        return nil
+    end
+
+    remaining = tonumber(remaining)
+    if not remaining then
+        return nil
+    end
+
+    return remaining
+end
+
+local function RealCooldownEndsInsideActiveGCD(realDurationObj)
+    if CooldownCompanion._gcdActive ~= true then
+        return false
+    end
+
+    local gcdDurationObj = CooldownCompanion._gcdDurationObj
+    if not gcdDurationObj then
+        return false
+    end
+
+    local realRemaining = GetReadableDurationRemaining(realDurationObj)
+    if not realRemaining then
+        return false
+    end
+
+    local gcdRemaining = GetReadableDurationRemaining(gcdDurationObj)
+    if not gcdRemaining then
+        return false
+    end
+
+    return realRemaining <= gcdRemaining
 end
 
 local function GetConfiguredAuraUnit(buttonData)
@@ -406,11 +571,30 @@ end
 
 local ProbeActionSlotCooldownForSpell
 
-local function EvaluateSpellCooldownLane(spellID, secrecy)
+local function ApplyGCDSyncIfRealEndsInside(result, realDurationObj, source)
+    if not (result and realDurationObj and result.isOnGCD == true) then
+        return false
+    end
+
+    if RealCooldownEndsInsideActiveGCD(realDurationObj) ~= true then
+        return false
+    end
+
+    result.state = COOLDOWN_STATE_GCD
+    result.source = source
+    result.realCooldownShown = false
+    result.durationObj = CooldownCompanion._gcdDurationObj
+    result.renderDurationObj = CooldownCompanion._gcdDurationObj
+    result.gcdSyncUsed = true
+    return true
+end
+
+local function EvaluateSpellCooldownLane(spellID, secrecy, baseSpellID, options)
     local result = {
         spellID = spellID,
         fetchOk = false,
         state = COOLDOWN_STATE_READY,
+        source = "ready",
         realCooldownShown = false,
         isOnGCD = false,
         deferred = false,
@@ -420,11 +604,13 @@ local function EvaluateSpellCooldownLane(spellID, secrecy)
         return result
     end
 
+    options = options or {}
+
     local info = C_Spell.GetSpellCooldown(spellID)
     result.info = info
     if not info then
         if secrecy ~= 0 and ProbeActionSlotCooldownForSpell then
-            local slotProbe = ProbeActionSlotCooldownForSpell(spellID)
+            local slotProbe = ProbeActionSlotCooldownForSpell(baseSpellID or spellID, spellID)
             if slotProbe.shown ~= nil then
                 result.fetchOk = true
                 result.normalCooldownShown = slotProbe.shown == true
@@ -434,9 +620,13 @@ local function EvaluateSpellCooldownLane(spellID, secrecy)
                 result.slotProbe = slotProbe
                 if result.realCooldownShown and slotProbe.realDurationObj then
                     result.state = COOLDOWN_STATE_COOLDOWN
+                    result.source = "action-slot-real-no-spell-info"
                     result.renderDurationObj = slotProbe.realDurationObj
+                    result.isOnGCD = CooldownCompanion._gcdActive == true
+                    ApplyGCDSyncIfRealEndsInside(result, slotProbe.realDurationObj, "action-slot-gcd-sync")
                 elseif slotProbe.shown and slotProbe.durationObj then
                     result.state = COOLDOWN_STATE_GCD
+                    result.source = "action-slot-gcd-no-spell-info"
                     result.renderDurationObj = slotProbe.durationObj
                     result.isOnGCD = true
                 end
@@ -458,49 +648,80 @@ local function EvaluateSpellCooldownLane(spellID, secrecy)
 
     if result.deferred then
         result.state = COOLDOWN_STATE_COOLDOWN
+        result.source = "spell-deferred"
     elseif result.realCooldownShown and result.realDurationObj then
         result.state = COOLDOWN_STATE_COOLDOWN
+        result.source = "spell-real-ignore-gcd"
         result.renderDurationObj = result.realDurationObj
     elseif CooldownLogic.IsSpellGCDOnly(info, {
         normalCooldownShown = result.normalCooldownShown,
         realCooldownShown = result.realCooldownShown,
     }) then
         result.state = COOLDOWN_STATE_GCD
+        result.source = "spell-gcd"
         result.renderDurationObj = result.durationObj or CooldownCompanion._gcdDurationObj
     end
 
-    return result
-end
-
-local function SelectSpellCooldownResult(current, candidate)
-    if not candidate or not candidate.fetchOk then
-        return current
+    if result.state == COOLDOWN_STATE_COOLDOWN
+        and result.realCooldownShown == true
+        and result.realDurationObj then
+        ApplyGCDSyncIfRealEndsInside(result, result.realDurationObj, "spell-gcd-sync")
     end
-    if not current or not current.fetchOk then
-        return candidate
-    end
-    return CooldownLogic.SelectStrongerCooldownState(current, candidate)
-end
 
-local function EvaluateButtonSpellCooldown(buttonData, cooldownSpellId)
-    local displayResult = EvaluateSpellCooldownLane(cooldownSpellId, buttonData._cooldownSecrecy)
-    local result = displayResult
+    local needsRealCooldownFallback = result.state ~= COOLDOWN_STATE_COOLDOWN
+        and (result.isOnGCD == true or result.normalCooldownShown == true)
 
-    if cooldownSpellId and cooldownSpellId ~= buttonData.id then
-        local displayBaseSpellID = C_Spell.GetBaseSpell(cooldownSpellId)
-        if displayBaseSpellID == buttonData.id then
-            local baseResult = EvaluateSpellCooldownLane(buttonData.id, buttonData._cooldownSecrecy)
-            result = SelectSpellCooldownResult(
-                result,
-                baseResult
-            )
-            if result and (displayResult.isOnGCD or baseResult.isOnGCD) then
-                result.isOnGCD = true
+    -- Some short real cooldowns surface as GCD-only through the spell lane
+    -- until the GCD ends. The action-slot duration object matches Blizzard's
+    -- button display and can expose the real ignoreGCD cooldown immediately.
+    if needsRealCooldownFallback
+        and options.allowActionSlotRealFallback
+        and ProbeActionSlotCooldownForSpell then
+        local slotProbe = ProbeActionSlotCooldownForSpell(baseSpellID or spellID, spellID)
+        if slotProbe.realShown == true and slotProbe.realDurationObj then
+            result.slotProbe = slotProbe
+            if result.gcdSyncUsed == true then
+                return result
             end
+
+            if ApplyGCDSyncIfRealEndsInside(result, slotProbe.realDurationObj, "action-slot-gcd-sync") then
+                return result
+            end
+
+            result.normalCooldownShown = slotProbe.shown == true or result.normalCooldownShown
+            result.realCooldownShown = true
+            result.durationObj = slotProbe.durationObj or result.durationObj
+            result.realDurationObj = slotProbe.realDurationObj
+            result.state = COOLDOWN_STATE_COOLDOWN
+            result.source = "action-slot-real-fallback"
+            result.renderDurationObj = slotProbe.realDurationObj
         end
     end
 
     return result
+end
+
+local function GetLiveOverrideSpellID(buttonData)
+    if not (buttonData and buttonData.type == "spell" and not buttonData.isPassive) then
+        return nil
+    end
+
+    local overrideID = C_Spell.GetOverrideSpell(buttonData.id)
+    if overrideID and overrideID ~= 0 and overrideID ~= buttonData.id then
+        return overrideID
+    end
+
+    return nil
+end
+
+local function EvaluateButtonSpellCooldown(buttonData, cooldownSpellId, noCooldown)
+    local allowActionSlotRealFallback = buttonData.hasCharges ~= true
+        and cooldownSpellId == buttonData.id
+        and noCooldown ~= true
+
+    return EvaluateSpellCooldownLane(cooldownSpellId, buttonData._cooldownSecrecy, buttonData.id, {
+        allowActionSlotRealFallback = allowActionSlotRealFallback,
+    })
 end
 
 local function ResolveChargeState(button, buttonData)
@@ -542,11 +763,19 @@ local actionSlotSeenScratch = {}
 local function MergeActionSlotProbe(result, probe)
     if probe.sawAnySlot then result.sawAnySlot = true end
     if probe.sawUnknown then result.sawUnknown = true end
-    if probe.shown then
-        result.shown = true
-        result.durationObj = probe.durationObj
-        result.realShown = probe.realShown
-        result.realDurationObj = probe.realDurationObj
+    if probe.slot and not result.slot then result.slot = probe.slot end
+    if probe.matchedSpellID and not result.matchedSpellID then result.matchedSpellID = probe.matchedSpellID end
+    if probe.shown ~= nil then result.shown = probe.shown end
+    if probe.realShown ~= nil then result.realShown = probe.realShown end
+    if probe.durationObj then result.durationObj = result.durationObj or probe.durationObj end
+    if probe.realDurationObj then result.realDurationObj = result.realDurationObj or probe.realDurationObj end
+    if probe.shown or probe.realShown then
+        result.shown = probe.shown == true
+        result.durationObj = probe.durationObj or result.durationObj
+        result.realShown = probe.realShown == true
+        result.realDurationObj = probe.realDurationObj or result.realDurationObj
+        result.slot = probe.slot or result.slot
+        result.matchedSpellID = probe.matchedSpellID or result.matchedSpellID
         return true
     end
     return false
@@ -554,7 +783,7 @@ end
 
 local function ProbeActionSlotsForSpellID(spellID)
     local result = {
-        shown = false,
+        shown = nil,
         realShown = nil,
         sawAnySlot = false,
         sawUnknown = false,
@@ -569,6 +798,8 @@ local function ProbeActionSlotsForSpellID(spellID)
         if not actionSlotSeenScratch[slot] then
             actionSlotSeenScratch[slot] = true
             result.sawAnySlot = true
+            result.slot = result.slot or slot
+            result.matchedSpellID = result.matchedSpellID or spellID
 
             local durationObj = C_ActionBar.GetActionCooldownDuration(slot)
             local realDurationObj = C_ActionBar.GetActionCooldownDuration(slot, true)
@@ -583,14 +814,20 @@ local function ProbeActionSlotsForSpellID(spellID)
                 realShown = DurationObjectShowsCooldown(realDurationObj)
             end
 
-            if shown then
-                result.shown = true
+            if shown or realShown then
+                result.shown = shown == true
                 result.durationObj = durationObj
-                result.realShown = realShown
+                result.realShown = realShown == true
                 result.realDurationObj = realDurationObj
+                result.slot = slot
+                result.matchedSpellID = spellID
                 return result
             end
         end
+    end
+
+    if result.sawAnySlot then
+        result.shown = false
     end
 
     return result
@@ -695,21 +932,52 @@ function CooldownCompanion:UpdateButtonCooldown(button)
         end
     end
 
-    -- For transforming spells (e.g. Command Demon → pet ability), use the
-    -- current override spell for cooldown queries. _displaySpellId is set
-    -- by UpdateButtonIcon on SPELL_UPDATE_ICON and creation.
-    -- Lazy-cache no-cooldown detection for spells (GCD-only, no real CD).
-    -- Computed once (nil → true/false), reset in UpdateButtonStyle on respec.
-    if button._noCooldown == nil then
-        if buttonData.type == "spell" and not buttonData.isPassive and not usesChargeBehavior then
-            local baseCd = GetSpellBaseCooldown(buttonData.id)
-            button._noCooldown = (not baseCd or baseCd == 0) and not HasTooltipCooldown(buttonData.id)
-        else
-            button._noCooldown = false
+    -- For transforming spells (e.g. Void Eruption -> Void Volley), keep the
+    -- displayed spell fresh even when the game does not fire SPELL_UPDATE_ICON.
+    local cooldownSpellId = button._displaySpellId or buttonData.id
+    local liveOverrideId
+    local forceBaseDisplayId = false
+    if buttonData.type == "spell" and not buttonData.cdmChildSlot then
+        local refreshIcon = false
+        local previousLiveOverrideId = button._liveOverrideSpellId
+        liveOverrideId = GetLiveOverrideSpellID(buttonData)
+        button._liveOverrideSpellId = liveOverrideId
+        if liveOverrideId then
+            if liveOverrideId ~= cooldownSpellId then
+                refreshIcon = true
+            end
+            cooldownSpellId = liveOverrideId
+        elseif previousLiveOverrideId then
+            cooldownSpellId = buttonData.id
+            forceBaseDisplayId = true
+            refreshIcon = true
+        end
+
+        if button._displaySpellId ~= cooldownSpellId then
+            refreshIcon = true
+        end
+
+        -- Per-tick icon staleness detection for silent transforms (e.g. Tiger's
+        -- Fury changing Rake/Rip icons). GetSpellTexture dynamically resolves
+        -- the current visual, but no event fires for these transforms.
+        local freshIcon = C_Spell.GetSpellTexture(buttonData.id)
+        if freshIcon and freshIcon ~= button._lastSpellTexture then
+            button._lastSpellTexture = freshIcon
+            refreshIcon = true
+        end
+
+        if refreshIcon then
+            if forceBaseDisplayId then
+                button._forceBaseDisplaySpellId = true
+            end
+            CooldownCompanion:UpdateButtonIcon(button)
+            button._forceBaseDisplaySpellId = nil
+            cooldownSpellId = forceBaseDisplayId and buttonData.id
+                or liveOverrideId
+                or button._displaySpellId
+                or buttonData.id
         end
     end
-
-    local cooldownSpellId = button._displaySpellId or buttonData.id
 
     -- Deferred icon refresh for cdmChildSlot buttons (set by OnSpellUpdateIcon).
     -- One-tick delay ensures the CDM viewer's RefreshSpellTexture has already
@@ -717,21 +985,21 @@ function CooldownCompanion:UpdateButtonCooldown(button)
     if button._iconDirty then
         button._iconDirty = nil
         CooldownCompanion:UpdateButtonIcon(button)
-        cooldownSpellId = button._displaySpellId or buttonData.id
+        cooldownSpellId = liveOverrideId or button._displaySpellId or buttonData.id
     end
 
-    -- Per-tick icon staleness detection for silent transforms (e.g. Tiger's Fury
-    -- changing Rake/Rip icons). GetSpellTexture dynamically resolves the current
-    -- visual, but no event fires for these transforms. cdmChildSlot buttons
-    -- already have their own per-tick viewer-based icon re-sync.
-    -- Event-driven updates (_iconDirty) remain instant (handled above).
-    if buttonData.type == "spell" and not buttonData.cdmChildSlot then
-        local freshIcon = C_Spell.GetSpellTexture(buttonData.id)
-        if freshIcon and freshIcon ~= button._lastSpellTexture then
-            button._lastSpellTexture = freshIcon
-            CooldownCompanion:UpdateButtonIcon(button)
-            cooldownSpellId = button._displaySpellId or buttonData.id
+    -- Lazy-cache no-cooldown detection for spells (GCD-only, no real CD).
+    -- Tie the cache to the displayed spell so replacements do not inherit the
+    -- base spell's cooldown classification.
+    if buttonData.type == "spell" and not buttonData.isPassive and not usesChargeBehavior then
+        if button._noCooldown == nil or button._noCooldownSpellId ~= cooldownSpellId then
+            button._noCooldownSpellId = cooldownSpellId
+            local baseCd = GetSpellBaseCooldown(cooldownSpellId)
+            button._noCooldown = (not baseCd or baseCd == 0) and not HasTooltipCooldown(cooldownSpellId)
         end
+    else
+        button._noCooldown = false
+        button._noCooldownSpellId = nil
     end
 
     -- Proc state: event-driven table lookup (base spell + current displayed override).
@@ -756,7 +1024,6 @@ function CooldownCompanion:UpdateButtonCooldown(button)
     button._cooldownState = COOLDOWN_STATE_READY
     button._chargeState = nil
     button._chargeCooldownVisualActive = nil
-
     -- Fetch cooldown data and update the cooldown widget.
     -- isOnGCD is NeverSecret (always readable even during restricted combat).
     local fetchOk, isOnGCD
@@ -769,6 +1036,12 @@ function CooldownCompanion:UpdateButtonCooldown(button)
     local auraProbeDuration
     local auraProbeNormalCooldownShown = false
     local auraProbeRealCooldownShown = false
+    local auraDisplayNameState
+    local activeAuraSpellID
+    local activeAuraSpellIDSourceResolved = false
+    local activeAuraSpellIDFromFallback = false
+    local previousActiveAuraSpellID = button._activeAuraSpellID
+    local previousActiveAuraSpellIDFromFallback = button._activeAuraSpellIDFromFallback == true
 
     -- Aura tracking: check for active buff/debuff and override cooldown swipe
     local auraOverrideActive = false
@@ -780,6 +1053,8 @@ function CooldownCompanion:UpdateButtonCooldown(button)
     local auraEventRemoved = button._auraEventRemoved
     button._auraEventRemoved = nil
     if buttonData.auraTracking and button._auraSpellID then
+        auraDisplayNameState = CreateAuraDisplayNameState(button)
+        button._auraDisplayName = nil
         local configUnit = GetConfiguredAuraUnit(buttonData)
         local auraUnit = button._auraUnit or configUnit
 
@@ -801,13 +1076,19 @@ function CooldownCompanion:UpdateButtonCooldown(button)
         -- Cache parsed IDs on the button to avoid per-tick gmatch allocation.
         if not viewerFrame and buttonData.auraSpellID then
             local ids = button._parsedAuraIDs
-            if not ids or button._parsedAuraIDsRaw ~= buttonData.auraSpellID then
+            if not ids or button._parsedAuraIDsRaw ~= buttonData.auraSpellID or button._parsedAuraIDsButtonID ~= buttonData.id then
                 ids = {}
+                button._parsedAuraIDsIncludeButtonID = nil
                 for id in tostring(buttonData.auraSpellID):gmatch("%d+") do
-                    ids[#ids + 1] = tonumber(id)
+                    local numId = tonumber(id)
+                    ids[#ids + 1] = numId
+                    if numId == buttonData.id then
+                        button._parsedAuraIDsIncludeButtonID = true
+                    end
                 end
                 button._parsedAuraIDs = ids
                 button._parsedAuraIDsRaw = buttonData.auraSpellID
+                button._parsedAuraIDsButtonID = buttonData.id
             end
             for _, numId in ipairs(ids) do
                 local f = CooldownCompanion:ResolveBuffViewerFrameForSpell(numId)
@@ -855,6 +1136,9 @@ function CooldownCompanion:UpdateButtonCooldown(button)
                     -- old target after a target switch), causing ghost auras.
                     local auraData = C_UnitAuras.GetAuraDataByAuraInstanceID(unit, viewerInstId)
                     if auraData then
+                        RecordAuraDisplayName(auraDisplayNameState, auraData)
+                        activeAuraSpellID = GetReadableAuraSpellID(auraData)
+                        activeAuraSpellIDSourceResolved = true
                         button._durationObj = durationObj
                         button._viewerBar = nil  -- primary path: DurationObject available
                         button.cooldown:SetCooldownFromDurationObject(durationObj)
@@ -950,18 +1234,65 @@ function CooldownCompanion:UpdateButtonCooldown(button)
         local canUsePlayerAuraFallback = auraTrackingReady and configUnit == "player"
 
         if canUsePlayerAuraFallback and not auraOverrideActive then
-            local baseId = C_Spell.GetBaseSpell(buttonData.id)
-            -- Try base spell first (buff is applied as base), then _auraSpellID
-            local fallbackId = baseId and baseId ~= button._auraSpellID and baseId or nil
-            local auraData = fallbackId and C_UnitAuras.GetPlayerAuraBySpellID(fallbackId)
-            if not auraData then
-                auraData = C_UnitAuras.GetPlayerAuraBySpellID(button._auraSpellID)
+            local auraData
+            if buttonData.auraSpellID then
+                local ids = button._parsedAuraIDs
+                if not ids or button._parsedAuraIDsRaw ~= buttonData.auraSpellID or button._parsedAuraIDsButtonID ~= buttonData.id then
+                    ids = {}
+                    button._parsedAuraIDsIncludeButtonID = nil
+                    for id in tostring(buttonData.auraSpellID):gmatch("%d+") do
+                        local numId = tonumber(id)
+                        ids[#ids + 1] = numId
+                        if numId == buttonData.id then
+                            button._parsedAuraIDsIncludeButtonID = true
+                        end
+                    end
+                    button._parsedAuraIDs = ids
+                    button._parsedAuraIDsRaw = buttonData.auraSpellID
+                    button._parsedAuraIDsButtonID = buttonData.id
+                end
+                for _, numId in ipairs(ids) do
+                    auraData = C_UnitAuras.GetPlayerAuraBySpellID(numId)
+                    if auraData then
+                        activeAuraSpellID = numId
+                        activeAuraSpellIDFromFallback = true
+                        break
+                    end
+                end
+                if not auraData and not button._parsedAuraIDsIncludeButtonID then
+                    local baseId = C_Spell.GetBaseSpell(buttonData.id)
+                    local fallbackId = baseId and baseId ~= button._auraSpellID and baseId or nil
+                    auraData = fallbackId and C_UnitAuras.GetPlayerAuraBySpellID(fallbackId)
+                    if auraData then
+                        activeAuraSpellID = fallbackId
+                        activeAuraSpellIDFromFallback = true
+                    end
+                end
+            else
+                local baseId = C_Spell.GetBaseSpell(buttonData.id)
+                -- Try base spell first for implicit form-variant spells where the buff is applied as base.
+                local fallbackId = baseId and baseId ~= button._auraSpellID and baseId or nil
+                auraData = fallbackId and C_UnitAuras.GetPlayerAuraBySpellID(fallbackId)
+                if auraData then
+                    activeAuraSpellID = fallbackId
+                    activeAuraSpellIDFromFallback = true
+                end
+                if not auraData then
+                    auraData = C_UnitAuras.GetPlayerAuraBySpellID(button._auraSpellID)
+                    if auraData then
+                        activeAuraSpellID = button._auraSpellID
+                        activeAuraSpellIDFromFallback = true
+                    end
+                end
             end
             if auraData then
                 local instId = auraData.auraInstanceID
                 if instId and not issecretvalue(instId) then
                     local durationObj = C_UnitAuras.GetAuraDuration("player", instId)
                     if durationObj then
+                        RecordAuraDisplayName(auraDisplayNameState, auraData)
+                        activeAuraSpellID = activeAuraSpellID or GetReadableAuraSpellID(auraData)
+                        activeAuraSpellIDSourceResolved = true
                         button._durationObj = durationObj
                         button._viewerBar = nil
                         button.cooldown:SetCooldownFromDurationObject(durationObj)
@@ -987,6 +1318,12 @@ function CooldownCompanion:UpdateButtonCooldown(button)
                 if auraData then
                     local durationObj = C_UnitAuras.GetAuraDuration(cachedUnit, button._auraInstanceID)
                     if durationObj then
+                        RecordAuraDisplayName(auraDisplayNameState, auraData)
+                        activeAuraSpellID = GetReadableAuraSpellID(auraData)
+                        if activeAuraSpellID then
+                            activeAuraSpellIDSourceResolved = true
+                            activeAuraSpellIDFromFallback = true
+                        end
                         button._durationObj = durationObj
                         button._viewerBar = nil
                         button.cooldown:SetCooldownFromDurationObject(durationObj)
@@ -1038,6 +1375,7 @@ function CooldownCompanion:UpdateButtonCooldown(button)
                 if now - button._auraGraceStart <= 0.3 or button._targetSwitchAt then
                     button._durationObj = prevAuraDurationObj
                     auraOverrideActive = true
+                    PreserveAuraDisplayNameDuringGrace(auraDisplayNameState)
                 else
                     button._auraGraceStart = nil
                 end
@@ -1078,15 +1416,22 @@ function CooldownCompanion:UpdateButtonCooldown(button)
             else
                 button._durationObj = prevAuraDurationObj
                 auraOverrideActive = true
+                PreserveAuraDisplayNameDuringGrace(auraDisplayNameState)
             end
         end
         button._auraActive = auraOverrideActive
         if auraOverrideActive then
             button._auraHasTimer = auraHasTimer
+            button._activeAuraSpellID = activeAuraSpellID or button._activeAuraSpellID
+            if activeAuraSpellIDSourceResolved then
+                button._activeAuraSpellIDFromFallback = activeAuraSpellIDFromFallback or nil
+            end
         end
         if not auraOverrideActive then
             button._auraInstanceID = nil
             button._auraUnit = configUnit
+            button._activeAuraSpellID = nil
+            button._activeAuraSpellIDFromFallback = nil
         end
 
         -- Viewer icon change detection: for passive aura-tracked buttons, the
@@ -1121,7 +1466,10 @@ function CooldownCompanion:UpdateButtonCooldown(button)
         if buttonData.auraShowAuraIcon and button._auraSpellID then
             local shouldShow = auraOverrideActive
             button._auraViewerFrame = shouldShow and viewerFrame or nil
-            if shouldShow ~= (button._showingAuraIcon or false) then
+            local activeAuraSpellChanged = shouldShow
+                and (button._activeAuraSpellID ~= previousActiveAuraSpellID
+                    or (button._activeAuraSpellIDFromFallback == true) ~= previousActiveAuraSpellIDFromFallback)
+            if shouldShow ~= (button._showingAuraIcon or false) or activeAuraSpellChanged then
                 button._showingAuraIcon = shouldShow
                 CooldownCompanion:UpdateButtonIcon(button)
             elseif shouldShow and viewerFrame then
@@ -1209,42 +1557,8 @@ function CooldownCompanion:UpdateButtonCooldown(button)
         end
         button._inPandemic = inPandemic
 
-        -- Pass through the CDM item's current name text when aura tracking is
-        -- active. This mirrors CDM state-based names (e.g. Light/Moderate/Heavy).
-        -- Icon is NOT passed through — UpdateButtonIcon is the sole authoritative source.
-        if auraOverrideActive then
-            if viewerFrame then
-                local viewerName = GetViewerNameFontString(viewerFrame)
-                if button.nameText and not buttonData.customName and viewerName and viewerName.GetText then
-                    -- Pass through the CDM-rendered text directly; avoid calling viewer mixin methods
-                    -- from tainted code (they can execute secret-value logic internally).
-                    button.nameText:SetText(viewerName:GetText())
-                end
-                -- Multi-slot buttons read their icon from the viewer's Icon widget.
-                -- Event-driven UpdateButtonIcon calls can race with the CDM viewer's
-                -- internal icon update on transforms (e.g. Diabolic Ritual), so re-sync
-                -- the icon every tick to ensure it reflects the viewer's current state.
-                if buttonData.cdmChildSlot then
-                    CooldownCompanion:UpdateButtonIcon(button)
-                end
-                button._viewerAuraVisualsActive = true
-            end
-        elseif button._viewerAuraVisualsActive then
-            button._viewerAuraVisualsActive = nil
-            if button.nameText and not buttonData.customName then
-                local restoreSpellID = button._displaySpellId or buttonData.id
-                local baseName = C_Spell.GetSpellName(restoreSpellID)
-                if baseName then
-                    button.nameText:SetText(baseName)
-                end
-            end
-            -- Multi-slot buttons got their icon from per-tick viewer reads while
-            -- the aura was active. Now that the aura has dropped, re-sync the icon
-            -- to the viewer's current (base) state.
-            if buttonData.cdmChildSlot then
-                CooldownCompanion:UpdateButtonIcon(button)
-            end
-        end
+        -- Pass through aura display names while keeping icon writes owned by UpdateButtonIcon.
+        CommitAuraDisplayName(button, buttonData, viewerFrame, auraOverrideActive, auraDisplayNameState)
     end
     button._auraTrackingReady = auraTrackingReady
 
@@ -1305,7 +1619,7 @@ function CooldownCompanion:UpdateButtonCooldown(button)
 
     if not auraOverrideActive then
         if buttonData.type == "spell" and not buttonData.isPassive then
-            spellCooldownResult = EvaluateButtonSpellCooldown(buttonData, cooldownSpellId)
+            spellCooldownResult = EvaluateButtonSpellCooldown(buttonData, cooldownSpellId, button._noCooldown)
             if spellCooldownResult and spellCooldownResult.fetchOk then
                 spellCooldownInfo = spellCooldownResult.info
                 spellCooldownDuration = spellCooldownResult.durationObj
@@ -1781,6 +2095,7 @@ function CooldownCompanion:UpdateButtonCooldown(button)
         -- Non-compact mode: alpha=0 for hidden, restore for visible
         if button._visibilityHidden then
             button.cooldown:Hide()  -- prevent stale IsShown() across ticks
+            HideIconFillForHiddenButton(button)
             if button._lastVisAlpha ~= 0 then
                 button:SetAlpha(0)
                 button._lastVisAlpha = 0
@@ -1801,6 +2116,7 @@ function CooldownCompanion:UpdateButtonCooldown(button)
             -- auto-hide the CooldownFrame; without this, bar mode _mainCDShown
             -- and icon mode force-show both read stale true on next tick.
             button.cooldown:Hide()
+            HideIconFillForHiddenButton(button)
             DispatchStandaloneTextureVisual(button)
             return  -- Skip visual updates for hidden buttons
         else
@@ -1856,7 +2172,9 @@ function CooldownCompanion:UpdateButtonCooldown(button)
 
     -- Mode-specific visual dispatch
     if button._isText then
-        UpdateTextDisplay(button)
+        if not (auraDisplayNameState and auraDisplayNameState.preserveSecretTextRender) then
+            UpdateTextDisplay(button, auraDisplayNameState and auraDisplayNameState.secretName, auraDisplayNameState and auraDisplayNameState.hasSecretName == true)
+        end
     elseif button._isBar then
         UpdateBarDisplay(button)
         DispatchStandaloneTextureVisual(button)

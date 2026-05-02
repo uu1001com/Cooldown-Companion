@@ -113,6 +113,12 @@ local defaults = {
                         iconCooldownTintColor = {1, 0, 0.102, 1}, -- cooldown tint (default: 60% opacity white)
                         iconAuraTintEnabled = false,             -- apply separate tint when aura is active
                         iconAuraTintColor = {0, 0.925, 1, 1},       -- aura tint (default: white full opacity)
+                        iconFillEnabled = false,
+                        iconFillOrientation = "vertical",
+                        iconFillReverse = false,
+                        iconFillTimerBehavior = "drain",
+                        iconFillCooldownColor = {0.6, 0.13, 0.18, 0.55},
+                        iconFillAuraColor = {0.2, 1.0, 0.2, 0.55},
                         showLossOfControl = false,
                         procGlowOverhang = 32,
                         procGlowColor = {1, 1, 1, 1},
@@ -277,6 +283,12 @@ local defaults = {
             iconCooldownTintColor = {1, 0, 0.102, 1},
             iconAuraTintEnabled = false,
             iconAuraTintColor = {0, 0.925, 1, 1},
+            iconFillEnabled = false,
+            iconFillOrientation = "vertical",
+            iconFillReverse = false,
+            iconFillTimerBehavior = "drain",
+            iconFillCooldownColor = {0.6, 0.13, 0.18, 0.55},
+            iconFillAuraColor = {0.2, 1.0, 0.2, 0.55},
             showLossOfControl = false,
             procGlowOverhang = 32,
             procGlowColor = {1, 1, 1, 1},
@@ -641,6 +653,11 @@ ST.OVERRIDE_SECTIONS = {
         keys = {"iconTintColor", "iconCooldownTintEnabled", "iconCooldownTintColor", "iconAuraTintEnabled", "iconAuraTintColor", "backgroundColor"},
         modes = {icons = true, bars = true},
     },
+    iconFillTimer = {
+        label = "Icon Fill Timer",
+        keys = {"iconFillEnabled", "iconFillOrientation", "iconFillReverse", "iconFillTimerBehavior", "iconFillCooldownColor", "iconFillAuraColor"},
+        modes = {icons = true},
+    },
     assistedHighlight = {
         label = "Assisted Highlight",
         keys = {"showAssistedHighlight", "assistedHighlightHostileTargetOnly", "assistedHighlightStyle", "assistedHighlightColor", "assistedHighlightBorderSize", "assistedHighlightBlizzardOverhang", "assistedHighlightProcOverhang", "assistedHighlightProcColor", "assistedHighlightCombatOnly"},
@@ -692,9 +709,24 @@ ST.OVERRIDE_SECTIONS = {
         keys = {"showBarIcon", "barIconReverse", "barIconOffset", "barIconSizeOverride", "barIconSize"},
         modes = {bars = true},
     },
-    barColors = {
-        label = "Bar Colors",
-        keys = {"barColor", "barCooldownColor", "barChargeColor", "barBgColor"},
+    barColor = {
+        label = "Bar Color",
+        keys = {"barColor"},
+        modes = {bars = true},
+    },
+    barCooldownColor = {
+        label = "Bar Cooldown Color",
+        keys = {"barCooldownColor"},
+        modes = {bars = true},
+    },
+    barChargeColor = {
+        label = "Bar Recharging Color",
+        keys = {"barChargeColor"},
+        modes = {bars = true},
+    },
+    barBgColor = {
+        label = "Bar Background Color",
+        keys = {"barBgColor"},
         modes = {bars = true},
     },
     barNameText = {

@@ -111,14 +111,16 @@ function CooldownCompanion:EnsureRuntimeInitialized()
 end
 
 function CooldownCompanion:OnEnable()
-    -- Register cooldown events — set dirty flag, let ticker do the actual update.
-    -- The 0.1s ticker runs regardless, so latency is at most ~100ms for
-    -- event-triggered updates — indistinguishable visually since the cooldown
-    -- frame animates independently. This prevents redundant full-update passes
-    -- during event storms.
-    -- Cooldown/state change events that trigger a dirty-flag update pass
+    -- Cooldown events can expose very short ready windows, so refresh them
+    -- immediately instead of waiting for the ticker.
     for _, evt in ipairs({
         "SPELL_UPDATE_COOLDOWN", "BAG_UPDATE_COOLDOWN", "ACTIONBAR_UPDATE_COOLDOWN",
+    }) do
+        self:RegisterEvent(evt, "OnCooldownStateChanged")
+    end
+
+    -- Broader state changes can wait for the regular ticker pass.
+    for _, evt in ipairs({
         "UNIT_POWER_FREQUENT", "LOSS_OF_CONTROL_ADDED", "LOSS_OF_CONTROL_UPDATE",
         "ITEM_COUNT_CHANGED", "PLAYER_EQUIPMENT_CHANGED",
     }) do
@@ -207,6 +209,9 @@ function CooldownCompanion:OnEnable()
 
     -- Rebuild viewer aura map when Cooldown Manager layout changes (user rearranges spells)
     EventRegistry:RegisterCallback("CooldownViewerSettings.OnDataChanged", function()
+        if ST._configState then
+            ST._configState.autocompleteCache = nil
+        end
         C_Timer.After(0.2, function()
             self:QueueBuildViewerAuraMap()
         end)
@@ -291,6 +296,11 @@ end
 
 function CooldownCompanion:MarkCooldownsDirty()
     self._cooldownsDirty = true
+end
+
+function CooldownCompanion:OnCooldownStateChanged()
+    self._cooldownsDirty = true
+    self:UpdateAllCooldowns()
 end
 
 -- Iterate every button across all groups, calling callback(button, buttonData) for each.

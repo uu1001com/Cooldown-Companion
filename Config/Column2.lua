@@ -31,6 +31,9 @@ local EncodeExportData = ST._EncodeExportData
 local GroupsHaveForeignSpecs = ST._GroupsHaveForeignSpecs
 local BindConfigShiftTooltip = ST._BindConfigShiftTooltip
 local NotifyTutorialAction = ST._NotifyTutorialAction
+local IsConfigFinderActive = ST._IsConfigFinderActive
+local BuildConfigFinderResults = ST._BuildConfigFinderResults
+local SelectConfigFinderResult = ST._SelectConfigFinderResult
 
 local IsTriggerPanelGroup
 
@@ -119,6 +122,68 @@ local function EnsurePanelTypeTooltipTarget(header)
     target:SetFrameStrata(header.frame:GetFrameStrata())
     target:SetFrameLevel(header.frame:GetFrameLevel() + 20)
     return target
+end
+
+local function TrimPanelName(name)
+    if name == nil then return "" end
+    return tostring(name):match("^%s*(.-)%s*$") or ""
+end
+
+local function IsGenericPanelName(name)
+    local trimmed = TrimPanelName(name)
+    return trimmed == "" or trimmed == "Panel" or trimmed:match("^Panel%s+%d+$") ~= nil
+end
+
+local function EnsureGenericRenameBadge(header)
+    local badge = header.frame._cdcGenericRenameBadge
+    if not badge then
+        badge = CreateFrame("Button", nil, header.frame)
+        badge:SetSize(14, 14)
+        badge:SetPropagateMouseClicks(false)
+        badge:SetPropagateMouseMotion(false)
+        badge.icon = badge:CreateTexture(nil, "OVERLAY")
+        badge.icon:SetAllPoints()
+        badge:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:AddLine("Default name. Click to rename.", 1, 0.82, 0, true)
+            GameTooltip:Show()
+        end)
+        badge:SetScript("OnLeave", function()
+            GameTooltip:Hide()
+        end)
+        header.frame._cdcGenericRenameBadge = badge
+    end
+
+    badge:SetFrameLevel(header.frame:GetFrameLevel() + 25)
+    return badge
+end
+
+local function ConfigureGenericRenameBadge(header, panel, panelId, rightOffset)
+    local badge = EnsureGenericRenameBadge(header)
+    badge:ClearAllPoints()
+    badge:SetScript("OnClick", nil)
+
+    if not IsGenericPanelName(panel and panel.name) then
+        badge:Hide()
+        return rightOffset
+    end
+
+    local currentName = TrimPanelName(panel and panel.name)
+    if currentName == "" then
+        currentName = "Panel " .. tostring(panelId)
+    end
+
+    badge.icon:SetAtlas("QuestLegendary", false)
+    badge.icon:SetVertexColor(1, 0.82, 0, 0.85)
+    badge:SetPoint("LEFT", header.label, "CENTER", rightOffset, 0)
+    badge:SetScript("OnClick", function(_, button)
+        if button ~= "LeftButton" then return end
+        GameTooltip:Hide()
+        ShowPopupAboveConfig("CDC_RENAME_GROUP", currentName, { groupId = panelId })
+    end)
+    badge:Show()
+
+    return rightOffset + 18
 end
 
 local function ConfigurePanelTypeBadge(header, displayMode, textWidth)
@@ -420,6 +485,97 @@ local function RenderColumn2NoPanelsState(classColor)
         panelHelp:SetFont((GameFontNormal:GetFont()), 12, "")
         panelHelp:SetColor(0.75, 0.75, 0.75)
         CS.col2Scroll:AddChild(panelHelp)
+    end
+
+    CS.col2Scroll:DoLayout()
+end
+
+local function RenderConfigFinderResults()
+    if CS.col2ButtonBar then CS.col2ButtonBar:Hide() end
+    CS.col2Scroll.frame:SetPoint("BOTTOMRIGHT", CS.col2Scroll.frame:GetParent(), "BOTTOMRIGHT", 0, 0)
+    CS.lastCol2RenderedRows = {}
+    CS.lastCol2PanelMetas = {}
+
+    local results = BuildConfigFinderResults and BuildConfigFinderResults()
+    if not results or #results.panelResults == 0 then
+        local label = AceGUI:Create("Label")
+        label:SetText("|cff888888No matching panels or entries.|r")
+        label:SetFullWidth(true)
+        CS.col2Scroll:AddChild(label)
+        return
+    end
+
+    local cc = C_ClassColor.GetClassColor(select(2, UnitClass("player")))
+
+    for resultIndex, result in ipairs(results.panelResults) do
+        local panel = result.panel
+        local panelId = result.panelId
+        local containerId = result.containerId
+        local container = result.container
+
+        if resultIndex > 1 then
+            AddClassAccentSpacer(CS.col2Scroll, cc)
+        end
+
+        local panelContainer = AceGUI:Create("InlineGroup")
+        panelContainer:SetTitle("")
+        panelContainer:SetLayout("List")
+        panelContainer:SetFullWidth(true)
+        CompactUntitledInlineGroupConfig(panelContainer)
+        CS.col2Scroll:AddChild(panelContainer)
+
+        local panelName = panel and panel.name or ("Panel " .. tostring(panelId))
+        local groupName = container and container.name or "Group"
+        local headerText = groupName .. "  |cff666666/|r  " .. panelName
+
+        local header = AceGUI:Create("InteractiveLabel")
+        CleanRecycledEntry(header)
+        header:SetText(headerText)
+        header:SetImage("Interface\\BUTTONS\\WHITE8X8")
+        header:SetImageSize(1, 32)
+        if header.image then header.image:SetAlpha(0) end
+        header:SetFullWidth(true)
+        header:SetFontObject(GameFontHighlight)
+        header:SetJustifyH("CENTER")
+        header:SetHighlight("Interface\\QuestFrame\\UI-QuestTitleHighlight")
+        ConfigurePanelTypeBadge(header, panel and panel.displayMode, header.label:GetStringWidth())
+        if panel and panel.enabled == false then
+            header:SetColor(0.5, 0.5, 0.5)
+        elseif result.panelMatches then
+            header:SetColor(1.0, 0.82, 0.0)
+        end
+        header:SetCallback("OnClick", function(widget, event, mouseButton)
+            if mouseButton == "LeftButton" and SelectConfigFinderResult then
+                SelectConfigFinderResult(containerId, panelId, nil)
+            end
+        end)
+        panelContainer:AddChild(header)
+
+        for _, entryInfo in ipairs(result.entryMatches or {}) do
+            local buttonData = entryInfo.button
+            local entry = AceGUI:Create("InteractiveLabel")
+            CleanRecycledEntry(entry)
+            entry:SetText(entryInfo.text or (buttonData and buttonData.name) or "Entry")
+            entry:SetImage(buttonData and GetButtonIcon(buttonData) or 134400)
+            entry:SetImageSize(32, 32)
+            entry:SetFullWidth(true)
+            entry:SetFontObject(GameFontHighlight)
+            entry:SetHighlight("Interface\\QuestFrame\\UI-QuestTitleHighlight")
+            if buttonData and buttonData.enabled == false then
+                entry:SetColor(0.5, 0.5, 0.5)
+                if entry.image and entry.image.SetDesaturated then
+                    entry.image:SetDesaturated(true)
+                end
+            end
+
+            local buttonIndex = entryInfo.index
+            entry:SetCallback("OnClick", function(widget, event, mouseButton)
+                if mouseButton == "LeftButton" and SelectConfigFinderResult then
+                    SelectConfigFinderResult(containerId, panelId, buttonIndex)
+                end
+            end)
+            panelContainer:AddChild(entry)
+        end
     end
 
     CS.col2Scroll:DoLayout()
@@ -1378,6 +1534,11 @@ local function RefreshColumn2()
         return
     end
 
+    if IsConfigFinderActive and IsConfigFinderActive() then
+        RenderConfigFinderResults()
+        return
+    end
+
     -- Restore scroll bottom offset for button bar space (browse mode may have cleared it)
     CS.col2Scroll.frame:SetPoint("BOTTOMRIGHT", CS.col2Scroll.frame:GetParent(), "BOTTOMRIGHT", 0, 30)
 
@@ -1717,6 +1878,9 @@ local function RefreshColumn2()
                 ConfigurePanelTypeBadge(header, panel.displayMode, textW)
                 header:SetHighlight("Interface\\QuestFrame\\UI-QuestTitleHighlight")
 
+                local rightOffset = (textW / 2) + 4
+                rightOffset = ConfigureGenericRenameBadge(header, panel, panelId, rightOffset)
+
                 -- Anchor unlock badge (shown when panel is individually unlocked)
                 local anchorBadge = header.frame._cdcAnchorBadge
                 if not anchorBadge then
@@ -1725,10 +1889,11 @@ local function RefreshColumn2()
                 end
                 anchorBadge:SetSize(16, 16)
                 anchorBadge:ClearAllPoints()
-                anchorBadge:SetPoint("LEFT", header.label, "CENTER", (textW / 2) + 4, 0)
+                anchorBadge:SetPoint("LEFT", header.label, "CENTER", rightOffset, 0)
                 if panel.locked == false then
                     anchorBadge:SetAtlas("ShipMissionIcon-Training-Map", false)
                     anchorBadge:Show()
+                    rightOffset = rightOffset + 22
                 else
                     anchorBadge:Hide()
                 end
@@ -1741,11 +1906,11 @@ local function RefreshColumn2()
                 end
                 disabledBadge:SetSize(16, 16)
                 disabledBadge:ClearAllPoints()
-                local disabledOffset = (panel.locked == false) and 22 or 0
-                disabledBadge:SetPoint("LEFT", header.label, "CENTER", (textW / 2) + 4 + disabledOffset, 0)
+                disabledBadge:SetPoint("LEFT", header.label, "CENTER", rightOffset, 0)
                 if panel.enabled == false then
                     disabledBadge:SetAtlas("GM-icon-visibleDis-pressed", false)
                     disabledBadge:Show()
+                    rightOffset = rightOffset + 22
                 else
                     disabledBadge:Hide()
                 end
@@ -1774,9 +1939,6 @@ local function RefreshColumn2()
                 end
 
                 local specBadgeIdx = 0
-                local rightOffset = (textW / 2) + 4
-                if panel.locked == false then rightOffset = rightOffset + 22 end
-                if panel.enabled == false then rightOffset = rightOffset + 22 end
 
                 if panel.specs then
                     for specId in pairs(panel.specs) do
@@ -2025,6 +2187,44 @@ local function RefreshColumn2()
                             end
                             UIDropDownMenu_AddButton(info, level)
 
+                            local copyStyleMode
+                            if ctxPanel.displayMode == "bars" then
+                                copyStyleMode = "bars"
+                            elseif ctxPanel.displayMode == nil or ctxPanel.displayMode == "icons" then
+                                copyStyleMode = "icons"
+                            end
+                            if copyStyleMode then
+                                local _, copyPanelOrder = CooldownCompanion:GetDirectStyleCopyPanelList(copyStyleMode, ctxPanelId)
+                                info = UIDropDownMenu_CreateInfo()
+                                info.text = "Copy Style From"
+                                info.notCheckable = true
+                                if #copyPanelOrder > 0 then
+                                    info.hasArrow = true
+                                    info.menuList = "COPY_STYLE_FROM_PANEL"
+                                else
+                                    info.disabled = true
+                                end
+                                UIDropDownMenu_AddButton(info, level)
+                            end
+
+                            -- "Move to Group" submenu (only when other visible containers exist)
+                            local db = CooldownCompanion.db.profile
+                            local hasOtherContainer = false
+                            for cid, _ in pairs(db.groupContainers) do
+                                if cid ~= ctxContainerId and CooldownCompanion:IsContainerVisibleToCurrentChar(cid) then
+                                    hasOtherContainer = true
+                                    break
+                                end
+                            end
+                            if hasOtherContainer then
+                                info = UIDropDownMenu_CreateInfo()
+                                info.text = "Move to Group"
+                                info.notCheckable = true
+                                info.hasArrow = true
+                                info.menuList = "MOVE_TO_GROUP"
+                                UIDropDownMenu_AddButton(info, level)
+                            end
+
                             -- Export single panel
                             info = UIDropDownMenu_CreateInfo()
                             info.text = L["Export"]
@@ -2046,24 +2246,6 @@ local function RefreshColumn2()
                             end
                             UIDropDownMenu_AddButton(info, level)
 
-                            -- "Move to Group" submenu (only when other visible containers exist)
-                            local db = CooldownCompanion.db.profile
-                            local hasOtherContainer = false
-                            for cid, _ in pairs(db.groupContainers) do
-                                if cid ~= ctxContainerId and CooldownCompanion:IsContainerVisibleToCurrentChar(cid) then
-                                    hasOtherContainer = true
-                                    break
-                                end
-                            end
-                            if hasOtherContainer then
-                                info = UIDropDownMenu_CreateInfo()
-                                info.text = L["Move to Group"]
-                                info.notCheckable = true
-                                info.hasArrow = true
-                                info.menuList = "MOVE_TO_GROUP"
-                                UIDropDownMenu_AddButton(info, level)
-                            end
-
                             info = UIDropDownMenu_CreateInfo()
                             info.text = L["|cffff4444Delete|r"]
                             info.notCheckable = true
@@ -2072,6 +2254,38 @@ local function RefreshColumn2()
                                 ShowPopupAboveConfig("CDC_DELETE_PANEL", ctxPanel.name or L["Panel"], { containerId = ctxContainerId, panelId = ctxPanelId })
                             end
                             UIDropDownMenu_AddButton(info, level)
+
+                        elseif menuList == "COPY_STYLE_FROM_PANEL" then
+                            local copyStyleMode
+                            if ctxPanel.displayMode == "bars" then
+                                copyStyleMode = "bars"
+                            elseif ctxPanel.displayMode == nil or ctxPanel.displayMode == "icons" then
+                                copyStyleMode = "icons"
+                            end
+                            local copyPanelList, copyPanelOrder = CooldownCompanion:GetDirectStyleCopyPanelList(copyStyleMode, ctxPanelId)
+                            if #copyPanelOrder == 0 then
+                                local emptyInfo = UIDropDownMenu_CreateInfo()
+                                emptyInfo.text = "No same-type panels available"
+                                emptyInfo.notCheckable = true
+                                emptyInfo.disabled = true
+                                UIDropDownMenu_AddButton(emptyInfo, level)
+                            else
+                                for _, sourceGroupId in ipairs(copyPanelOrder) do
+                                    local sourceName = copyPanelList[sourceGroupId] or ("Panel " .. tostring(sourceGroupId))
+                                    local copyInfo = UIDropDownMenu_CreateInfo()
+                                    copyInfo.text = sourceName
+                                    copyInfo.notCheckable = true
+                                    copyInfo.func = function()
+                                        CloseDropDownMenus()
+                                        ShowPopupAboveConfig("CDC_CONFIRM_PANEL_STYLE_COPY", sourceName, {
+                                            mode = copyStyleMode,
+                                            sourceGroupId = sourceGroupId,
+                                            targetGroupId = ctxPanelId,
+                                        })
+                                    end
+                                    UIDropDownMenu_AddButton(copyInfo, level)
+                                end
+                            end
 
                         elseif menuList == "MOVE_TO_GROUP" then
                             local db = CooldownCompanion.db.profile

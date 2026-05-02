@@ -16,6 +16,7 @@ local ipairs = ipairs
 local unpack = unpack
 local UnitExists = UnitExists
 local InCombatLockdown = InCombatLockdown
+local GetTime = GetTime
 
 -- Imports from Helpers
 local ApplyStrataOrder = ST._ApplyStrataOrder
@@ -55,6 +56,9 @@ local ApplyFontStyle = CooldownCompanion.ApplyFontStyle
 -- IMPORTANT: These tables are read-only — never write to their indices.
 local DEFAULT_WHITE = {1, 1, 1, 1}
 local DEFAULT_AURA_TEXT_COLOR = {0, 0.925, 1, 1}
+local DEFAULT_ICON_FILL_COOLDOWN_COLOR = {0.6, 0.13, 0.18, 0.55}
+local DEFAULT_ICON_FILL_AURA_COLOR = {0.2, 1.0, 0.2, 0.55}
+local ICON_FILL_TEXTURE = "Interface\\Buttons\\WHITE8x8"
 local BLIZZARD_AURA_SWIPE_TEXTURE = "Interface\\HUD\\UI-HUD-CoolDownManager-Icon-Swipe"
 local BLIZZARD_AURA_SWIPE_R = 1
 local BLIZZARD_AURA_SWIPE_G = 0.95
@@ -67,6 +71,56 @@ local function ApplyAuraBlizzardCooldownLayer(button)
     if button and button.auraBlizzardCooldown and button.cooldown then
         button.auraBlizzardCooldown:SetFrameLevel(button.cooldown:GetFrameLevel())
     end
+end
+
+local function ApplyIconFillLayer(button)
+    if button and button.iconFill then
+        local fillLevel = button:GetFrameLevel() + 1
+        if button.cooldown and button.cooldown.GetFrameLevel then
+            local cooldownLevel = button.cooldown:GetFrameLevel()
+            if cooldownLevel and cooldownLevel > fillLevel then
+                fillLevel = cooldownLevel - 1
+            end
+        end
+        button.iconFill:SetFrameLevel(fillLevel)
+    end
+end
+
+local function AnchorIconFill(button)
+    if not (button and button.iconFill and button.icon) then
+        return
+    end
+
+    button.iconFill:ClearAllPoints()
+    button.iconFill:SetPoint("TOPLEFT", button.icon, "TOPLEFT", 0, 0)
+    button.iconFill:SetPoint("BOTTOMRIGHT", button.icon, "BOTTOMRIGHT", 0, 0)
+end
+
+local function ApplyIconFillGeometry(button, style)
+    if not (button and button.iconFill) then
+        return
+    end
+
+    local orientation = style and style.iconFillOrientation == "horizontal" and "HORIZONTAL" or "VERTICAL"
+    button.iconFill:SetOrientation(orientation)
+    button.iconFill:SetReverseFill(style and style.iconFillReverse == true or false)
+end
+
+local function ResolveIconFillTimerValue(button, elapsedPercent)
+    if button and button.style and button.style.iconFillTimerBehavior == "fill" then
+        return elapsedPercent
+    end
+    return 1 - elapsedPercent
+end
+
+local function ResolveIconFillDurationObjectValue(button, durationObj)
+    if not durationObj then
+        return nil
+    end
+    if button and button.style and button.style.iconFillTimerBehavior == "fill" then
+        return durationObj:GetElapsedPercent()
+    end
+    return durationObj:GetRemainingPercent()
 end
 
 local function AnchorAuraBlizzardCooldown(button)
@@ -101,7 +155,184 @@ local function HideBlizzardAuraSwipe(button, style)
     end
     if button and button._auraBlizzardSwipeActive then
         button._auraBlizzardSwipeActive = nil
+        if button._iconFillActive ~= true then
+            ApplyDefaultCooldownSwipeStyle(button, style)
+        end
+    end
+end
+
+local function IsIconFillAvailable(button, style)
+    if not (button and button.iconFill and style and style.iconFillEnabled == true) then
+        return false
+    end
+
+    local group = button._groupId
+        and CooldownCompanion.db and CooldownCompanion.db.profile
+        and CooldownCompanion.db.profile.groups
+        and CooldownCompanion.db.profile.groups[button._groupId]
+    if group then
+        if (group.displayMode or "icons") ~= "icons" then
+            return false
+        end
+        if group.masqueEnabled == true then
+            return false
+        end
+    end
+
+    return true
+end
+
+local function ResolveIconFillPreviewRemaining(button)
+    local duration = button and button._conditionalPreviewDuration
+    local startTime = button and button._conditionalPreviewStartTime
+    if not (duration and startTime and duration > 0) then
+        return nil, nil
+    end
+
+    local remaining
+    if button._conditionalPreviewLoop
+        and button._conditionalPreviewLoopStartTime
+        and button._conditionalPreviewLoopDuration
+        and button._conditionalPreviewLoopDuration > 0 then
+        local elapsed = GetTime() - button._conditionalPreviewLoopStartTime
+        if elapsed < 0 then elapsed = 0 end
+        local cycleElapsed = elapsed % button._conditionalPreviewLoopDuration
+        remaining = button._conditionalPreviewLoopDuration - cycleElapsed
+        if remaining > duration then remaining = duration end
+    else
+        remaining = duration - (GetTime() - startTime)
+        if remaining < 0 then remaining = 0 end
+    end
+
+    return remaining, duration
+end
+
+local function SetIconFillFromCooldownWidget(button)
+    if not (button and button.iconFill and button.cooldown) then
+        return false
+    end
+
+    local startMs, durMs = button.cooldown:GetCooldownTimes()
+    if not (startMs and durMs)
+        or issecretvalue(startMs)
+        or issecretvalue(durMs)
+        or durMs <= 0 then
+        return false
+    end
+
+    local elapsed = (GetTime() * 1000) - startMs
+    if elapsed < 0 then elapsed = 0 end
+    if elapsed > durMs then elapsed = durMs end
+
+    local value = ResolveIconFillTimerValue(button, elapsed / durMs)
+
+    button.iconFill:SetValue(value)
+    return true
+end
+
+local function SetIconFillValue(button)
+    if not (button and button.iconFill and button._iconFillMode) then
+        return
+    end
+
+    if button._iconFillMode == "aura_static" then
+        button.iconFill:SetValue(1)
+        return
+    end
+
+    local remaining, duration = ResolveIconFillPreviewRemaining(button)
+    if remaining and duration and duration > 0 then
+        button.iconFill:SetValue(ResolveIconFillTimerValue(button, 1 - (remaining / duration)))
+        return
+    end
+
+    if button._durationObj then
+        button.iconFill:SetValue(ResolveIconFillDurationObjectValue(button, button._durationObj))
+        return
+    end
+
+    if SetIconFillFromCooldownWidget(button) then
+        return
+    end
+
+    if button._iconFillMode == "cooldown" and button.buttonData and button.buttonData.type == "item" then
+        local durationSeconds = button._itemCdDuration or 0
+        if durationSeconds > 0 then
+            local elapsed = GetTime() - (button._itemCdStart or 0)
+            if elapsed < 0 then elapsed = 0 end
+            local value = elapsed / durationSeconds
+            if value > 1 then value = 1 end
+            button.iconFill:SetValue(ResolveIconFillTimerValue(button, value))
+            return
+        end
+    end
+
+    button.iconFill:SetValue(0)
+end
+
+local function IconFillOnUpdate(self)
+    SetIconFillValue(self._owner)
+end
+
+local function HideIconFill(button, style)
+    if not (button and button.iconFill) then
+        return
+    end
+
+    button.iconFill:Hide()
+    button.iconFill:SetScript("OnUpdate", nil)
+    if button._iconFillActive then
+        button._iconFillActive = nil
+        button._iconFillMode = nil
+        button._iconFillAuraActive = nil
         ApplyDefaultCooldownSwipeStyle(button, style)
+    end
+end
+
+local function UpdateIconFill(button, buttonData, style)
+    if not IsIconFillAvailable(button, style) then
+        HideIconFill(button, style)
+        return
+    end
+
+    local auraPreview = button._conditionalAuraPreview == true
+        or button._conditionalAuraDurationTextPreview == true
+    local cooldownPreview = button._conditionalPreviewDomain == "cooldown"
+    local mode
+    local color
+
+    if button._auraActive == true or auraPreview then
+        color = style.iconFillAuraColor or DEFAULT_ICON_FILL_AURA_COLOR
+        if button._auraHasTimer == false and not auraPreview then
+            mode = "aura_static"
+        else
+            mode = "aura"
+        end
+    elseif cooldownPreview
+        or button._cooldownState == COOLDOWN_STATE_COOLDOWN
+        or (UsesChargeBehavior(buttonData) and button._chargeRecharging == true and button._hideCooldownChargesActive ~= true) then
+        mode = "cooldown"
+        color = style.iconFillCooldownColor or DEFAULT_ICON_FILL_COOLDOWN_COLOR
+    end
+
+    if not mode then
+        HideIconFill(button, style)
+        return
+    end
+
+    button._iconFillActive = true
+    button._iconFillMode = mode
+    button._iconFillAuraActive = (mode == "aura" or mode == "aura_static") or nil
+    ApplyIconFillGeometry(button, style)
+    button.iconFill:SetStatusBarColor(color[1], color[2], color[3], color[4])
+    SetIconFillValue(button)
+    button.iconFill:Show()
+    button.iconFill:SetScript("OnUpdate", IconFillOnUpdate)
+
+    button.cooldown:SetDrawSwipe(false)
+    button.cooldown:SetDrawEdge(false)
+    if button._iconFillAuraActive then
+        HideBlizzardAuraSwipe(button, style)
     end
 end
 
@@ -111,6 +342,7 @@ local function UpdateBlizzardAuraSwipe(button, style)
     end
 
     local enabled = style.auraUseBlizzardSwipe == true
+        and button._iconFillAuraActive ~= true
         and (button._auraActive == true or button._conditionalAuraDurationTextPreview == true)
         and (button._conditionalAuraDurationTextPreview == true or button._auraHasTimer ~= false)
 
@@ -224,6 +456,16 @@ function CooldownCompanion:CreateButtonFrame(parent, index, buttonData, style)
     button.icon:SetPoint("BOTTOMRIGHT", -borderSize, borderSize)
 
     ApplyIconTexCoord(button.icon, width, height)
+
+    button.iconFill = CreateFrame("StatusBar", button:GetName() .. "IconFill", button)
+    button.iconFill._owner = button
+    AnchorIconFill(button)
+    button.iconFill:SetMinMaxValues(0, 1)
+    button.iconFill:SetValue(0)
+    ApplyIconFillGeometry(button, style)
+    button.iconFill:SetStatusBarTexture(ICON_FILL_TEXTURE)
+    button.iconFill:Hide()
+    SetFrameClickThroughRecursive(button.iconFill, true, true)
 
     -- Border using textures (not BackdropTemplate which captures mouse)
     local borderColor = style.borderColor or {0, 0, 0, 1}
@@ -374,6 +616,7 @@ function CooldownCompanion:CreateButtonFrame(parent, index, buttonData, style)
 
     -- Apply configurable strata ordering (LoC always on top)
     ApplyStrataOrder(button, style.strataOrder)
+    ApplyIconFillLayer(button)
     ApplyAuraBlizzardCooldownLayer(button)
 
     -- Store button data
@@ -392,12 +635,16 @@ function CooldownCompanion:CreateButtonFrame(parent, index, buttonData, style)
     button._auraTrackingReady = buttonData.isPassive == true
     button._showingAuraIcon = false
     button._auraViewerFrame = nil
+    button._activeAuraSpellID = nil
+    button._activeAuraSpellIDFromFallback = nil
     button._lastViewerTexId = nil
     button._lastSpellTexture = nil
     button._spellTexBaseline = nil
 
     button._auraInstanceID = nil
     button._viewerAuraVisualsActive = nil
+    button._auraDisplayName = nil
+    button._auraNameOverrideActive = nil
 
     -- Key press highlight runtime state
     button._keyPressHighlightActive = nil
@@ -433,6 +680,9 @@ function CooldownCompanion:CreateButtonFrame(parent, index, buttonData, style)
     -- Re-apply full click-through on overlay frames (the recursive call above
     -- re-enables motion on them when tooltips are on, causing them to steal hover events)
     SetFrameClickThroughRecursive(button.cooldown, true, true)
+    if button.iconFill then
+        SetFrameClickThroughRecursive(button.iconFill, true, true)
+    end
     if button.auraBlizzardCooldown then
         SetFrameClickThroughRecursive(button.auraBlizzardCooldown, true, true)
     end
@@ -496,10 +746,14 @@ function CooldownCompanion:UpdateButtonIcon(button)
     local icon
     local displayId = buttonData.id
     local overrideId = nil
+    local forceBaseDisplay = button._forceBaseDisplaySpellId == true
 
     if buttonData.type == "spell" then
         overrideId = C_Spell.GetOverrideSpell(buttonData.id)
         if overrideId == buttonData.id or overrideId == 0 then
+            overrideId = nil
+        end
+        if forceBaseDisplay then
             overrideId = nil
         end
         -- Look up viewer child for current override info (icon, display name).
@@ -513,7 +767,7 @@ function CooldownCompanion:UpdateButtonIcon(button)
         else
             child = CooldownCompanion.viewerAuraFrames[buttonData.id]
         end
-        if child and child.cooldownInfo then
+        if child and child.cooldownInfo and not forceBaseDisplay then
             -- For multi-slot buttons, keep the slot-specific buff viewer child —
             -- FindCooldownViewerChild is not slot-aware and would lose differentiation.
             if not buttonData.cdmChildSlot then
@@ -613,12 +867,13 @@ function CooldownCompanion:UpdateButtonIcon(button)
     end
 
     -- Aura icon swap: show the tracked aura spell's icon while aura is active
+    local auraIconSpellID = button._activeAuraSpellID or button._auraSpellID
     if buttonData.type == "spell" and button._auraActive
-       and buttonData.auraShowAuraIcon and button._auraSpellID then
+       and buttonData.auraShowAuraIcon and auraIconSpellID then
         -- Read the viewer frame's Icon texture (updates per-stage for multi-stage
         -- auras like Hot Streak). GetTextureFileID may return a secret value in
         -- combat; pass it straight through — do not test or branch on it.
-        local vf = button._auraViewerFrame
+        local vf = button._activeAuraSpellIDFromFallback and nil or button._auraViewerFrame
         local hasViewerIcon
         if vf then
             local iconTexture = vf.Icon
@@ -632,7 +887,7 @@ function CooldownCompanion:UpdateButtonIcon(button)
         end
         if not hasViewerIcon then
             -- Fallback: static spell texture (viewer hidden or unavailable)
-            local auraIcon = C_Spell.GetSpellTexture(button._auraSpellID)
+            local auraIcon = C_Spell.GetSpellTexture(auraIconSpellID)
             if auraIcon then icon = auraIcon end
         end
     end
@@ -700,6 +955,7 @@ local function UpdateIconModeVisuals(button, buttonData, style, fetchOk, isOnGCD
         button.cooldown:SetDrawSwipe(swipeEnabled and fillEnabled)
     end
 
+    UpdateIconFill(button, buttonData, style)
     UpdateBlizzardAuraSwipe(button, style)
 
     -- When separate text positions: move primary text to aura anchor during aura, cooldown anchor otherwise
@@ -940,6 +1196,7 @@ function CooldownCompanion:UpdateButtonStyle(button, style)
     button._readyGlowMaxChargesActive = nil
     button._readyGlowMaxChargesSpellID = nil
     button._noCooldown = nil
+    button._noCooldownSpellId = nil
     button._vertexR = nil
     button._vertexG = nil
     button._vertexB = nil
@@ -954,11 +1211,14 @@ function CooldownCompanion:UpdateButtonStyle(button, style)
     button._readyGlowActive = nil
     button._keyPressHighlightActive = nil
     button._displaySpellId = nil
+    button._liveOverrideSpellId = nil
     button._spellOutOfRange = nil
     button._itemCount = nil
     button._auraActive = nil
     button._showingAuraIcon = nil
     button._auraViewerFrame = nil
+    button._activeAuraSpellID = nil
+    button._activeAuraSpellIDFromFallback = nil
     button._lastViewerTexId = nil
     button._lastSpellTexture = nil
     button._spellTexBaseline = nil
@@ -968,9 +1228,14 @@ function CooldownCompanion:UpdateButtonStyle(button, style)
     button._pandemicGraceStart = nil
     button._pandemicGraceSuppressed = nil
     button._viewerAuraVisualsActive = nil
+    button._auraDisplayName = nil
+    button._auraNameOverrideActive = nil
     button._auraSpellID = CooldownCompanion:ResolveAuraSpellID(button.buttonData)
     button._auraUnit = button.buttonData.auraUnit or "player"
     button._auraStackText = nil
+    button._iconFillActive = nil
+    button._iconFillMode = nil
+    button._iconFillAuraActive = nil
     if button.auraStackCount then button.auraStackCount:SetText("") end
     button._visibilityHidden = false
     button._prevVisibilityHidden = false
@@ -985,6 +1250,16 @@ function CooldownCompanion:UpdateButtonStyle(button, style)
     button.icon:SetPoint("BOTTOMRIGHT", -borderSize, borderSize)
 
     ApplyIconTexCoord(button.icon, width, height)
+
+    if button.iconFill then
+        AnchorIconFill(button)
+        button.iconFill:SetMinMaxValues(0, 1)
+        button.iconFill:SetValue(0)
+        ApplyIconFillGeometry(button, style)
+        button.iconFill:SetStatusBarTexture(ICON_FILL_TEXTURE)
+        button.iconFill:SetScript("OnUpdate", nil)
+        button.iconFill:Hide()
+    end
 
     -- Update border textures
     local borderColor = style.borderColor or {0, 0, 0, 1}
@@ -1115,6 +1390,7 @@ function CooldownCompanion:UpdateButtonStyle(button, style)
 
     -- Apply configurable strata ordering (LoC always on top)
     ApplyStrataOrder(button, style.strataOrder)
+    ApplyIconFillLayer(button)
     ApplyAuraBlizzardCooldownLayer(button)
     CooldownCompanion:UpdateAuraTextureVisual(button)
 
@@ -1129,6 +1405,9 @@ function CooldownCompanion:UpdateButtonStyle(button, style)
     -- Re-apply full click-through on overlay frames (the recursive call above
     -- re-enables motion on them when tooltips are on, causing them to steal hover events)
     SetFrameClickThroughRecursive(button.cooldown, true, true)
+    if button.iconFill then
+        SetFrameClickThroughRecursive(button.iconFill, true, true)
+    end
     if button.auraBlizzardCooldown then
         SetFrameClickThroughRecursive(button.auraBlizzardCooldown, true, true)
     end

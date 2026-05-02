@@ -33,6 +33,9 @@ local ContainersHaveForeignSpecs = ST._ContainersHaveForeignSpecs
 local FolderHasForeignSpecs = ST._FolderHasForeignSpecs
 local ApplyCheckboxIndent = ST._ApplyCheckboxIndent
 local NotifyTutorialAction = ST._NotifyTutorialAction
+local IsConfigFinderActive = ST._IsConfigFinderActive
+local BuildConfigFinderResults = ST._BuildConfigFinderResults
+local ClearConfigFinderText = ST._ClearConfigFinderText
 
 local GenerateGroupName
 
@@ -46,6 +49,70 @@ local function ClearSelection()
     CS.selectedButton = nil
     wipe(CS.selectedButtons)
     wipe(CS.selectedPanels)
+end
+
+local function TrimGroupName(name)
+    if name == nil then return "" end
+    return tostring(name):match("^%s*(.-)%s*$") or ""
+end
+
+local function IsGenericGroupName(name)
+    local trimmed = TrimGroupName(name)
+    return trimmed == ""
+        or trimmed == "New Group"
+        or trimmed:match("^New Group%s+%d+$") ~= nil
+        or trimmed == "Group"
+        or trimmed:match("^Group%s+%d+$") ~= nil
+end
+
+local function EnsureGenericGroupRenameBadge(entry)
+    local badge = entry.frame._cdcGenericRenameBadge
+    if not badge then
+        badge = CreateFrame("Button", nil, entry.frame)
+        badge:SetSize(14, 14)
+        badge:SetPropagateMouseClicks(false)
+        badge:SetPropagateMouseMotion(false)
+        badge.icon = badge:CreateTexture(nil, "OVERLAY")
+        badge.icon:SetAllPoints()
+        badge:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:AddLine("Default name. Click to rename.", 1, 0.82, 0, true)
+            GameTooltip:Show()
+        end)
+        badge:SetScript("OnLeave", function()
+            GameTooltip:Hide()
+        end)
+        entry.frame._cdcGenericRenameBadge = badge
+    end
+
+    badge:SetFrameLevel(entry.frame:GetFrameLevel() + 25)
+    return badge
+end
+
+local function ConfigureGenericGroupRenameBadge(entry, container, containerId, nameWidth)
+    local badge = EnsureGenericGroupRenameBadge(entry)
+    badge:ClearAllPoints()
+    badge:SetScript("OnClick", nil)
+
+    if not IsGenericGroupName(container and container.name) then
+        badge:Hide()
+        return
+    end
+
+    local currentName = TrimGroupName(container and container.name)
+    if currentName == "" then
+        currentName = "New Group"
+    end
+
+    badge.icon:SetAtlas("QuestLegendary", false)
+    badge.icon:SetVertexColor(1, 0.82, 0, 0.85)
+    badge:SetPoint("CENTER", entry.label, "LEFT", nameWidth + 13, 0)
+    badge:SetScript("OnClick", function(_, button)
+        if button ~= "LeftButton" then return end
+        GameTooltip:Hide()
+        ShowPopupAboveConfig("CDC_RENAME_GROUP", currentName, { containerId = containerId })
+    end)
+    badge:Show()
 end
 
 ------------------------------------------------------------------------
@@ -900,6 +967,7 @@ local function RefreshColumn1(preserveDrag)
 
     local db = CooldownCompanion.db.profile
     local charKey = CooldownCompanion.db.keys.char
+    local searchResults = IsConfigFinderActive and IsConfigFinderActive() and BuildConfigFinderResults and BuildConfigFinderResults() or nil
 
     -- Ensure folders table exists
     if not db.folders then db.folders = {} end
@@ -998,7 +1066,10 @@ local function RefreshColumn1(preserveDrag)
         local folderChildContainers = {}  -- [folderId] = { containerId, ... }
         for _, cid in ipairs(sectionContainerIds) do
             local container = db.groupContainers[cid]
-            if container.folderId and validFolderIds[container.folderId] then
+            if searchResults and not searchResults.containerMatches[cid] then
+                -- Search hides non-matching groups while preserving folder context
+                -- for the groups that do match.
+            elseif container.folderId and validFolderIds[container.folderId] then
                 if not folderChildContainers[container.folderId] then
                     folderChildContainers[container.folderId] = {}
                 end
@@ -1021,7 +1092,9 @@ local function RefreshColumn1(preserveDrag)
         -- Build top-level items list: folders + loose containers
         local items = {}
         for _, fid in ipairs(sectionFolderIds) do
-            table.insert(items, { kind = "folder", id = fid, order = CooldownCompanion:GetOrderForSpec(db.folders[fid], specId, fid) })
+            if not searchResults or (folderChildContainers[fid] and #folderChildContainers[fid] > 0) then
+                table.insert(items, { kind = "folder", id = fid, order = CooldownCompanion:GetOrderForSpec(db.folders[fid], specId, fid) })
+            end
         end
         for _, cid in ipairs(looseContainerIds) do
             table.insert(items, { kind = "container", id = cid, order = CooldownCompanion:GetOrderForSpec(db.groupContainers[cid], specId, cid) })
@@ -1125,7 +1198,12 @@ local function RefreshColumn1(preserveDrag)
 
         -- Show panel count in name when >1 panel
         local panelCount = CooldownCompanion:GetPanelCount(containerId)
-        local displayName = container.name
+        local groupName = container.name or "New Group"
+        local showGenericRenameBadge = IsGenericGroupName(groupName)
+        local displayName = groupName
+        if showGenericRenameBadge then
+            displayName = displayName .. "      "
+        end
         if panelCount > 1 then
             displayName = displayName .. "  |cff888888(" .. panelCount .. L[" panels)|r"]
         end
@@ -1145,6 +1223,12 @@ local function RefreshColumn1(preserveDrag)
         end
         entry:SetFullWidth(true)
         entry:SetFontObject(GameFontHighlight)
+        local groupNameWidth = 0
+        if showGenericRenameBadge and entry.label then
+            entry.label:SetText(groupName)
+            groupNameWidth = entry.label:GetStringWidth()
+            entry:SetText(displayName)
+        end
         entry:SetHighlight("Interface\\QuestFrame\\UI-QuestTitleHighlight")
 
         -- Color: blue for multi-selected, green for selected, gray for inactive
@@ -1162,9 +1246,13 @@ local function RefreshColumn1(preserveDrag)
         if entry._cdcModeBadge then entry._cdcModeBadge:Hide() end
 
         SetupGroupRowIndicators(entry, container)
+        if showGenericRenameBadge then
+            ConfigureGenericGroupRenameBadge(entry, container, containerId, groupNameWidth)
+        end
 
         entry:SetCallback("OnClick", function(widget, event, mouseButton)
             if mouseButton == "LeftButton"
+                and not searchResults
                 and not IsShiftKeyDown()
                 and not IsControlKeyDown()
                 and not GetCursorInfo()
@@ -1193,6 +1281,20 @@ local function RefreshColumn1(preserveDrag)
         entry.frame:SetScript("OnMouseUp", function(self, button)
             if CS.dragState and CS.dragState.phase == "active" then return end
             if button == "LeftButton" then
+                if searchResults then
+                    CooldownCompanion:ClearAllConfigPreviews()
+                    wipe(CS.selectedGroups)
+                    wipe(CS.selectedPanels)
+                    wipe(CS.selectedButtons)
+                    CS.selectedContainer = containerId
+                    CS.selectedGroup = nil
+                    CS.selectedButton = nil
+                    if ClearConfigFinderText then
+                        ClearConfigFinderText()
+                    end
+                    CooldownCompanion:RefreshConfigPanel()
+                    return
+                end
                 if IsShiftKeyDown() then
                     if CS.specExpandedGroupId == containerId then
                         CS.specExpandedGroupId = nil
@@ -1492,7 +1594,7 @@ local function RefreshColumn1(preserveDrag)
         })
 
         entry:SetCallback("OnClick", function(widget, event, mouseButton)
-            if mouseButton == "LeftButton" and not IsShiftKeyDown() and not GetCursorInfo() then
+            if mouseButton == "LeftButton" and not searchResults and not IsShiftKeyDown() and not GetCursorInfo() then
                 local cursorX, cursorY = GetScaledCursorPosition(CS.col1Scroll)
                 CS.dragState = {
                     kind = "folder",
@@ -1514,6 +1616,9 @@ local function RefreshColumn1(preserveDrag)
         entry.frame:SetScript("OnMouseUp", function(self, button)
             if CS.dragState and CS.dragState.phase == "active" then return end
             if button == "LeftButton" then
+                if searchResults then
+                    return
+                end
                 if IsShiftKeyDown() then
                     if CS.specExpandedFolderId == folderId then
                         CS.specExpandedFolderId = nil
@@ -1739,7 +1844,7 @@ local function RefreshColumn1(preserveDrag)
                         RenderFolderSpecPanel(item.id, section)
                     end
                     -- If expanded, render children with accent bar
-                    if not CS.collapsedFolders[item.id] then
+                    if searchResults or not CS.collapsedFolders[item.id] then
                         local children = folderChildContainers[item.id]
                         if children and #children > 0 then
                             local firstEntry, lastEntry
@@ -1812,6 +1917,16 @@ local function RefreshColumn1(preserveDrag)
         elseif container.createdBy == charKey then
             table.insert(charIds, id)
         end
+    end
+
+    if searchResults and not next(searchResults.containerMatches) then
+        local label = AceGUI:Create("Label")
+        label:SetText("|cff888888No matching groups.|r")
+        label:SetFullWidth(true)
+        CS.col1Scroll:AddChild(label)
+        CS.lastCol1RenderedRows = col1RenderedRows
+        PopulateColumn1ButtonBar()
+        return
     end
 
     if showNewUserEmptyState then
