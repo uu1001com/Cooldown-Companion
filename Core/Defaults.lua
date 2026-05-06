@@ -238,7 +238,7 @@ local defaults = {
         nextGroupId = 1,
         groupContainers = {},  -- [containerId] = { name, order, folderId, enabled, locked, specs, heroTalents, loadConditions, alpha/fade, anchor, ... }
         nextContainerId = 1,
-        folders = {},       -- [folderId] = { name, order, section, manualIcon?, specs?, heroTalents? }
+        folders = {},       -- [folderId] = { name, order, section, manualIcon?, specs?, heroTalents?, loadConditions? }
         nextFolderId = 1,
         globalStyle = {
             buttonSize = 36,
@@ -445,6 +445,36 @@ local defaults = {
             segmentGap = 4,
             hideManaForNonHealer = true,
             resources = {
+                [-1] = {
+                    enabled = false,
+                    healthBarColor = nil,
+                    healthBarOpacity = 0.7,
+                    healthBarGradient = false,
+                    healthBarFullColor = nil,
+                    healthBarHalfColor = nil,
+                    healthBarLowColor = nil,
+                    healthBackgroundColor = nil,
+                    healthBackgroundGradient = true,
+                    healthBackgroundFullColor = nil,
+                    healthBackgroundHalfColor = nil,
+                    healthBackgroundLowColor = nil,
+                    healthBackgroundOpacity = 1,
+                    showText = false,
+                    textFormat = "percent",
+                    showAbsorbs = true,
+                    showHealAbsorbs = true,
+                    showIncomingHeals = true,
+                    showLowHealthAlert = false,
+                    healthAbsorbColor = { 0.55, 0.85, 1.0, 0.45 },
+                    healthAbsorbTexture = "Solid",
+                    healthHealAbsorbColor = { 1.0, 0.12, 0.12, 0.55 },
+                    healthHealAbsorbTexture = "Solid",
+                    healthIncomingHealColor = { 0.1, 0.85, 0.35, 0.45 },
+                    healthIncomingHealTexture = "Solid",
+                    healthLowHealthAlertColor = { 1.0, 0.08, 0.04, 0.35 },
+                    healthLowHealthAlertTexture = "Solid",
+                    healthLowHealthAlertMissingHealthOnly = false,
+                },
                 [100] = {
                     enabled = true,
                     mwBaseColor = nil,

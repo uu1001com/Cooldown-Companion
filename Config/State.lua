@@ -119,6 +119,7 @@ local PROFILE_BAR_HEIGHT = 36
 ------------------------------------------------------------------------
 ST._configState = {
     -- Selection state
+    selectedFolder = nil,        -- folderId selected in Column 1
     selectedContainer = nil,     -- containerId selected in Column 1
     selectedGroup = nil,         -- panelId (groupId) selected in Column 2 panel list
     selectedButton = nil,
@@ -126,6 +127,7 @@ ST._configState = {
     selectedPanels = {},         -- multi-selected panel IDs (within a container)
     selectedGroups = {},         -- multi-selected container IDs
     selectedTab = "appearance",
+    selectedFolderTab = "general",
     selectedContainerTab = "general",
     buttonSettingsTab = "settings",
     panelSettingsTab = "appearance",
@@ -207,6 +209,7 @@ ST._configState = {
     configSearchText = "",
     configFinderBox = nil,
     configFinderSuppressTextChanged = false,
+    compactConfigRows = false,
 
     -- Spec filter inline expansion
     specExpandedGroupId = nil,
@@ -561,6 +564,7 @@ local function SelectConfigFinderResult(containerId, panelId, buttonIndex)
     wipe(CS.selectedGroups)
     wipe(CS.selectedPanels)
     wipe(CS.selectedButtons)
+    CS.selectedFolder = nil
     CS.selectedContainer = containerId
     CS.selectedGroup = panelId
     CS.selectedButton = buttonIndex
@@ -1035,6 +1039,10 @@ local function ShowConfigShiftTooltip()
         end
         return false
     end
+    local extraLine = widget:GetUserData("cdcShiftTooltipExtraLine")
+    if extraLine then
+        GameTooltip:AddLine(extraLine, 0.7, 0.7, 0.7, true)
+    end
     active.tooltipOwner = owner
     active.tooltipShown = true
     GameTooltip:Show()
@@ -1116,6 +1124,145 @@ end
 local BADGE_SIZE = 24
 local BADGE_SPACING = 2
 local BADGE_RIGHT_PAD = 4
+local COMPACT_ROW_HEIGHT = 32
+local CONFIG_ROW_ICON_SIZE = 32
+local CONFIG_ROW_ICON_GAP = 4
+local CONFIG_ROW_RIGHT_PAD = 4
+
+local function ClearConfigRowLayout(entry, restoreHandlers)
+    if not entry then
+        return
+    end
+
+    local icon = entry.image
+    if icon then
+        icon:Hide()
+        icon:ClearAllPoints()
+        icon:SetTexture(nil)
+        icon:SetAtlas(nil)
+        icon:SetAlpha(1)
+        if icon.SetDesaturated then
+            icon:SetDesaturated(false)
+        end
+    end
+
+    local label = entry.label
+    if label then
+        if label.SetWordWrap then label:SetWordWrap(true) end
+        if label.SetNonSpaceWrap then label:SetNonSpaceWrap(false) end
+        if label.SetMaxLines then label:SetMaxLines(0) end
+    end
+
+    entry._cdcConfigRow = nil
+    entry.imageshown = nil
+    if icon then icon:Show() end
+
+    if restoreHandlers then
+        if entry._cdcConfigRowWidthHandlerInstalled then
+            entry.OnWidthSet = entry._cdcConfigRowOriginalOnWidthSet
+            entry._cdcConfigRowOriginalOnWidthSet = nil
+            entry._cdcConfigRowWidthHandlerInstalled = nil
+        end
+        if entry._cdcConfigRowReleaseHandlerInstalled then
+            entry.OnRelease = entry._cdcConfigRowOriginalOnRelease
+            entry._cdcConfigRowOriginalOnRelease = nil
+            entry._cdcConfigRowReleaseHandlerInstalled = nil
+        end
+    end
+end
+
+local function ApplyConfigRowLayout(entry)
+    local row = entry and entry._cdcConfigRow
+    if not (row and entry.frame and entry.label) then
+        return
+    end
+
+    local compact = CS.compactConfigRows == true
+    local hasIcon = row.kind == "icon"
+    local frame = entry.frame
+    local label = entry.label
+    local leftPad = 0
+
+    if not compact then
+        if hasIcon then
+            leftPad = CONFIG_ROW_ICON_SIZE + CONFIG_ROW_ICON_GAP
+        else
+            leftPad = row.normalLeftPad or 0
+        end
+    end
+
+    entry:SetHeight(COMPACT_ROW_HEIGHT)
+    frame.height = COMPACT_ROW_HEIGHT
+
+    label:ClearAllPoints()
+    label:SetPoint("LEFT", frame, "LEFT", leftPad, 0)
+    local rightPad = row.rightPad or CONFIG_ROW_RIGHT_PAD
+    label:SetPoint("RIGHT", frame, "RIGHT", -rightPad, 0)
+    local rowWidth = frame.width or frame:GetWidth() or 0
+    if rowWidth > 0 then
+        label:SetWidth(math.max(1, rowWidth - leftPad - rightPad))
+    end
+    if label.SetWordWrap then
+        label:SetWordWrap(false)
+    end
+    if label.SetNonSpaceWrap then
+        label:SetNonSpaceWrap(false)
+    end
+    if label.SetMaxLines then
+        label:SetMaxLines(1)
+    end
+    label:SetJustifyH(row.justifyH or "LEFT")
+    label:SetJustifyV("MIDDLE")
+
+    local icon = entry.image
+    if icon then
+        icon:ClearAllPoints()
+        icon:SetSize(CONFIG_ROW_ICON_SIZE, CONFIG_ROW_ICON_SIZE)
+        icon:SetPoint("LEFT", frame, "LEFT", 0, 0)
+
+        if hasIcon and not compact and (row.texture or row.atlas) then
+            if row.atlas then
+                icon:SetAtlas(row.atlas, false)
+            else
+                icon:SetAtlas(nil)
+                icon:SetTexture(row.texture)
+                icon:SetTexCoord(0, 1, 0, 1)
+            end
+            icon:SetAlpha(1)
+            if icon.SetDesaturated then
+                icon:SetDesaturated(row.desaturated == true)
+            end
+            icon:Show()
+        else
+            icon:Hide()
+        end
+    end
+end
+
+local function EnsureConfigRowHandlers(entry)
+    if not entry._cdcConfigRowWidthHandlerInstalled then
+        entry._cdcConfigRowOriginalOnWidthSet = entry.OnWidthSet
+        entry.OnWidthSet = function(self, width)
+            if self._cdcConfigRowOriginalOnWidthSet then
+                self:_cdcConfigRowOriginalOnWidthSet(width)
+            end
+            ApplyConfigRowLayout(self)
+        end
+        entry._cdcConfigRowWidthHandlerInstalled = true
+    end
+
+    if not entry._cdcConfigRowReleaseHandlerInstalled then
+        entry._cdcConfigRowOriginalOnRelease = entry.OnRelease
+        entry.OnRelease = function(self)
+            local originalOnRelease = self._cdcConfigRowOriginalOnRelease
+            ClearConfigRowLayout(self, true)
+            if originalOnRelease then
+                originalOnRelease(self)
+            end
+        end
+        entry._cdcConfigRowReleaseHandlerInstalled = true
+    end
+end
 
 local function CleanRecycledEntry(entry)
     if entry._cdcModeBadge then entry._cdcModeBadge:Hide() end
@@ -1130,6 +1277,7 @@ local function CleanRecycledEntry(entry)
     if entry.frame._cdcOverrideBadge then entry.frame._cdcOverrideBadge:Hide() end
     if entry.frame._cdcSoundBadge then entry.frame._cdcSoundBadge:Hide() end
     if entry.frame._cdcAuraBadge then entry.frame._cdcAuraBadge:Hide() end
+    if entry.frame._cdcFallbackBadge then entry.frame._cdcFallbackBadge:Hide() end
     if entry.frame._cdcTalentBadge then entry.frame._cdcTalentBadge:Hide() end
     if entry.frame._cdcCollapseIcon then entry.frame._cdcCollapseIcon:Hide() end
     if entry.frame._cdcCollapseBtn then entry.frame._cdcCollapseBtn:Hide() end
@@ -1138,19 +1286,83 @@ local function CleanRecycledEntry(entry)
     if entry.frame._cdcAnchorBadge then entry.frame._cdcAnchorBadge:Hide() end
     if entry.frame._cdcHeaderDisabledBadge then entry.frame._cdcHeaderDisabledBadge:Hide() end
     if entry.frame._cdcDisabledBadge then entry.frame._cdcDisabledBadge:Hide() end
+    if entry.frame._cdcFallbackRemoveBtn then entry.frame._cdcFallbackRemoveBtn:Hide() end
+    if entry.frame._cdcFallbackUpBtn then entry.frame._cdcFallbackUpBtn:Hide() end
+    if entry.frame._cdcFallbackDownBtn then entry.frame._cdcFallbackDownBtn:Hide() end
     if entry.frame._cdcMarkerLeft then entry.frame._cdcMarkerLeft:Hide() end
     if entry.frame._cdcMarkerRight then entry.frame._cdcMarkerRight:Hide() end
     entry.frame:SetScript("OnMouseUp", nil)
     entry.frame:SetScript("OnReceiveDrag", nil)
     entry.frame._cdcOnMouseDown = nil
     entry.frame._cdcLastClickTime = nil
-    if entry.image then
-        entry.image:Show()
-        entry.image:SetAlpha(1)
-        if entry.image.SetDesaturated then
-            entry.image:SetDesaturated(false)
+    ClearConfigRowLayout(entry, true)
+end
+
+local function ApplyConfigRowIcon(entry, texture, opts)
+    opts = opts or {}
+    entry._cdcConfigRow = {
+        kind = "icon",
+        texture = texture,
+        atlas = opts.atlas,
+        desaturated = opts.desaturated == true,
+        rightPad = opts.rightPad,
+    }
+    EnsureConfigRowHandlers(entry)
+
+    entry:SetImage(nil)
+    entry.imageshown = nil
+
+    ApplyConfigRowLayout(entry)
+end
+
+local function ApplyConfigTextRow(entry, justifyH, normalLeftPad, rightPad)
+    entry._cdcConfigRow = {
+        kind = "text",
+        justifyH = justifyH or "LEFT",
+        normalLeftPad = normalLeftPad or 0,
+        rightPad = rightPad,
+    }
+    EnsureConfigRowHandlers(entry)
+
+    entry:SetImage(nil)
+    entry.imageshown = nil
+
+    ApplyConfigRowLayout(entry)
+end
+
+local function ReapplyConfigRowLayouts(widget)
+    if not widget then
+        return
+    end
+
+    if widget._cdcConfigRow then
+        ApplyConfigRowLayout(widget)
+    end
+
+    if widget.children then
+        for _, child in ipairs(widget.children) do
+            ReapplyConfigRowLayouts(child)
         end
     end
+end
+
+local function UpdateConfigFolderAccentBars()
+    local showBars = not CS.compactConfigRows
+    for _, bar in ipairs(CS.folderAccentBars or {}) do
+        if showBars and bar._cdcFolderAccentActive then
+            bar:Show()
+        else
+            bar:Hide()
+        end
+    end
+end
+
+local function RefreshVisibleConfigCompactRows()
+    ReapplyConfigRowLayouts(CS.col1Scroll)
+    ReapplyConfigRowLayouts(CS.col2Scroll)
+    UpdateConfigFolderAccentBars()
+    if CS.col1Scroll and CS.col1Scroll.DoLayout then CS.col1Scroll:DoLayout() end
+    if CS.col2Scroll and CS.col2Scroll.DoLayout then CS.col2Scroll:DoLayout() end
 end
 
 local function AcquireBadge(frame, index)
@@ -1794,6 +2006,7 @@ local function ResetConfigSelection(full)
         ST._CancelAutoAddFlow()
     end
     CooldownCompanion:ClearAllConfigPreviews()
+    CS.selectedFolder = nil
     CS.selectedButton = nil
     wipe(CS.selectedButtons)
     wipe(CS.selectedPanels)
@@ -1964,6 +2177,9 @@ CS.SetConfigPrimaryMode = SetConfigPrimaryMode
 ST._CompactUntitledInlineGroupConfig = CompactUntitledInlineGroupConfig
 ST._CDM_VIEWER_NAMES = CDM_VIEWER_NAMES
 ST._CleanRecycledEntry = CleanRecycledEntry
+ST._ApplyConfigRowIcon = ApplyConfigRowIcon
+ST._ApplyConfigTextRow = ApplyConfigTextRow
+ST._RefreshVisibleConfigCompactRows = RefreshVisibleConfigCompactRows
 ST._AcquireBadge = AcquireBadge
 ST._SetupGroupRowIndicators = SetupGroupRowIndicators
 ST._SetupFolderRowIndicators = SetupFolderRowIndicators

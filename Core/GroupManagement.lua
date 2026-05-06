@@ -1159,9 +1159,11 @@ end
 
 function CooldownCompanion:RenameFolder(folderId, newName)
     local folder = self.db.profile.folders[folderId]
-    if folder then
-        folder.name = newName
-    end
+    if not folder then return false end
+    local normalizedName = tostring(newName or ""):match("^%s*(.-)%s*$")
+    if normalizedName == "" then return false end
+    folder.name = normalizedName
+    return true
 end
 
 function CooldownCompanion:MoveGroupToFolder(id, folderId)
@@ -1330,13 +1332,7 @@ function CooldownCompanion:AddButtonToGroup(groupId, buttonType, id, name, isPet
 
     -- Auto-detect charges for items (e.g. Hellstone: GetItemCount with includeUses > plain count)
     if buttonType == "item" then
-        local plainCount = C_Item.GetItemCount(id)
-        local chargeCount = C_Item.GetItemCount(id, false, true)
-        if chargeCount > plainCount then
-            group.buttons[buttonIndex].hasCharges = true
-            group.buttons[buttonIndex].showChargeText = true
-            group.buttons[buttonIndex].maxCharges = chargeCount
-        end
+        self.UpdateItemChargeMetadata(group.buttons[buttonIndex], id)
     end
 
     -- Record original classification (immutable label for config display).

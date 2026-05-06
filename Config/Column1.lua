@@ -12,6 +12,8 @@ local AceGUI = LibStub("AceGUI-3.0")
 -- Imports from earlier Config/ files
 local BuildHeroTalentSubTreeCheckboxes = ST._BuildHeroTalentSubTreeCheckboxes
 local CleanRecycledEntry = ST._CleanRecycledEntry
+local ApplyConfigRowIcon = ST._ApplyConfigRowIcon
+local ApplyConfigTextRow = ST._ApplyConfigTextRow
 local SetupGroupRowIndicators = ST._SetupGroupRowIndicators
 local SetupFolderRowIndicators = ST._SetupFolderRowIndicators
 local SetupColumn1MarkerRow = ST._SetupColumn1MarkerRow
@@ -44,6 +46,7 @@ local GenerateGroupName
 ------------------------------------------------------------------------
 local function ClearSelection()
     CooldownCompanion:ClearAllConfigPreviews()
+    CS.selectedFolder = nil
     CS.selectedContainer = nil
     CS.selectedGroup = nil
     CS.selectedButton = nil
@@ -145,12 +148,10 @@ local function RenderBrowseMode()
         -- Phase A: Character list
         local backBtn = AceGUI:Create("InteractiveLabel")
         CleanRecycledEntry(backBtn)
-        backBtn:SetText(L["|A:common-icon-backarrow:14:14|a  Back to My Groups"])
-        backBtn:SetImage(134400)
-        backBtn:SetImageSize(1, 32)
-        backBtn.image:SetAlpha(0)
+        backBtn:SetText("|A:common-icon-backarrow:14:14|a  Back to My Groups")
         backBtn:SetFullWidth(true)
         backBtn:SetFontObject(GameFontHighlight)
+        ApplyConfigTextRow(backBtn)
         backBtn:SetHighlight("Interface\\QuestFrame\\UI-QuestTitleHighlight")
         backBtn:SetCallback("OnClick", function()
             CS.browseMode = false
@@ -180,19 +181,15 @@ local function RenderBrowseMode()
             CleanRecycledEntry(entry)
             local displayName, cc = GetClassColoredCharName(charInfo.charKey, charInfo.classFilename)
 
-            -- Class icon (use individual atlas to avoid tiled-sheet border)
-            if charInfo.classFilename then
-                entry:SetImage(134400) -- placeholder to initialise image widget
-                entry.image:SetAtlas("classicon-" .. strlower(charInfo.classFilename), false)
-                entry:SetImageSize(32, 32)
-            else
-                entry:SetImage(134400)
-                entry:SetImageSize(32, 32)
-            end
-
             entry:SetText(displayName)
             entry:SetFullWidth(true)
             entry:SetFontObject(GameFontHighlight)
+            -- Class icon (use individual atlas to avoid tiled-sheet border)
+            if charInfo.classFilename then
+                ApplyConfigRowIcon(entry, 134400, { atlas = "classicon-" .. strlower(charInfo.classFilename) })
+            else
+                ApplyConfigRowIcon(entry, 134400)
+            end
             entry:SetHighlight("Interface\\QuestFrame\\UI-QuestTitleHighlight")
             entry:SetCallback("OnClick", function()
                 CS.browseCharKey = charInfo.charKey
@@ -206,12 +203,10 @@ local function RenderBrowseMode()
         -- Phase B: Selected character's groups
         local backBtn = AceGUI:Create("InteractiveLabel")
         CleanRecycledEntry(backBtn)
-        backBtn:SetText(L["|A:common-icon-backarrow:14:14|a  Back to Characters"])
-        backBtn:SetImage(134400)
-        backBtn:SetImageSize(1, 32)
-        backBtn.image:SetAlpha(0)
+        backBtn:SetText("|A:common-icon-backarrow:14:14|a  Back to Characters")
         backBtn:SetFullWidth(true)
         backBtn:SetFontObject(GameFontHighlight)
+        ApplyConfigTextRow(backBtn)
         backBtn:SetHighlight("Interface\\QuestFrame\\UI-QuestTitleHighlight")
         backBtn:SetCallback("OnClick", function()
             CS.browseCharKey = nil
@@ -259,10 +254,9 @@ local function RenderBrowseMode()
             end
 
             entry:SetText(displayName)
-            entry:SetImage(GetContainerIcon(containerId, db))
-            entry:SetImageSize(32, 32)
             entry:SetFullWidth(true)
             entry:SetFontObject(GameFontHighlight)
+            ApplyConfigRowIcon(entry, GetContainerIcon(containerId, db))
             entry:SetHighlight("Interface\\QuestFrame\\UI-QuestTitleHighlight")
 
             -- Green highlight for selected browse container
@@ -756,6 +750,9 @@ local function ShowFolderContextMenu(db, folderId, folder)
             if folder.heroTalents and next(folder.heroTalents) then
                 folderData.heroTalents = CopyTable(folder.heroTalents)
             end
+            if CooldownCompanion:HasLocalLoadConditions(folder) then
+                folderData.loadConditions = CopyTable(folder.loadConditions)
+            end
 
             local orderedCids = {}
             for cid, container in pairs(db.groupContainers) do
@@ -962,6 +959,7 @@ local function RefreshColumn1(preserveDrag)
     for i, bar in ipairs(CS.folderAccentBars) do
         bar:Hide()
         bar:ClearAllPoints()
+        bar._cdcFolderAccentActive = nil
     end
     local accentBarIndex = 0  -- pool cursor, incremented as bars are used
 
@@ -1210,17 +1208,6 @@ local function RefreshColumn1(preserveDrag)
 
         entry:SetText(displayName)
         local showManualIcon = not inFolder and IsValidIconTexture(container.manualIcon)
-        if showManualIcon then
-            entry:SetImage(container.manualIcon)
-            entry:SetImageSize(32, 32)
-        else
-            entry:SetImage("Interface\\BUTTONS\\WHITE8X8")
-            entry:SetImageSize(inFolder and 13 or 1, 30)
-        end
-        if entry.image then
-            entry.image:Show()
-            entry.image:SetAlpha(showManualIcon and 1 or 0)
-        end
         entry:SetFullWidth(true)
         entry:SetFontObject(GameFontHighlight)
         local groupNameWidth = 0
@@ -1228,6 +1215,11 @@ local function RefreshColumn1(preserveDrag)
             entry.label:SetText(groupName)
             groupNameWidth = entry.label:GetStringWidth()
             entry:SetText(displayName)
+        end
+        if showManualIcon then
+            ApplyConfigRowIcon(entry, container.manualIcon)
+        else
+            ApplyConfigTextRow(entry, "LEFT", inFolder and 17 or 0)
         end
         entry:SetHighlight("Interface\\QuestFrame\\UI-QuestTitleHighlight")
 
@@ -1286,6 +1278,7 @@ local function RefreshColumn1(preserveDrag)
                     wipe(CS.selectedGroups)
                     wipe(CS.selectedPanels)
                     wipe(CS.selectedButtons)
+                    CS.selectedFolder = nil
                     CS.selectedContainer = containerId
                     CS.selectedGroup = nil
                     CS.selectedButton = nil
@@ -1314,6 +1307,7 @@ local function RefreshColumn1(preserveDrag)
                     if CS.selectedContainer and not CS.selectedGroups[CS.selectedContainer] and next(CS.selectedGroups) then
                         CS.selectedGroups[CS.selectedContainer] = true
                     end
+                    CS.selectedFolder = nil
                     ClearSelection()
                     CooldownCompanion:RefreshConfigPanel()
                     return
@@ -1321,6 +1315,7 @@ local function RefreshColumn1(preserveDrag)
                 -- Normal click: toggle-through selection, clear multi-select
                 CooldownCompanion:ClearAllConfigPreviews()
                 wipe(CS.selectedGroups)
+                CS.selectedFolder = nil
                 if CS.selectedContainer == containerId then
                     if CS.selectedGroup then
                         -- First re-click: clear panel selection (return to container settings)
@@ -1551,24 +1546,16 @@ local function RefreshColumn1(preserveDrag)
 
         local isCollapsed = CS.collapsedFolders[folderId]
 
-        -- Collapse indicator as inline texture in label
-        local collapseTag = isCollapsed
-            and "  |A:common-icon-plus:10:10|a"
-            or "  |A:common-icon-minus:10:10|a"
-
         local entry = AceGUI:Create("InteractiveLabel")
         CleanRecycledEntry(entry)
-        entry:SetText(folder.name .. collapseTag)
-        entry:SetImage(GetFolderIcon(folderId, db))
-        entry:SetImageSize(32, 32)
-        if entry.image then
-            entry.image:Show()
-            entry.image:SetAlpha(1)
-        end
+        entry:SetText(folder.name)
         entry:SetFullWidth(true)
         entry:SetFontObject(GameFontHighlight)
+        ApplyConfigRowIcon(entry, GetFolderIcon(folderId, db))
         local allChildrenInactive = IsFolderFullyInactive(folderId, childContainerIds)
-        if allChildrenInactive then
+        if CS.selectedFolder == folderId and not CS.selectedContainer and not CS.selectedGroup then
+            entry:SetColor(0.25, 0.62, 1.0)
+        elseif allChildrenInactive then
             entry:SetColor(0.5, 0.5, 0.5)
         else
             entry:SetColor(1.0, 0.82, 0.0)
@@ -1581,6 +1568,33 @@ local function RefreshColumn1(preserveDrag)
         entry.frame._cdcItemKind = "folder"
         entry.frame._cdcFolderId = folderId
         entry.frame._cdcSection = sectionTag
+
+        local collapseBtn = entry.frame._cdcCollapseBtn
+        if not collapseBtn then
+            collapseBtn = CreateFrame("Button", nil, entry.frame)
+            collapseBtn:SetSize(16, 16)
+            collapseBtn._arrow = collapseBtn:CreateTexture(nil, "ARTWORK")
+            collapseBtn._arrow:SetSize(12, 12)
+            collapseBtn._arrow:SetPoint("CENTER")
+            collapseBtn._arrow:SetAtlas("glues-characterselect-icon-arrowdown-small")
+            entry.frame._cdcCollapseBtn = collapseBtn
+        end
+        collapseBtn:SetParent(entry.frame)
+        collapseBtn:ClearAllPoints()
+        collapseBtn:SetPoint("LEFT", entry.label, "RIGHT", 4, 0)
+        collapseBtn._arrow:SetRotation(isCollapsed and (math.pi / 2) or 0)
+        collapseBtn:Show()
+        collapseBtn._arrow:Show()
+        collapseBtn:SetScript("OnClick", function()
+            CS.collapsedFolders[folderId] = not CS.collapsedFolders[folderId]
+            CooldownCompanion:RefreshConfigPanel()
+        end)
+        collapseBtn:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:AddLine(isCollapsed and "Expand" or "Collapse")
+            GameTooltip:Show()
+        end)
+        collapseBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
         TrackRenderedRow({
             kind = "folder",
@@ -1629,7 +1643,14 @@ local function RefreshColumn1(preserveDrag)
                     CooldownCompanion:RefreshConfigPanel()
                     return
                 end
-                CS.collapsedFolders[folderId] = not CS.collapsedFolders[folderId]
+                CooldownCompanion:ClearAllConfigPreviews()
+                CS.selectedFolder = folderId
+                CS.selectedContainer = nil
+                CS.selectedGroup = nil
+                CS.selectedButton = nil
+                wipe(CS.selectedGroups)
+                wipe(CS.selectedPanels)
+                wipe(CS.selectedButtons)
                 CooldownCompanion:RefreshConfigPanel()
             elseif button == "MiddleButton" then
                 -- Lock/unlock all containers in this folder
@@ -1867,9 +1888,14 @@ local function RefreshColumn1(preserveDrag)
                                 bar:SetWidth(3)
                                 bar:ClearAllPoints()
                                 bar._cdcFolderId = item.id
+                                bar._cdcFolderAccentActive = true
                                 bar:SetPoint("TOPLEFT", firstEntry.frame, "TOPLEFT", 0, 0)
                                 bar:SetPoint("BOTTOMLEFT", lastEntry.frame, "BOTTOMLEFT", 0, 0)
-                                bar:Show()
+                                if CS.compactConfigRows then
+                                    bar:Hide()
+                                else
+                                    bar:Show()
+                                end
                             end
                         end
                     end

@@ -6,11 +6,15 @@
 local ADDON_NAME, ST = ...
 local CooldownCompanion = ST.Addon
 local CS = ST._configState
-local L = LibStub("AceLocale-3.0"):GetLocale("CooldownCompanion", true) or {}
-local AceGUI = LibStub("AceGUI-3.0")
+local RB = ST._RB
+local RESOURCE_HEALTH = RB and RB.RESOURCE_HEALTH or -1
 
+local AceGUI = LibStub("AceGUI-3.0")
+local L = LibStub("AceLocale-3.0"):GetLocale("CooldownCompanion", true) or {}
 -- Imports from earlier Config/ files
 local CleanRecycledEntry = ST._CleanRecycledEntry
+local ApplyConfigRowIcon = ST._ApplyConfigRowIcon
+local ApplyConfigTextRow = ST._ApplyConfigTextRow
 local GetButtonIcon = ST._GetButtonIcon
 local GetConfigEntryDisplayName = ST._GetConfigEntryDisplayName
 local GenerateFolderName = ST._GenerateFolderName
@@ -531,12 +535,10 @@ local function RenderConfigFinderResults()
         local header = AceGUI:Create("InteractiveLabel")
         CleanRecycledEntry(header)
         header:SetText(headerText)
-        header:SetImage("Interface\\BUTTONS\\WHITE8X8")
-        header:SetImageSize(1, 32)
-        if header.image then header.image:SetAlpha(0) end
         header:SetFullWidth(true)
         header:SetFontObject(GameFontHighlight)
         header:SetJustifyH("CENTER")
+        ApplyConfigTextRow(header, "CENTER")
         header:SetHighlight("Interface\\QuestFrame\\UI-QuestTitleHighlight")
         ConfigurePanelTypeBadge(header, panel and panel.displayMode, header.label:GetStringWidth())
         if panel and panel.enabled == false then
@@ -555,17 +557,14 @@ local function RenderConfigFinderResults()
             local buttonData = entryInfo.button
             local entry = AceGUI:Create("InteractiveLabel")
             CleanRecycledEntry(entry)
+            local entryDisabled = buttonData and buttonData.enabled == false
             entry:SetText(entryInfo.text or (buttonData and buttonData.name) or "Entry")
-            entry:SetImage(buttonData and GetButtonIcon(buttonData) or 134400)
-            entry:SetImageSize(32, 32)
             entry:SetFullWidth(true)
             entry:SetFontObject(GameFontHighlight)
+            ApplyConfigRowIcon(entry, buttonData and GetButtonIcon(buttonData) or 134400, { desaturated = entryDisabled })
             entry:SetHighlight("Interface\\QuestFrame\\UI-QuestTitleHighlight")
-            if buttonData and buttonData.enabled == false then
+            if entryDisabled then
                 entry:SetColor(0.5, 0.5, 0.5)
-                if entry.image and entry.image.SetDesaturated then
-                    entry.image:SetDesaturated(true)
-                end
             end
 
             local buttonIndex = entryInfo.index
@@ -769,14 +768,12 @@ local function PlaceRowBadge(frame, badge, offsetX)
     return offsetX - ROW_BADGE_SIZE - ROW_BADGE_SPACING
 end
 
-local function LayoutRowBadges(frame, badge1, badge2, badge3, badge4, badge5, badge6)
+local function LayoutRowBadges(frame, ...)
     local offsetX = -ROW_BADGE_RIGHT_PAD
-    offsetX = PlaceRowBadge(frame, badge1, offsetX)
-    offsetX = PlaceRowBadge(frame, badge2, offsetX)
-    offsetX = PlaceRowBadge(frame, badge3, offsetX)
-    offsetX = PlaceRowBadge(frame, badge4, offsetX)
-    offsetX = PlaceRowBadge(frame, badge5, offsetX)
-    PlaceRowBadge(frame, badge6, offsetX)
+    for index = 1, select("#", ...) do
+        local badge = select(index, ...)
+        offsetX = PlaceRowBadge(frame, badge, offsetX)
+    end
 end
 
 local function IsAuraTrackingConfigReady(buttonData, cdmEnabled)
@@ -1124,6 +1121,12 @@ local function RefreshColumn2()
                         else
                             ST._BuildResourceBarStylingPanel(scroll, "colors")
                         end
+                    elseif tab == "health" then
+                        if ST._BuildResourceBarHealthStylingPanel then
+                            ST._BuildResourceBarHealthStylingPanel(scroll)
+                        else
+                            ST._BuildResourceBarStylingPanel(scroll, "health")
+                        end
                     elseif tab == "positioning" then
                         if ST._BuildResourceBarPositioningPanel then
                             ST._BuildResourceBarPositioningPanel(scroll)
@@ -1152,15 +1155,26 @@ local function RefreshColumn2()
                     colorsTabText = L["Colors: "] .. ST._GetClassColoredText(specName)
                 end
             end
-            col2._resourceStylingTabGroup:SetTabs({
-                { value = "bar_text", text = L["Styling"] },
-                { value = "positioning", text = L["Layout"] },
+
+            local rbSettings = CooldownCompanion:GetResourceBarSettings()
+            local health = rbSettings and rbSettings.resources and rbSettings.resources[RESOURCE_HEALTH]
+            local healthEnabled = health and health.enabled == true
+            local tabs = {
+                { value = "bar_text", text = "Styling" },
+                { value = "positioning", text = "Layout" },
                 { value = "colors", text = colorsTabText },
-            })
+            }
+            if healthEnabled then
+                tabs[#tabs + 1] = { value = "health", text = "Health" }
+            elseif CS.resourceStylingTab == "health" then
+                CS.resourceStylingTab = "bar_text"
+            end
+            col2._resourceStylingTabGroup:SetTabs(tabs)
 
             if CS.resourceStylingTab ~= "bar_text"
                 and CS.resourceStylingTab ~= "colors"
                 and CS.resourceStylingTab ~= "positioning"
+                and not (healthEnabled and CS.resourceStylingTab == "health")
             then
                 CS.resourceStylingTab = "bar_text"
             end
@@ -1326,12 +1340,11 @@ local function RefreshColumn2()
             local header = AceGUI:Create("InteractiveLabel")
             CleanRecycledEntry(header)
             header:SetText(headerText)
-            header:SetImage("Interface\\BUTTONS\\WHITE8X8")
-            header.image:SetAlpha(0)
 
             header:SetFullWidth(true)
             header:SetFontObject(GameFontHighlight)
             header:SetJustifyH("CENTER")
+            ApplyConfigTextRow(header, "CENTER")
             local textW = header.label:GetStringWidth()
             ConfigurePanelTypeBadge(header, panel.displayMode, textW)
 
@@ -1385,14 +1398,14 @@ local function RefreshColumn2()
                     entry:SetText(buttonData.name or ("ID: " .. (buttonData.id or "?")))
                     entry:SetFullWidth(true)
                     entry:SetFontObject(GameFontHighlightSmall)
+                    if buttonData.enabled == false and entry.image and entry.image.SetDesaturated then
+                        entry.image:SetDesaturated(true)
+                    end
                     entry:SetHighlight("Interface\\QuestFrame\\UI-QuestTitleHighlight")
                     if CS.selectedGroup == panelGroupId and CS.selectedButton == buttonIndex then
                         entry:SetColor(0, 1, 0)
                     elseif buttonData.enabled == false then
                         entry:SetColor(0.5, 0.5, 0.5)
-                    end
-                    if buttonData.enabled == false and entry.image and entry.image.SetDesaturated then
-                        entry.image:SetDesaturated(true)
                     end
                     local capturedIndex = buttonIndex
                     entry:SetCallback("OnClick", function()
@@ -1865,14 +1878,12 @@ local function RefreshColumn2()
                 local header = AceGUI:Create("InteractiveLabel")
                 CleanRecycledEntry(header)
                 header:SetText(headerText)
-                header:SetImage(134400) -- invisible dummy for 32px row height
-                header:SetImageSize(1, 32)
-                header.image:SetAlpha(0)
 
                 -- Mode badge overlay (pooled on widget, same pattern as old Column 1)
                 header:SetFullWidth(true)
                 header:SetFontObject(GameFontHighlight)
                 header:SetJustifyH("CENTER")
+                ApplyConfigTextRow(header, "CENTER")
                 -- Position badge to the left of centered text
                 local textW = header.label:GetStringWidth()
                 ConfigurePanelTypeBadge(header, panel.displayMode, textW)
@@ -2427,25 +2438,28 @@ local function RefreshColumn2()
                 for i, buttonData in ipairs(panelButtons) do
                     local entry = AceGUI:Create("InteractiveLabel")
                     CleanRecycledEntry(entry)
-                    local usable = CooldownCompanion:IsButtonUsable(buttonData)
+                    local usable = CooldownCompanion:IsButtonUsable(buttonData, panel)
+                    local loadAllowed = CooldownCompanion:IsButtonLoadConditionMet(buttonData, panel)
 
                     local entryName = IsTriggerPanelGroup(panel)
                         and GetTriggerRowDisplayText(buttonData)
                         or GetConfigEntryDisplayName(buttonData, { includeDecorations = true })
                     entry:SetText(entryName or ("Unknown " .. buttonData.type))
-                    entry:SetImage(GetButtonIcon(buttonData))
-                    entry:SetImageSize(32, 32)
-                    if entry.image and entry.image.SetDesaturated then
-                        entry.image:SetDesaturated(not usable)
-                    end
                     entry:SetFullWidth(true)
                     entry:SetFontObject(GameFontHighlight)
+                    ApplyConfigRowIcon(entry, GetButtonIcon(buttonData), { desaturated = not usable })
                     entry:SetHighlight("Interface\\QuestFrame\\UI-QuestTitleHighlight")
                     if buttonData.type == "spell" then
                         BindConfigShiftTooltip(entry, "spell", ResolveColumn2TooltipSpellId(buttonData), entry.frame, "ANCHOR_RIGHT")
                     elseif buttonData.type == "item" then
                         BindConfigShiftTooltip(entry, "item", buttonData.id, entry.frame, "ANCHOR_RIGHT")
                     end
+                    entry:SetUserData(
+                        "cdcShiftTooltipExtraLine",
+                        CooldownCompanion:HasLocalLoadConditions(buttonData)
+                            and "This entry adds load conditions."
+                            or nil
+                    )
 
                     -- Selection highlighting: only show if this panel is the selected one
                     if CS.selectedGroup == panelId then
@@ -2463,12 +2477,16 @@ local function RefreshColumn2()
                     -- Right-side row badges
                     local rowFrame = entry.frame
                     local rowBadgeLevel = rowFrame:GetFrameLevel() + 5
-                    local warnBadge, overrideBadge, soundBadge, auraBadge
+                    local warnBadge, overrideBadge, soundBadge, auraBadge, fallbackBadge
 
                     if not usable and buttonData.enabled ~= false then
                         warnBadge = EnsureRowBadge(rowFrame, "_cdcWarnBtn", "Ping_Marker_Icon_Warning")
                         warnBadge:SetFrameLevel(rowBadgeLevel)
-                        SetRowBadgeTooltip(warnBadge, L["Spell/item unavailable"], 1, 0.3, 0.3)
+                        if not loadAllowed then
+                            SetRowBadgeTooltip(warnBadge, "Hidden by load conditions", 1, 0.3, 0.3)
+                        else
+                            SetRowBadgeTooltip(warnBadge, "Spell/item unavailable", 1, 0.3, 0.3)
+                        end
                         warnBadge:Show()
                     end
 
@@ -2482,6 +2500,13 @@ local function RefreshColumn2()
                         overrideBadge:SetFrameLevel(rowBadgeLevel)
                         SetRowBadgeTooltip(overrideBadge, L["Has appearance overrides"])
                         overrideBadge:Show()
+                    end
+
+                    if CooldownCompanion.HasItemFallbacks(buttonData) then
+                        fallbackBadge = EnsureRowBadge(rowFrame, "_cdcFallbackBadge", "banker")
+                        fallbackBadge:SetFrameLevel(rowBadgeLevel)
+                        SetRowBadgeTooltip(fallbackBadge, "Uses item fallbacks")
+                        fallbackBadge:Show()
                     end
 
                     if buttonData.type == "spell" then
@@ -2538,7 +2563,7 @@ local function RefreshColumn2()
                         disabledBadge:Show()
                     end
 
-                    LayoutRowBadges(rowFrame, disabledBadge, warnBadge, overrideBadge, soundBadge, auraBadge, talentBadge)
+                    LayoutRowBadges(rowFrame, disabledBadge, warnBadge, overrideBadge, fallbackBadge, soundBadge, auraBadge, talentBadge)
 
                     entry:SetCallback("OnClick", function(widget, event, mouseButton)
                         if mouseButton == "LeftButton" and not IsControlKeyDown() and not GetCursorInfo() then

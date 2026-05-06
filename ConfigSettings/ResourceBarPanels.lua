@@ -9,6 +9,7 @@ local ADDON_NAME, ST = ...
 local CooldownCompanion = ST.Addon
 local L = LibStub("AceLocale-3.0"):GetLocale("CooldownCompanion", true) or {}
 local AceGUI = LibStub("AceGUI-3.0")
+local LSM = LibStub("LibSharedMedia-3.0")
 local CS = ST._configState
 
 -- Imports from Helpers.lua
@@ -61,6 +62,23 @@ local DEFAULT_SEG_THRESHOLD_COLOR = RB.DEFAULT_SEG_THRESHOLD_COLOR
 local DEFAULT_CONTINUOUS_TICK_COLOR = RB.DEFAULT_CONTINUOUS_TICK_COLOR
 local DEFAULT_CONTINUOUS_TICK_MODE = RB.DEFAULT_CONTINUOUS_TICK_MODE
 local DEFAULT_CONTINUOUS_TICK_WIDTH = RB.DEFAULT_CONTINUOUS_TICK_WIDTH
+local DEFAULT_HEALTH_BAR_COLOR = RB.DEFAULT_HEALTH_BAR_COLOR
+local DEFAULT_HEALTH_BAR_OPACITY = RB.DEFAULT_HEALTH_BAR_OPACITY
+local DEFAULT_HEALTH_BAR_FULL_COLOR = RB.DEFAULT_HEALTH_BAR_FULL_COLOR
+local DEFAULT_HEALTH_BAR_HALF_COLOR = RB.DEFAULT_HEALTH_BAR_HALF_COLOR
+local DEFAULT_HEALTH_BAR_LOW_COLOR = RB.DEFAULT_HEALTH_BAR_LOW_COLOR
+local DEFAULT_HEALTH_BAR_GRADIENT = RB.DEFAULT_HEALTH_BAR_GRADIENT
+local DEFAULT_HEALTH_BACKGROUND_COLOR = RB.DEFAULT_HEALTH_BACKGROUND_COLOR
+local DEFAULT_HEALTH_BACKGROUND_FULL_COLOR = RB.DEFAULT_HEALTH_BACKGROUND_FULL_COLOR
+local DEFAULT_HEALTH_BACKGROUND_HALF_COLOR = RB.DEFAULT_HEALTH_BACKGROUND_HALF_COLOR
+local DEFAULT_HEALTH_BACKGROUND_LOW_COLOR = RB.DEFAULT_HEALTH_BACKGROUND_LOW_COLOR
+local DEFAULT_HEALTH_BACKGROUND_OPACITY = RB.DEFAULT_HEALTH_BACKGROUND_OPACITY
+local DEFAULT_HEALTH_BACKGROUND_GRADIENT = RB.DEFAULT_HEALTH_BACKGROUND_GRADIENT
+local DEFAULT_HEALTH_ABSORB_COLOR = RB.DEFAULT_HEALTH_ABSORB_COLOR
+local DEFAULT_HEALTH_HEAL_ABSORB_COLOR = RB.DEFAULT_HEALTH_HEAL_ABSORB_COLOR
+local DEFAULT_HEALTH_INCOMING_HEAL_COLOR = RB.DEFAULT_HEALTH_INCOMING_HEAL_COLOR
+local DEFAULT_HEALTH_LOW_HEALTH_ALERT_COLOR = RB.DEFAULT_HEALTH_LOW_HEALTH_ALERT_COLOR
+local DEFAULT_HEALTH_EFFECT_TEXTURE = RB.DEFAULT_HEALTH_EFFECT_TEXTURE
 local DEFAULT_COMBO_COLOR = RB.DEFAULT_COMBO_COLOR
 local DEFAULT_COMBO_MAX_COLOR = RB.DEFAULT_COMBO_MAX_COLOR
 local DEFAULT_COMBO_CHARGED_COLOR = RB.DEFAULT_COMBO_CHARGED_COLOR
@@ -122,6 +140,323 @@ local StartDragTracking = ST._StartDragTracking
 local GetDragIndicator = ST._GetDragIndicator
 local HideDragIndicator = ST._HideDragIndicator
 local ResetDragIndicatorStyle = ST._ResetDragIndicatorStyle
+
+local HealthResource = { ID = RB.RESOURCE_HEALTH }
+
+function HealthResource.GetEffectTextureOptions()
+    local options = {}
+    local order = {}
+    for _, name in ipairs(LSM:List("statusbar")) do
+        options[name] = name
+        table.insert(order, name)
+    end
+    return options, order
+end
+
+function HealthResource.NormalizeEffectTexture(health, key)
+    if type(health[key]) ~= "string"
+        or health[key] == ""
+        or not LSM:IsValid("statusbar", health[key]) then
+        health[key] = DEFAULT_HEALTH_EFFECT_TEXTURE
+    end
+end
+
+function HealthResource.EnsureSettings(settings)
+    settings.resources = settings.resources or {}
+    if type(settings.resources[HealthResource.ID]) ~= "table" then
+        settings.resources[HealthResource.ID] = { enabled = false }
+    elseif settings.resources[HealthResource.ID].enabled == nil then
+        settings.resources[HealthResource.ID].enabled = false
+    end
+    local health = settings.resources[HealthResource.ID]
+    if health.showAbsorbs == nil then health.showAbsorbs = true end
+    if health.showHealAbsorbs == nil then health.showHealAbsorbs = true end
+    if health.showIncomingHeals == nil then health.showIncomingHeals = true end
+    if health.showLowHealthAlert == nil then health.showLowHealthAlert = false end
+    if health.healthLowHealthAlertMissingHealthOnly == nil then health.healthLowHealthAlertMissingHealthOnly = false end
+    if type(health.healthAbsorbColor) ~= "table" then health.healthAbsorbColor = DEFAULT_HEALTH_ABSORB_COLOR end
+    if type(health.healthHealAbsorbColor) ~= "table" then health.healthHealAbsorbColor = DEFAULT_HEALTH_HEAL_ABSORB_COLOR end
+    if type(health.healthIncomingHealColor) ~= "table" then health.healthIncomingHealColor = DEFAULT_HEALTH_INCOMING_HEAL_COLOR end
+    if type(health.healthLowHealthAlertColor) ~= "table" then health.healthLowHealthAlertColor = DEFAULT_HEALTH_LOW_HEALTH_ALERT_COLOR end
+    HealthResource.NormalizeEffectTexture(health, "healthAbsorbTexture")
+    HealthResource.NormalizeEffectTexture(health, "healthHealAbsorbTexture")
+    HealthResource.NormalizeEffectTexture(health, "healthIncomingHealTexture")
+    HealthResource.NormalizeEffectTexture(health, "healthLowHealthAlertTexture")
+    return settings.resources[HealthResource.ID]
+end
+
+function HealthResource.AddOpacitySlider(container, health, key, label, defaultValue, applyBars)
+    local slider = AceGUI:Create("Slider")
+    slider:SetLabel(label)
+    slider:SetSliderValues(0, 1, 0.05)
+    slider:SetIsPercent(true)
+    slider:SetValue(tonumber(health[key]) or defaultValue)
+    slider:SetFullWidth(true)
+    slider:SetCallback("OnValueChanged", function(widget, event, val)
+        health[key] = val
+        applyBars()
+    end)
+    container:AddChild(slider)
+end
+
+function HealthResource.AddEffectTextureDropdown(container, health, key, label, applyBars)
+    local drop = AceGUI:Create("Dropdown")
+    drop:SetLabel(label)
+    drop:SetList(HealthResource.GetEffectTextureOptions())
+    drop:SetValue(health[key] or DEFAULT_HEALTH_EFFECT_TEXTURE)
+    drop:SetFullWidth(true)
+    drop:SetCallback("OnValueChanged", function(widget, event, val)
+        health[key] = val or DEFAULT_HEALTH_EFFECT_TEXTURE
+        applyBars()
+    end)
+    container:AddChild(drop)
+end
+
+function HealthResource.AddEffectStyleControls(container, checkbox, health, options, applyBars)
+    local enabled = health[options.enabledKey] == true
+    local expanded, advBtn = AddAdvancedToggle(checkbox, options.advancedKey, tabInfoButtons, enabled)
+    if not (enabled and expanded) then
+        return expanded, advBtn
+    end
+
+    AddColorPicker(container, health, options.colorKey, options.colorLabel, options.defaultColor, true, applyBars, applyBars)
+    HealthResource.AddEffectTextureDropdown(container, health, options.textureKey, options.textureLabel, applyBars)
+    return expanded, advBtn
+end
+
+function HealthResource.BuildColorControls(container, settings, applyBars)
+    local health = HealthResource.EnsureSettings(settings)
+    local fillGradientEnabled = health.healthBarGradient
+    if fillGradientEnabled == nil then
+        fillGradientEnabled = DEFAULT_HEALTH_BAR_GRADIENT
+    end
+    local gradientEnabled = health.healthBackgroundGradient
+    if gradientEnabled == nil then
+        gradientEnabled = DEFAULT_HEALTH_BACKGROUND_GRADIENT
+    end
+
+    local fillHeading = AceGUI:Create("Heading")
+    fillHeading:SetText("Health")
+    ColorHeading(fillHeading)
+    fillHeading:SetFullWidth(true)
+    container:AddChild(fillHeading)
+    local healthFillKey = "rb_health_fill"
+    local healthFillCollapsed = resourceBarCollapsedSections[healthFillKey]
+    AttachCollapseButton(fillHeading, healthFillCollapsed, function()
+        resourceBarCollapsedSections[healthFillKey] = not resourceBarCollapsedSections[healthFillKey]
+        CooldownCompanion:RefreshConfigPanel()
+    end)
+
+    if not healthFillCollapsed then
+        local fillGradientCb = AceGUI:Create("CheckBox")
+        fillGradientCb:SetLabel("Use Health Gradient")
+        fillGradientCb:SetValue(fillGradientEnabled == true)
+        fillGradientCb:SetFullWidth(true)
+        fillGradientCb:SetCallback("OnValueChanged", function(widget, event, val)
+            health.healthBarGradient = val == true
+            applyBars()
+            CooldownCompanion:RefreshConfigPanel()
+        end)
+        container:AddChild(fillGradientCb)
+
+        if fillGradientEnabled == true then
+            AddColorPicker(container, health, "healthBarFullColor", "Full Health", DEFAULT_HEALTH_BAR_FULL_COLOR, false, applyBars, applyBars)
+            AddColorPicker(container, health, "healthBarHalfColor", "Half Health", DEFAULT_HEALTH_BAR_HALF_COLOR, false, applyBars, applyBars)
+            AddColorPicker(container, health, "healthBarLowColor", "Low Health", DEFAULT_HEALTH_BAR_LOW_COLOR, false, applyBars, applyBars)
+        else
+            AddColorPicker(container, health, "healthBarColor", "Health Color", DEFAULT_HEALTH_BAR_COLOR, false, applyBars, applyBars)
+        end
+        HealthResource.AddOpacitySlider(container, health, "healthBarOpacity", "Health Opacity", DEFAULT_HEALTH_BAR_OPACITY, applyBars)
+    end
+
+    local missingHeading = AceGUI:Create("Heading")
+    missingHeading:SetText("Missing Health")
+    ColorHeading(missingHeading)
+    missingHeading:SetFullWidth(true)
+    container:AddChild(missingHeading)
+    local healthMissingKey = "rb_health_missing"
+    local healthMissingCollapsed = resourceBarCollapsedSections[healthMissingKey]
+    local healthMissingCollapseBtn = AttachCollapseButton(missingHeading, healthMissingCollapsed, function()
+        resourceBarCollapsedSections[healthMissingKey] = not resourceBarCollapsedSections[healthMissingKey]
+        CooldownCompanion:RefreshConfigPanel()
+    end)
+    local missingInfoBtn = CreateInfoButton(missingHeading.frame, healthMissingCollapseBtn, "LEFT", "RIGHT", 4, 0, {
+        "Missing Health",
+        {"Resource Background Color is used by regular resource bars. Health uses Missing Health for its empty region.", 1, 1, 1, true},
+    }, missingHeading)
+    missingHeading.right:ClearAllPoints()
+    missingHeading.right:SetPoint("RIGHT", missingHeading.frame, "RIGHT", -3, 0)
+    missingHeading.right:SetPoint("LEFT", missingInfoBtn, "RIGHT", 4, 0)
+
+    if not healthMissingCollapsed then
+        local bgGradientCb = AceGUI:Create("CheckBox")
+        bgGradientCb:SetLabel("Use Missing Health Gradient")
+        bgGradientCb:SetValue(gradientEnabled == true)
+        bgGradientCb:SetFullWidth(true)
+        bgGradientCb:SetCallback("OnValueChanged", function(widget, event, val)
+            health.healthBackgroundGradient = val == true
+            applyBars()
+            CooldownCompanion:RefreshConfigPanel()
+        end)
+        container:AddChild(bgGradientCb)
+
+        if gradientEnabled == true then
+            AddColorPicker(container, health, "healthBackgroundFullColor", "Missing Health Full", DEFAULT_HEALTH_BACKGROUND_FULL_COLOR, false, applyBars, applyBars)
+            AddColorPicker(container, health, "healthBackgroundHalfColor", "Missing Health Half", DEFAULT_HEALTH_BACKGROUND_HALF_COLOR, false, applyBars, applyBars)
+            AddColorPicker(container, health, "healthBackgroundLowColor", "Missing Health Low", DEFAULT_HEALTH_BACKGROUND_LOW_COLOR, false, applyBars, applyBars)
+        else
+            AddColorPicker(container, health, "healthBackgroundColor", "Missing Health Color", DEFAULT_HEALTH_BACKGROUND_COLOR, false, applyBars, applyBars)
+        end
+
+        HealthResource.AddOpacitySlider(container, health, "healthBackgroundOpacity", "Missing Health Opacity", DEFAULT_HEALTH_BACKGROUND_OPACITY, applyBars)
+    end
+
+    local effectsHeading = AceGUI:Create("Heading")
+    effectsHeading:SetText("Health Effects")
+    ColorHeading(effectsHeading)
+    effectsHeading:SetFullWidth(true)
+    container:AddChild(effectsHeading)
+    local healthEffectsKey = "rb_health_effects"
+    local healthEffectsCollapsed = resourceBarCollapsedSections[healthEffectsKey]
+    AttachCollapseButton(effectsHeading, healthEffectsCollapsed, function()
+        resourceBarCollapsedSections[healthEffectsKey] = not resourceBarCollapsedSections[healthEffectsKey]
+        CooldownCompanion:RefreshConfigPanel()
+    end)
+
+    if healthEffectsCollapsed then
+        return
+    end
+
+    local absorbsCb = AceGUI:Create("CheckBox")
+    absorbsCb:SetLabel("Show Absorbs")
+    absorbsCb:SetValue(health.showAbsorbs == true)
+    absorbsCb:SetFullWidth(true)
+    absorbsCb:SetCallback("OnValueChanged", function(widget, event, val)
+        health.showAbsorbs = val == true
+        applyBars()
+        CooldownCompanion:RefreshConfigPanel()
+    end)
+    container:AddChild(absorbsCb)
+    HealthResource.AddEffectStyleControls(container, absorbsCb, health, {
+        enabledKey = "showAbsorbs",
+        advancedKey = "healthAbsorbs",
+        colorKey = "healthAbsorbColor",
+        textureKey = "healthAbsorbTexture",
+        colorLabel = "Absorb Color",
+        textureLabel = "Absorb Texture",
+        defaultColor = DEFAULT_HEALTH_ABSORB_COLOR,
+    }, applyBars)
+
+    local healAbsorbsCb = AceGUI:Create("CheckBox")
+    healAbsorbsCb:SetLabel("Show Healing Absorbs")
+    healAbsorbsCb:SetValue(health.showHealAbsorbs == true)
+    healAbsorbsCb:SetFullWidth(true)
+    healAbsorbsCb:SetCallback("OnValueChanged", function(widget, event, val)
+        health.showHealAbsorbs = val == true
+        applyBars()
+        CooldownCompanion:RefreshConfigPanel()
+    end)
+    container:AddChild(healAbsorbsCb)
+    HealthResource.AddEffectStyleControls(container, healAbsorbsCb, health, {
+        enabledKey = "showHealAbsorbs",
+        advancedKey = "healthHealAbsorbs",
+        colorKey = "healthHealAbsorbColor",
+        textureKey = "healthHealAbsorbTexture",
+        colorLabel = "Healing Absorb Color",
+        textureLabel = "Healing Absorb Texture",
+        defaultColor = DEFAULT_HEALTH_HEAL_ABSORB_COLOR,
+    }, applyBars)
+
+    local incomingHealsCb = AceGUI:Create("CheckBox")
+    incomingHealsCb:SetLabel("Show Incoming Heals")
+    incomingHealsCb:SetValue(health.showIncomingHeals == true)
+    incomingHealsCb:SetFullWidth(true)
+    incomingHealsCb:SetCallback("OnValueChanged", function(widget, event, val)
+        health.showIncomingHeals = val == true
+        applyBars()
+        CooldownCompanion:RefreshConfigPanel()
+    end)
+    container:AddChild(incomingHealsCb)
+    HealthResource.AddEffectStyleControls(container, incomingHealsCb, health, {
+        enabledKey = "showIncomingHeals",
+        advancedKey = "healthIncomingHeals",
+        colorKey = "healthIncomingHealColor",
+        textureKey = "healthIncomingHealTexture",
+        colorLabel = "Incoming Heal Color",
+        textureLabel = "Incoming Heal Texture",
+        defaultColor = DEFAULT_HEALTH_INCOMING_HEAL_COLOR,
+    }, applyBars)
+
+    local lowHealthAlertCb = AceGUI:Create("CheckBox")
+    lowHealthAlertCb:SetLabel("Show Low Health Alert")
+    lowHealthAlertCb:SetValue(health.showLowHealthAlert == true)
+    lowHealthAlertCb:SetFullWidth(true)
+    lowHealthAlertCb:SetCallback("OnValueChanged", function(widget, event, val)
+        health.showLowHealthAlert = val == true
+        applyBars()
+        CooldownCompanion:RefreshConfigPanel()
+    end)
+    container:AddChild(lowHealthAlertCb)
+    local lowHealthAlertAdvancedExpanded, lowHealthAlertAdvancedBtn = HealthResource.AddEffectStyleControls(container, lowHealthAlertCb, health, {
+        enabledKey = "showLowHealthAlert",
+        advancedKey = "healthLowHealthAlert",
+        colorKey = "healthLowHealthAlertColor",
+        textureKey = "healthLowHealthAlertTexture",
+        colorLabel = "Low Health Alert Color",
+        textureLabel = "Low Health Alert Texture",
+        defaultColor = DEFAULT_HEALTH_LOW_HEALTH_ALERT_COLOR,
+    }, applyBars)
+    local lowHealthAlertInfoAnchor = lowHealthAlertAdvancedBtn
+    local lowHealthAlertInfoOffset = 4
+    if not (lowHealthAlertInfoAnchor and lowHealthAlertInfoAnchor:IsShown()) then
+        lowHealthAlertInfoAnchor = lowHealthAlertCb.checkbg
+        lowHealthAlertInfoOffset = lowHealthAlertCb.text:GetStringWidth() + 4
+    end
+    CreateInfoButton(lowHealthAlertCb.frame, lowHealthAlertInfoAnchor, "LEFT", "RIGHT", lowHealthAlertInfoOffset, 0, {
+        "Low Health Alert",
+        {"Blizzard sets the low-health threshold to 35%. This cannot be configured.", 1, 1, 1, true},
+    }, lowHealthAlertCb)
+    if health.showLowHealthAlert == true and lowHealthAlertAdvancedExpanded then
+        local missingHealthOnlyCb = AceGUI:Create("CheckBox")
+        missingHealthOnlyCb:SetLabel("Pulse Missing Health Only")
+        missingHealthOnlyCb:SetValue(health.healthLowHealthAlertMissingHealthOnly == true)
+        missingHealthOnlyCb:SetFullWidth(true)
+        missingHealthOnlyCb:SetCallback("OnValueChanged", function(widget, event, val)
+            health.healthLowHealthAlertMissingHealthOnly = val == true
+            applyBars()
+        end)
+        ApplyCheckboxIndent(missingHealthOnlyCb, 20)
+        container:AddChild(missingHealthOnlyCb)
+    end
+
+    if AddPreviewToggleButton then
+        AddPreviewToggleButton(container, "Preview Absorbs", function()
+            return CooldownCompanion:IsHealthEffectPreviewActive("absorbs")
+        end, function(show)
+            CooldownCompanion:SetHealthEffectPreview("absorbs", show)
+        end)
+
+        AddPreviewToggleButton(container, "Preview Heal Absorbs", function()
+            return CooldownCompanion:IsHealthEffectPreviewActive("healAbsorbs")
+        end, function(show)
+            CooldownCompanion:SetHealthEffectPreview("healAbsorbs", show)
+        end)
+
+        AddPreviewToggleButton(container, "Preview Incoming Heals", function()
+            return CooldownCompanion:IsHealthEffectPreviewActive("incomingHeals")
+        end, function(show)
+            CooldownCompanion:SetHealthEffectPreview("incomingHeals", show)
+        end)
+
+        AddPreviewToggleButton(container, "Preview Low Health Alert", function()
+            return CooldownCompanion:IsHealthEffectPreviewActive("lowHealthAlert")
+        end, function(show)
+            CooldownCompanion:SetHealthEffectPreview("lowHealthAlert", show)
+        end)
+    end
+end
+
+CS.healthResourceUI = HealthResource
 
 local function BuildResourceBarAnchoringPanel(container)
     local db = CooldownCompanion.db.profile
@@ -238,11 +573,15 @@ local function BuildResourceBarAnchoringPanel(container)
         local rbHeightAdvBtns = {}
         local resources = GetConfigActiveResources()
         for _, pt in ipairs(resources) do
-            local name = POWER_NAMES[pt] or (L["Power "] .. pt)
-            if not settings.resources[pt] then
+            local name = POWER_NAMES[pt] or ("Power " .. pt)
+            if pt == HealthResource.ID then
+                HealthResource.EnsureSettings(settings)
+            elseif not settings.resources[pt] then
                 settings.resources[pt] = {}
             end
-            local enabled = settings.resources[pt].enabled ~= false
+            local enabled = pt == HealthResource.ID
+                and settings.resources[pt].enabled == true
+                or settings.resources[pt].enabled ~= false
 
             local resCb = AceGUI:Create("CheckBox")
             resCb:SetLabel(L["Show "] .. name)
@@ -253,6 +592,9 @@ local function BuildResourceBarAnchoringPanel(container)
                     settings.resources[pt] = {}
                 end
                 settings.resources[pt].enabled = val
+                if pt == HealthResource.ID then
+                    CS.resourceStylingTab = val and "health" or "bar_text"
+                end
                 CooldownCompanion:ApplyResourceBars()
                 CooldownCompanion:UpdateAnchorStacking()
                 CooldownCompanion:RefreshConfigPanel()
@@ -505,8 +847,6 @@ end
 
 ------------------------------------------------------------------------
 
-local LSM = LibStub("LibSharedMedia-3.0")
-
 local function GetResourceBarTextureOptions()
     local t = {}
     for _, name in ipairs(LSM:List("statusbar")) do
@@ -571,9 +911,19 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
     local mode = sectionMode or "all"
     local showBarText = (mode == "all" or mode == "bar_text")
     local showColors = (mode == "all" or mode == "colors")
+    local showHealthColors = (mode == "all" or mode == "health")
     local showAuraOverlays = (mode == "all" or mode == "colors") -- aura overlays merged into Colors tab
 
     local applyBars = function() CooldownCompanion:ApplyResourceBars() end
+    local healthResourceID = -1 -- Keep aligned with RB.RESOURCE_HEALTH without adding an upvalue here.
+    local function isHealthTextFormat(textFormat)
+        return textFormat == "percent"
+            or textFormat == "percent_no_sign"
+            or textFormat == "current"
+            or textFormat == "current_max"
+            or textFormat == "current_percent"
+            or textFormat == "current_percent_no_sign"
+    end
 
     if showBarText then
     -- Bar Texture
@@ -604,8 +954,8 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
         container:AddChild(brightSlider)
     end
 
-    -- Background Color
-    AddColorPicker(container, settings, "backgroundColor", L["Background Color"], { 0, 0, 0, 0.5 }, true, applyBars)
+    -- Resource Background Color
+    AddColorPicker(container, settings, "backgroundColor", "Resource Background Color", { 0, 0, 0, 0.5 }, true, applyBars)
 
     -- Border Style
     local borderDrop = AceGUI:Create("Dropdown")
@@ -665,16 +1015,19 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
         local resources = GetConfigActiveResources()
         for _, pt in ipairs(resources) do
             local capturedPt = pt
+            local isHealthResource = capturedPt == healthResourceID
             local isSegmentedResource = (SEGMENTED_TYPES[capturedPt] == true) or (capturedPt == 100)
-            if not settings.resources[capturedPt] then
+            if isHealthResource then
+                CS.healthResourceUI.EnsureSettings(settings)
+            elseif not settings.resources[capturedPt] then
                 settings.resources[capturedPt] = {}
             end
             local resSettings = settings.resources[capturedPt]
             local name = POWER_NAMES[capturedPt] or (L["Power "] .. capturedPt)
 
             local showTextEnabled
-            if isSegmentedResource then
-                -- Segmented resources are off by default unless explicitly enabled.
+            if isHealthResource or isSegmentedResource then
+                -- Segmented resources and Health are off by default unless explicitly enabled.
                 showTextEnabled = resSettings.showText == true
             else
                 showTextEnabled = resSettings.showText ~= false
@@ -686,7 +1039,13 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
             cb:SetFullWidth(true)
             cb:SetCallback("OnValueChanged", function(widget, event, val)
                 if not settings.resources[capturedPt] then settings.resources[capturedPt] = {} end
-                if isSegmentedResource then
+                if isHealthResource then
+                    local healthSettings = settings.resources[capturedPt]
+                    healthSettings.showText = val and true or false
+                    if not isHealthTextFormat(healthSettings.textFormat) then
+                        healthSettings.textFormat = "percent"
+                    end
+                elseif isSegmentedResource then
                     settings.resources[capturedPt].showText = val and true or nil
                 else
                     if val then
@@ -706,7 +1065,24 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
                 textFormatDrop:SetLabel(L["Text Format"])
                 local textFormatOptions
                 local textFormatOrder
-                if isSegmentedResource then
+                if isHealthResource then
+                    textFormatOptions = {
+                        percent = "Percent",
+                        percent_no_sign = "Percent (No %)",
+                        current = "Current Health",
+                        current_max = "Current / Max Health",
+                        current_percent = "Current + Percent",
+                        current_percent_no_sign = "Current + Percent (No %)",
+                    }
+                    textFormatOrder = {
+                        "percent",
+                        "percent_no_sign",
+                        "current",
+                        "current_max",
+                        "current_percent",
+                        "current_percent_no_sign",
+                    }
+                elseif isSegmentedResource then
                     textFormatOptions = {
                         current = L["Current Value"],
                         current_max = L["Current / Max"],
@@ -721,8 +1097,12 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
                     textFormatOrder = { "current", "current_max", "percent" }
                 end
                 textFormatDrop:SetList(textFormatOptions, textFormatOrder)
-                local textFormatValue = resSettings.textFormat or DEFAULT_RESOURCE_TEXT_FORMAT
-                if isSegmentedResource then
+                local textFormatValue = resSettings.textFormat or (isHealthResource and "percent" or DEFAULT_RESOURCE_TEXT_FORMAT)
+                if isHealthResource then
+                    if not isHealthTextFormat(textFormatValue) then
+                        textFormatValue = "percent"
+                    end
+                elseif isSegmentedResource then
                     if textFormatValue ~= "current" and textFormatValue ~= "current_max" then
                         textFormatValue = DEFAULT_RESOURCE_TEXT_FORMAT
                     end
@@ -734,7 +1114,13 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
                 textFormatDrop:SetValue(textFormatValue)
                 textFormatDrop:SetFullWidth(true)
                 textFormatDrop:SetCallback("OnValueChanged", function(widget, event, val)
-                    if isSegmentedResource then
+                    if isHealthResource then
+                        if isHealthTextFormat(val) then
+                            settings.resources[capturedPt].textFormat = val
+                        else
+                            settings.resources[capturedPt].textFormat = "percent"
+                        end
+                    elseif isSegmentedResource then
                         if val == "current" or val == "current_max" then
                             settings.resources[capturedPt].textFormat = val
                         else
@@ -841,6 +1227,18 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
 
     end
 
+    if showHealthColors then
+        local health = settings.resources and settings.resources[healthResourceID]
+        if health and health.enabled == true then
+            CS.healthResourceUI.BuildColorControls(container, settings, applyBars)
+        elseif mode == "health" then
+            local label = AceGUI:Create("Label")
+            label:SetText("Enable Health to configure health colors.")
+            label:SetFullWidth(true)
+            container:AddChild(label)
+        end
+    end
+
     if showColors then
     -- ============ Per-Resource Colors Section ============
     local colorHeading = AceGUI:Create("Heading")
@@ -858,8 +1256,8 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
     end)
 
     local colorInfoBtn = CreateInfoButton(colorHeading.frame, colorCollapseBtn, "LEFT", "RIGHT", 4, 0, {
-        L["Per-Resource Colors"],
-        {L["These color settings are per-specialization. Switch specs to configure different colors."], 1, 1, 1, true},
+        "Per-Resource Colors",
+        {"Resource colors are saved per specialization.", 1, 1, 1, true},
     }, colorHeading)
 
     colorHeading.right:ClearAllPoints()
@@ -882,7 +1280,9 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
                 settings.resources[pt] = {}
             end
 
-            if pt == 4 then
+            if pt == healthResourceID then
+                -- Health colors are character-level and rendered above.
+            elseif pt == 4 then
                 -- Combo Points: two color pickers (normal vs at max)
                 local _p4n = { comboColor = ReadSpecOverrideKey(settings, 4, _colorSpecID, "comboColor", DEFAULT_COMBO_COLOR) }
                 AddColorPicker(container, _p4n, "comboColor", L["Combo Points"], DEFAULT_COMBO_COLOR, false,
@@ -1130,8 +1530,8 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
                             function() WriteSpecOverrideKey(settings, capturedPt, _colorSpecID, "segThresholdColor", _pSeg.segThresholdColor); applyBars() end,
                             function() WriteSpecOverrideKey(settings, capturedPt, _colorSpecID, "segThresholdColor", _pSeg.segThresholdColor) end)
                     end
-                elseif capturedPt ~= 101 then
-                    -- Stagger (101) has built-in threshold coloring; tick markers not applicable
+                elseif capturedPt ~= 101 and capturedPt ~= healthResourceID then
+                    -- Stagger (101) and Health have dedicated coloring; tick markers not applicable
                     local tickAdvKey = "rbTickMarker_" .. capturedPt
                     local _tickEnabled = ReadSpecOverrideKey(settings, capturedPt, _colorSpecID, "continuousTickEnabled", false) == true
                     local tickEnableCb = AceGUI:Create("CheckBox")
@@ -1268,6 +1668,10 @@ end
 
 local function BuildResourceBarColorsStylingPanel(container)
     BuildResourceBarStylingPanel(container, "colors")
+end
+
+local function BuildResourceBarHealthStylingPanel(container)
+    BuildResourceBarStylingPanel(container, "health")
 end
 
 ------------------------------------------------------------------------
@@ -2543,7 +2947,10 @@ local function BuildLayoutOrderPanel(container)
         return
     end
     local function GetResourceColor(pt)
-        if pt == 4 then return ReadSpecOverrideKey(rbSettings, pt, layoutSpecID, "comboColor", DEFAULT_COMBO_COLOR)
+        if pt == HealthResource.ID then
+            local health = rbSettings.resources and rbSettings.resources[HealthResource.ID]
+            return health and health.healthBarColor or DEFAULT_HEALTH_BAR_COLOR
+        elseif pt == 4 then return ReadSpecOverrideKey(rbSettings, pt, layoutSpecID, "comboColor", DEFAULT_COMBO_COLOR)
         elseif pt == 5 then return ReadSpecOverrideKey(rbSettings, pt, layoutSpecID, "runeReadyColor", DEFAULT_RUNE_READY_COLOR)
         elseif pt == 7 then return ReadSpecOverrideKey(rbSettings, pt, layoutSpecID, "shardReadyColor", DEFAULT_SHARD_READY_COLOR)
         elseif pt == 9 then return ReadSpecOverrideKey(rbSettings, pt, layoutSpecID, "holyColor", DEFAULT_HOLY_COLOR)
@@ -2676,9 +3083,11 @@ local function BuildLayoutOrderPanel(container)
 
     -- Class resource slots
     for _, pt in ipairs(activeResources) do
-        if not rbSettings.resources[pt] then rbSettings.resources[pt] = {} end
+        if pt == HealthResource.ID then
+            HealthResource.EnsureSettings(rbSettings)
+        elseif not rbSettings.resources[pt] then rbSettings.resources[pt] = {} end
         local res = rbSettings.resources[pt]
-        local showResource = res.enabled ~= false
+        local showResource = pt == HealthResource.ID and res.enabled == true or res.enabled ~= false
         if showResource and pt == 0 and rbSettings.hideManaForNonHealer then
             local specIdx = C_SpecializationInfo.GetSpecialization()
             if specIdx then
@@ -2846,5 +3255,6 @@ ST._BuildResourceBarPositioningPanel = BuildResourceBarPositioningPanel
 ST._BuildResourceBarStylingPanel = BuildResourceBarStylingPanel
 ST._BuildResourceBarBarTextStylingPanel = BuildResourceBarBarTextStylingPanel
 ST._BuildResourceBarColorsStylingPanel = BuildResourceBarColorsStylingPanel
+ST._BuildResourceBarHealthStylingPanel = BuildResourceBarHealthStylingPanel
 ST._BuildCustomAuraBarPanel = BuildCustomAuraBarPanel
 ST._BuildLayoutOrderPanel = BuildLayoutOrderPanel
