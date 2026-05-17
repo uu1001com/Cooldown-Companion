@@ -354,7 +354,7 @@ local function PopulateCol2PanelCreationBar(panelBtnWidth)
     )
 
     local otherPanelBtn = AceGUI:Create("Button")
-    otherPanelBtn:SetText("Extra")
+    otherPanelBtn:SetText("More")
     otherPanelBtn:SetCallback("OnClick", function()
         local menu = EnsureCol2PanelTypeMenu()
         UIDropDownMenu_Initialize(menu, function(self, level)
@@ -616,6 +616,40 @@ local function SubmitInlineAdd(rawInput)
     return true
 end
 
+local function ConfigureInlineAddInstructions(inputBox, placeholderText)
+    local editFrame = inputBox and inputBox.editbox
+    if not editFrame then
+        return function() end
+    end
+
+    local instructions = editFrame._cdcInlineAddInstructions
+    if not instructions then
+        instructions = editFrame:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+        instructions:SetPoint("LEFT", editFrame, "LEFT", 6, 0)
+        instructions:SetPoint("RIGHT", editFrame, "RIGHT", -6, 0)
+        instructions:SetJustifyH("LEFT")
+        instructions:SetTextColor(0.5, 0.5, 0.5)
+        editFrame._cdcInlineAddInstructions = instructions
+    end
+    instructions:SetText(placeholderText)
+
+    local function Update(text)
+        instructions:SetShown((text or "") == "")
+    end
+
+    local prevOnRelease = inputBox.events and inputBox.events["OnRelease"]
+    inputBox:SetCallback("OnRelease", function(widget)
+        if prevOnRelease then
+            prevOnRelease(widget, "OnRelease")
+        end
+        instructions:Hide()
+        instructions:SetText("")
+    end)
+
+    Update(editFrame:GetText())
+    return Update
+end
+
 local function BuildInlineAddControls(panelContainer, panelMeta, panel, panelId, btnCount)
     if CS.addingToPanelId ~= panelId or (panel.displayMode == "textures" and btnCount >= 1) then
         return
@@ -629,12 +663,14 @@ local function BuildInlineAddControls(panelContainer, panelMeta, panel, panelId,
     inputBox:DisableButton(true)
     inputBox:SetFullWidth(true)
     panelMeta.addInputFrame = inputBox.frame
+    local updatePlaceholder = ConfigureInlineAddInstructions(inputBox, "Add spells, items, and IDs")
     inputBox:SetCallback("OnEnterPressed", function(widget, event, text)
         if CS.ConsumeAutocompleteEnter() then return end
         CS.HideAutocomplete()
         SubmitInlineAdd(text)
     end)
     inputBox:SetCallback("OnTextChanged", function(widget, event, text)
+        updatePlaceholder(text)
         CS.newInput = text
         if text and #text >= 1 then
             local results = SearchAutocomplete(text)
@@ -1092,11 +1128,23 @@ local function RefreshColumn2()
         if CS.col2ButtonBar then CS.col2ButtonBar:Hide() end
         if col2 and col2._infoBtn then col2._infoBtn:Hide() end
         if not col2 then return end
+        if col2._infoBtn and not col2._defaultInfoOnEnter then
+            col2._defaultInfoOnEnter = col2._infoBtn:GetScript("OnEnter")
+            col2._defaultInfoOnLeave = col2._infoBtn:GetScript("OnLeave")
+        end
 
         -- Update column title based on active bar panel tab
-        local col2Title = L["Customization: Resources"]
-        if CS.barPanelTab == "castbar_anchoring" then
-            col2Title = L["Customization: Cast Bar"]
+        local col2Title = "Customization: Resources"
+        if CS.barPanelTab == "resource_anchoring" then
+            local specIdx = C_SpecializationInfo.GetSpecialization()
+            if specIdx then
+                local _, specName = C_SpecializationInfo.GetSpecializationInfo(specIdx)
+                if specName and specName ~= "" then
+                    col2Title = "Customization: Resources (" .. ST._GetClassColoredText(specName) .. ")"
+                end
+            end
+        elseif CS.barPanelTab == "castbar_anchoring" then
+            col2Title = "Customization: Cast Bar"
         elseif CS.barPanelTab == "frame_anchoring" then
             col2Title = L["Customization: Unit Frames"]
         end
@@ -1105,6 +1153,20 @@ local function RefreshColumn2()
         HideAllBarWidgets(col2)
 
         if CS.barPanelTab == "resource_anchoring" then
+            if col2._infoBtn then
+                col2._infoBtn:SetScript("OnEnter", function(self)
+                    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                    GameTooltip:AddLine("Resource Customization")
+                    GameTooltip:AddLine("Controls how resource bars are styled and positioned for the active specialization.", 1, 1, 1, false)
+                    GameTooltip:AddLine(" ")
+                    GameTooltip:AddLine("These settings also apply to Custom Bars.", 1, 1, 1, false)
+                    GameTooltip:Show()
+                end)
+                col2._infoBtn:SetScript("OnLeave", function()
+                    GameTooltip:Hide()
+                end)
+                col2._infoBtn:Show()
+            end
             if not col2._resourceStylingTabGroup then
                 local tabGroup = AceGUI:Create("TabGroup")
                 tabGroup:SetLayout("Fill")
@@ -1146,23 +1208,13 @@ local function RefreshColumn2()
                 col2._resourceStylingTabGroup = tabGroup
             end
 
-            -- Build dynamic "Colors: SpecName" tab text (updates on spec change)
-            local colorsTabText = L["Colors"]
-            local specIdx = C_SpecializationInfo.GetSpecialization()
-            if specIdx then
-                local _, specName = C_SpecializationInfo.GetSpecializationInfo(specIdx)
-                if specName and specName ~= "" then
-                    colorsTabText = L["Colors: "] .. ST._GetClassColoredText(specName)
-                end
-            end
-
             local rbSettings = CooldownCompanion:GetResourceBarSettings()
             local health = rbSettings and rbSettings.resources and rbSettings.resources[RESOURCE_HEALTH]
             local healthEnabled = health and health.enabled == true
             local tabs = {
                 { value = "bar_text", text = "Styling" },
                 { value = "positioning", text = "Layout" },
-                { value = "colors", text = colorsTabText },
+                { value = "colors", text = "Colors" },
             }
             if healthEnabled then
                 tabs[#tabs + 1] = { value = "health", text = "Health" }
@@ -1254,7 +1306,11 @@ local function RefreshColumn2()
 
     -- Normal mode: hide bars styling scroll and tab groups
     if col2 then HideAllBarWidgets(col2) end
-    if col2 and col2._infoBtn then col2._infoBtn:Show() end
+    if col2 and col2._infoBtn then
+        if col2._defaultInfoOnEnter then col2._infoBtn:SetScript("OnEnter", col2._defaultInfoOnEnter) end
+        if col2._defaultInfoOnLeave then col2._infoBtn:SetScript("OnLeave", col2._defaultInfoOnLeave) end
+        col2._infoBtn:Show()
+    end
 
     CancelDrag()
     CS.HideAutocomplete()

@@ -55,6 +55,28 @@ local function RefreshConfigPanelForPreviewToggle()
     return true
 end
 
+local function AddDurationFormatDropdown(container, settings, refreshCallback, opts)
+    if not (container and settings and CooldownCompanion.GetDurationFormatOptions) then
+        return nil
+    end
+
+    local formatOptions, formatOrder = CooldownCompanion:GetDurationFormatOptions()
+    local durationDrop = AceGUI:Create("Dropdown")
+    durationDrop:SetLabel("Duration Format")
+    durationDrop:SetList(formatOptions, formatOrder)
+    durationDrop:SetValue(CooldownCompanion.GetDurationFormat(settings))
+    durationDrop:SetFullWidth(true)
+    durationDrop:SetCallback("OnValueChanged", function(widget, event, val)
+        settings.durationFormat = CooldownCompanion.NormalizeDurationFormat(val)
+        settings.decimalTimers = nil
+        if refreshCallback then
+            refreshCallback()
+        end
+    end)
+    container:AddChild(durationDrop)
+    return durationDrop
+end
+
 local function AddPreviewToggleButton(container, offLabel, isActiveFn, setActiveFn)
     if not (container and isActiveFn and setActiveFn) then
         return nil
@@ -111,10 +133,20 @@ local function AddConditionalPreviewButton(container, label, previewKind, opts)
     end)
 end
 
-local function BuildCooldownTextControls(container, styleTable, refreshCallback)
+local function BuildCooldownTextControls(container, styleTable, refreshCallback, opts)
+    local fallbackStyle = opts and opts.fallbackStyle
+    local showCooldownText = styleTable.showCooldownText
+    if showCooldownText == nil and type(fallbackStyle) == "table" then
+        showCooldownText = fallbackStyle.showCooldownText
+    end
+    local showAuraText = styleTable.showAuraText
+    if showAuraText == nil and type(fallbackStyle) == "table" then
+        showAuraText = fallbackStyle.showAuraText
+    end
+
     local cdTextCb = AceGUI:Create("CheckBox")
-    cdTextCb:SetLabel(L["Show Cooldown Text"])
-    cdTextCb:SetValue(styleTable.showCooldownText or false)
+    cdTextCb:SetLabel("Show Cooldown Text")
+    cdTextCb:SetValue(showCooldownText or false)
     cdTextCb:SetFullWidth(true)
     cdTextCb:SetCallback("OnValueChanged", function(widget, event, val)
         styleTable.showCooldownText = val
@@ -123,27 +155,13 @@ local function BuildCooldownTextControls(container, styleTable, refreshCallback)
     end)
     container:AddChild(cdTextCb)
 
-    if styleTable.showCooldownText then
+    if not (opts and opts.isOverride) and (showCooldownText or showAuraText ~= false) then
+        AddDurationFormatDropdown(container, styleTable, refreshCallback, opts)
+    end
+
+    if showCooldownText then
         AddFontControls(container, styleTable, "cooldown", {}, refreshCallback)
         AddColorPicker(container, styleTable, "cooldownFontColor", L["Font Color"], {1, 1, 1, 1}, false, refreshCallback, refreshCallback)
-
-        local decimalCheck = AceGUI:Create("CheckBox")
-        decimalCheck:SetLabel(L["Show Decimal Point"])
-        decimalCheck:SetValue(styleTable.decimalTimers or false)
-        decimalCheck:SetFullWidth(true)
-        decimalCheck:SetCallback("OnValueChanged", function(widget, event, val)
-            styleTable.decimalTimers = val or nil
-            refreshCallback()
-        end)
-        container:AddChild(decimalCheck)
-
-        CreateInfoButton(decimalCheck.frame, decimalCheck.checkbg, "LEFT", "RIGHT", decimalCheck.text:GetStringWidth() + 4, 0, {
-            L["Show Decimal Point"],
-            {L["Shows one decimal place on duration text"], 1, 1, 1, true},
-            {L["(e.g. \"4.5\" instead of \"5\")."], 1, 1, 1, true},
-            " ",
-            {L["Bar and text mode only."], 0.7, 0.7, 0.7, true},
-        }, decimalCheck)
 
         local cdAnchorDrop = AddAnchorDropdown(container, styleTable, "cooldownTextAnchor", "CENTER", refreshCallback)
 
@@ -1027,8 +1045,8 @@ local function BuildPandemicBarControls(container, styleTable, refreshCallback, 
     BuildBarEffectControls(container, styleTable, refreshCallback, {
         colorKey = "barPandemicColor", colorLabel = L["Pandemic Bar Color"],
         defaultColor = {1, 0.5, 0, 1},
-        enableKey = "showPandemicGlow", enableLabel = L["Show Pandemic Color/Glow"],
-        effectKey = "pandemicBarEffect", effectLabel = L["Pandemic Effect"],
+        enableKey = "showPandemicGlow", enableLabel = "Show Pandemic Indicator",
+        effectKey = "pandemicBarEffect", effectLabel = "Pandemic Effect",
         effectColorKey = "pandemicBarEffectColor", effectColorLabel = "Pandemic Effect Color",
         defaultEffectColor = {1, 0.5, 0, 1},
         effectSizeKey = "pandemicBarEffectSize", effectThicknessKey = "pandemicBarEffectThickness",
@@ -1270,6 +1288,7 @@ end
 -- EXPORTS
 ------------------------------------------------------------------------
 ST._BuildCooldownTextControls = BuildCooldownTextControls
+ST._AddDurationFormatDropdown = AddDurationFormatDropdown
 ST._AddPreviewToggleButton = AddPreviewToggleButton
 ST._RefreshConfigPanelForPreviewToggle = RefreshConfigPanelForPreviewToggle
 ST._AddConditionalPreviewButton = AddConditionalPreviewButton

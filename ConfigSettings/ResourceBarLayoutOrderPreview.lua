@@ -25,8 +25,6 @@ local ApplyIconTexCoord = ST._ApplyIconTexCoord
 
 local POWER_NAMES = RB.POWER_NAMES
 local SEGMENTED_TYPES = RB.SEGMENTED_TYPES
-local MAX_CUSTOM_AURA_BARS = RB.MAX_CUSTOM_AURA_BARS or ST.MAX_CUSTOM_AURA_BARS or 5
-local CUSTOM_AURA_BAR_BASE = RB.CUSTOM_AURA_BAR_BASE
 local RESOURCE_HEALTH = RB.RESOURCE_HEALTH
 local RESOURCE_MAELSTROM_WEAPON = RB.RESOURCE_MAELSTROM_WEAPON
 local DEFAULT_RESOURCE_TEXT_FONT = RB.DEFAULT_RESOURCE_TEXT_FONT
@@ -47,6 +45,9 @@ local StyleContinuousBar = RB.StyleContinuousBar
 local StyleHealthBar = RB.StyleHealthBar
 local StyleSegmentedBar = RB.StyleSegmentedBar
 local PrepareCustomAuraBar = RB.PrepareCustomAuraBar
+local EnsureCustomBarId = RB.EnsureCustomBarId
+local EnsureCustomBarLayout = RB.EnsureCustomBarLayout
+local GetCustomBarLayout = RB.GetCustomBarLayout
 local ApplyPreviewBarState = RB.ApplyPreviewBarState
 local GetMWMaxStacks = RB.GetMWMaxStacks
 local CreatePixelBorders = RB.CreatePixelBorders
@@ -745,17 +746,21 @@ local function GetShortLabel(label)
     return first
 end
 
-local function CollectPreviewSlots(rbSettings, cbSettings, layout, isVerticalLayout)
-    local activeResources = GetConfigActiveResources()
-    local customBars = CooldownCompanion:GetSpecCustomAuraBars()
+local function CollectPreviewSlots(rbSettings, cbSettings, layout, isVerticalLayout, includeResourceSlots)
+    includeResourceSlots = includeResourceSlots == true
+    local activeResources = includeResourceSlots and GetConfigActiveResources() or {}
+    local customBars = includeResourceSlots and CooldownCompanion:GetSpecCustomAuraBars() or {}
     local primarySlots = {}
     local castSlots = {}
-    local resourceBarsEnabled = rbSettings and rbSettings.enabled
+    local resourceBarsEnabled = includeResourceSlots and rbSettings and rbSettings.enabled
 
-    layout.resources = layout.resources or {}
-    layout.customAuraBarSlots = layout.customAuraBarSlots or {}
-    rbSettings = rbSettings or {}
-    rbSettings.resources = rbSettings.resources or {}
+    if includeResourceSlots then
+        layout.resources = layout.resources or {}
+        layout.customAuraBarSlots = layout.customAuraBarSlots or {}
+        layout.customBars = layout.customBars or {}
+        rbSettings = rbSettings or {}
+        rbSettings.resources = rbSettings.resources or {}
+    end
 
     local function GetSlotColor(powerType)
         if powerType == RESOURCE_HEALTH then
@@ -852,32 +857,34 @@ local function CollectPreviewSlots(rbSettings, cbSettings, layout, isVerticalLay
     end
 
     if resourceBarsEnabled then
-        for slotIndex = 1, MAX_CUSTOM_AURA_BARS do
-            local customAura = customBars and customBars[slotIndex]
-            if customAura and customAura.enabled and customAura.spellID and not IsTruthyConfigFlag(customAura.independentAnchorEnabled) then
+        for customIndex, customAura in ipairs(customBars or {}) do
+            if customAura and customAura.enabled and customAura.spellID then
+                local customBarId = EnsureCustomBarId(rbSettings, customAura)
                 local spellInfo = C_Spell.GetSpellInfo(customAura.spellID)
-                local label = spellInfo and spellInfo.name or ("Custom Aura " .. slotIndex)
-                local slotName = "Custom Aura " .. slotIndex .. ": " .. label
+                local label = spellInfo and spellInfo.name or customAura.label or ("Custom Bar " .. customIndex)
+                local slotName = "Custom Bar: " .. label
                 local function EnsureLayoutSlot()
-                    layout.customAuraBarSlots[slotIndex] = layout.customAuraBarSlots[slotIndex] or {
-                        position = "below",
-                        order = 1000 + slotIndex,
-                    }
-                    return layout.customAuraBarSlots[slotIndex]
+                    return EnsureCustomBarLayout(rbSettings, nil, customBarId, 1000 + customIndex)
                 end
 
                 table_insert(primarySlots, {
-                    id = "custom:" .. tostring(slotIndex),
+                    id = "custom:" .. tostring(customBarId),
                     slotCategory = "primary",
                     kind = "custom",
-                    customAuraIndex = slotIndex,
-                    powerType = CUSTOM_AURA_BAR_BASE + slotIndex - 1,
+                    customAuraIndex = customIndex,
+                    customBarId = customBarId,
+                    customEntry = {
+                        kind = "custom",
+                        customBarIndex = customIndex,
+                        customBarId = customBarId,
+                        config = customAura,
+                    },
                     label = slotName,
                     shortLabel = GetShortLabel(label),
                     color = CloneColor(customAura.barColor, { 0.52, 0.64, 1.0, 1 }),
                     icon = C_Spell.GetSpellTexture(customAura.spellID) or LAYOUT_PREVIEW_ICON_FALLBACK,
                     getPos = function()
-                        local slot = layout.customAuraBarSlots[slotIndex]
+                        local slot = GetCustomBarLayout(rbSettings, nil, customAura, false)
                         if isVerticalLayout then
                             local pos = slot and slot.verticalPosition
                             if pos == "left" or pos == "right" then
@@ -888,11 +895,11 @@ local function CollectPreviewSlots(rbSettings, cbSettings, layout, isVerticalLay
                         return (slot and slot.position) or "below"
                     end,
                     getOrder = function()
-                        local slot = layout.customAuraBarSlots[slotIndex]
+                        local slot = GetCustomBarLayout(rbSettings, nil, customAura, false)
                         if isVerticalLayout then
-                            return (slot and slot.verticalOrder) or (slot and slot.order) or (1000 + slotIndex)
+                            return (slot and slot.verticalOrder) or (slot and slot.order) or (1000 + customIndex)
                         end
-                        return (slot and slot.order) or (1000 + slotIndex)
+                        return (slot and slot.order) or (1000 + customIndex)
                     end,
                     setPos = function(value)
                         local slot = EnsureLayoutSlot()
@@ -1096,14 +1103,15 @@ local function EnsureResourcePreview(frame, slot, preview, width, height)
 
     local barInfo = frame.previewBarInfo
     local rbSettings = preview.rbSettings
-    local segmentGap = rbSettings.segmentGap or 4
+    local layout = preview.layout
+    local segmentGap = (layout and layout.segmentGap) or rbSettings.segmentGap or 4
 
     if slot.kind == "custom" then
         local customBars = CooldownCompanion:GetSpecCustomAuraBars()
         barInfo = PrepareCustomAuraBar(
             frame.previewCanvas,
             barInfo,
-            slot.powerType,
+            slot.customEntry,
             customBars,
             rbSettings,
             preview.isVerticalLayout,
@@ -1642,6 +1650,36 @@ local function RenderHorizontalLayout(preview, content, layoutDrag, sourcePanel,
 end
 
 local function RenderVerticalLayout(preview, content, layoutDrag, sourcePanel, primarySlots, castSlots, horizontalBarHeight, verticalBarWidth)
+    if #primarySlots == 0 and #castSlots > 0 then
+        local castPanel = RenderMirroredPanel(preview, content, sourcePanel)
+        local panelWidth = castPanel:GetWidth()
+        local panelHeight = castPanel:GetHeight()
+        local castSlotFrameHeight = math_max(8, horizontalBarHeight)
+        local castAbove = SortSlotsForSide(castSlots, "above", true)
+        local castBelow = SortSlotsForSide(castSlots, "below", false)
+        local castAboveHeight = GetLaneExtent(#castAbove, castSlotFrameHeight)
+        local castBelowHeight = GetLaneExtent(#castBelow, castSlotFrameHeight)
+
+        local castAboveLane = BuildLane(preview, content, layoutDrag, nil, panelWidth, castAboveHeight, "y", "above", true, castAbove, sourcePanel.width, castSlotFrameHeight, "cast")
+        castAboveLane.frame:SetPoint("TOPLEFT", content, "TOPLEFT", 0, 0)
+
+        castAboveLane.setPreviewOverflow = function(extra)
+            castAboveLane.frame:ClearAllPoints()
+            castAboveLane.frame:SetPoint("TOPLEFT", content, "TOPLEFT", 0, extra)
+            castAboveLane.frame:SetSize(castAboveLane.baseWidth or panelWidth, (castAboveLane.baseHeight or castAboveHeight) + extra)
+        end
+        castAboveLane.setPreviewOverflow(0)
+
+        castPanel:ClearAllPoints()
+        castPanel:SetPoint("TOPLEFT", castAboveLane.frame, "BOTTOMLEFT", 0, -LAYOUT_PREVIEW_GAP)
+
+        local castBelowLane = BuildLane(preview, content, layoutDrag, nil, panelWidth, castBelowHeight, "y", "below", false, castBelow, sourcePanel.width, castSlotFrameHeight, "cast")
+        castBelowLane.frame:SetPoint("TOPLEFT", castPanel, "BOTTOMLEFT", 0, -LAYOUT_PREVIEW_GAP)
+
+        local iconCenterOffsetY = castAboveHeight + LAYOUT_PREVIEW_GAP + (panelHeight / 2)
+        return panelWidth, castAboveHeight + panelHeight + castBelowHeight + (LAYOUT_PREVIEW_GAP * 2), iconCenterOffsetY
+    end
+
     local panelFrame = RenderMirroredPanel(preview, content, sourcePanel)
     local panelWidth = panelFrame:GetWidth()
     local panelHeight = panelFrame:GetHeight()
@@ -1975,15 +2013,19 @@ local function CreateLayoutDragModel(preview)
             end
         end
 
-        local adjustedIndex = math_max(1, math_min(#filtered + 1, dropTarget.insertIndex or 1))
-        local newOrder = GetLayoutOrderForInsertion(filtered, lane.reversed, adjustedIndex)
         local oldPos = slotData.getPos()
         local oldOrder = slotData.getOrder()
+        local adjustedIndex = math_max(1, math_min(#filtered + 1, dropTarget.insertIndex or 1))
+        local newOrder = (#filtered == 0 and oldPos == lane.side)
+            and oldOrder
+            or GetLayoutOrderForInsertion(filtered, lane.reversed, adjustedIndex)
 
         slotData.setPos(lane.side)
         slotData.setOrder(newOrder)
 
         if oldPos ~= lane.side or oldOrder ~= newOrder then
+            CooldownCompanion:ApplyResourceBars()
+            CooldownCompanion:RepositionCastBar()
             CooldownCompanion:UpdateAnchorStacking()
             CooldownCompanion:RefreshConfigPanel()
         end
@@ -2001,14 +2043,16 @@ function ST._BuildLayoutOrderPreviewPanel(container)
     preview.host = container
     preview.rbSettings = CooldownCompanion:GetResourceBarSettings()
     preview.cbSettings = CooldownCompanion:GetCastBarSettings()
-    preview.isVerticalLayout = preview.rbSettings and IsResourceBarVerticalConfig(preview.rbSettings) or false
+    local layout = CooldownCompanion:GetSpecLayoutOrder()
+    preview.isVerticalLayout = preview.rbSettings and IsResourceBarVerticalConfig(preview.rbSettings, layout) or false
 
     ResetPreviewState(preview)
+    preview.layout = layout
     HidePreviewMessage(preview)
 
     local rbSettings = preview.rbSettings
     local cbSettings = preview.cbSettings
-    local supportsAttachedResourceBars = rbSettings and not IsTruthyConfigFlag(rbSettings.independentAnchorEnabled)
+    local supportsAttachedResourceBars = rbSettings and not (layout and IsTruthyConfigFlag(layout.independentAnchorEnabled))
     local hasAttachedCastBar = cbSettings and cbSettings.enabled and not IsTruthyConfigFlag(cbSettings.independentAnchorEnabled)
     if not supportsAttachedResourceBars and not hasAttachedCastBar then
         SetPreviewMessage(preview, "These settings apply only when Resource Bars or Cast Bar are anchored to a panel.")
@@ -2016,7 +2060,6 @@ function ST._BuildLayoutOrderPreviewPanel(container)
         return
     end
 
-    local layout = CooldownCompanion:GetSpecLayoutOrder()
     if not layout then
         SetPreviewMessage(preview, "Specialization data loading...")
         FinalizePreviewState(preview)
@@ -2030,7 +2073,13 @@ function ST._BuildLayoutOrderPreviewPanel(container)
         return
     end
 
-    local primarySlots, castSlots = CollectPreviewSlots(rbSettings, cbSettings, layout, preview.isVerticalLayout)
+    local primarySlots, castSlots = CollectPreviewSlots(
+        rbSettings,
+        cbSettings,
+        layout,
+        preview.isVerticalLayout,
+        supportsAttachedResourceBars
+    )
     if not preview.isVerticalLayout then
         for _, castSlot in ipairs(castSlots) do
             table_insert(primarySlots, castSlot)
@@ -2038,7 +2087,7 @@ function ST._BuildLayoutOrderPreviewPanel(container)
     end
 
     if #primarySlots == 0 and #castSlots == 0 then
-        SetPreviewMessage(preview, "No active bars to order. Enable resources, custom aura bars, or cast bar first.")
+        SetPreviewMessage(preview, "No active bars to order. Enable resources, Custom Bars, or cast bar first.")
         FinalizePreviewState(preview)
         return
     end

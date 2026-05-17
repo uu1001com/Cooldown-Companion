@@ -29,9 +29,27 @@ local IsVerticalFillReversed = RB.IsVerticalFillReversed
 local GetCurrentSpecID = RB.GetCurrentSpecID
 local GetResourceColors = RB.GetResourceColors
 local GetContinuousTickConfig = RB.GetContinuousTickConfig
+local GetSpecResourceDisplayProfile = RB.GetSpecResourceDisplayProfile
 local GetSafeRGBColor = RB.GetSafeRGBColor
 local SupportsResourceAuraStackMode = RB.SupportsResourceAuraStackMode
 local GetResolvedResourceAuraUnit = RB.GetResolvedResourceAuraUnit
+
+local function GetResourceDisplayStyle(settings)
+    return GetSpecResourceDisplayProfile and GetSpecResourceDisplayProfile(settings) or settings
+end
+
+local function ClampSegmentGapToFit(totalSize, segmentCount, gap)
+    gap = tonumber(gap) or 0
+    if gap <= 0 or segmentCount <= 1 then
+        return 0
+    end
+
+    local maxGap = (totalSize - segmentCount) / (segmentCount - 1)
+    if maxGap < 0 then
+        maxGap = 0
+    end
+    return math_min(gap, maxGap)
+end
 
 ------------------------------------------------------------------------
 -- Resource Aura Overlay
@@ -130,6 +148,20 @@ local function IsResourceAuraOverlayEnabled(resource)
     if type(resource) ~= "table" then
         return false
     end
+    local specID = GetCurrentSpecID()
+    if specID then
+        local specData = type(resource.specOverrides) == "table"
+            and (resource.specOverrides[specID] or resource.specOverrides[tostring(specID)])
+            or nil
+        if type(specData) == "table" and type(specData.auraOverlayEnabled) == "boolean" then
+            return specData.auraOverlayEnabled
+        end
+        if resource.auraOverlayEnabled == false then
+            return false
+        end
+        return type(GetResourceAuraEntry(resource, specID)) == "table"
+    end
+
     if type(resource.auraOverlayEnabled) == "boolean" then
         return resource.auraOverlayEnabled
     end
@@ -228,11 +260,11 @@ local function HideResourceAuraStackSegments(holder)
     end
 end
 
-local function LayoutResourceAuraStackSegments(holder, settings, orientationOverride, reverseFillOverride)
-    if not holder or not holder.auraStackSegments or not holder.segments then return end
-    local barTexture = CooldownCompanion:FetchStatusBar(settings and settings.barTexture or "Solid")
-    local borderStyle = settings and settings.borderStyle or "pixel"
-    local borderSize = settings and settings.borderSize or 1
+local function GetResourceAuraStackLayoutInputs(holder, settings, orientationOverride, reverseFillOverride)
+    local style = GetResourceDisplayStyle(settings)
+    local barTextureName = style and style.barTexture or "Solid"
+    local borderStyle = style and style.borderStyle or "pixel"
+    local borderSize = style and style.borderSize or 1
     local isVertical
     if orientationOverride == "vertical" then
         isVertical = true
@@ -242,13 +274,58 @@ local function LayoutResourceAuraStackSegments(holder, settings, orientationOver
         isVertical = IsVerticalResourceLayout(settings)
     end
     local reverseFill = false
-    if isVertical then
-        if reverseFillOverride == nil then
-            reverseFill = IsVerticalFillReversed(settings)
-        else
-            reverseFill = reverseFillOverride == true
-        end
+    if reverseFillOverride ~= nil then
+        reverseFill = reverseFillOverride == true
+    elseif isVertical then
+        reverseFill = IsVerticalFillReversed(settings)
     end
+
+    local baseSeg = holder and holder.segments and holder.segments[1]
+    local baseWidth = baseSeg and baseSeg:GetWidth() or 0
+    local baseHeight = baseSeg and baseSeg:GetHeight() or 0
+    local baseFrameLevel = baseSeg and baseSeg:GetFrameLevel() or 0
+
+    return barTextureName, borderStyle, borderSize, isVertical, reverseFill, baseWidth, baseHeight, baseFrameLevel
+end
+
+local function UpdateResourceAuraStackLayoutState(holder, count, barTextureName, borderStyle, borderSize, isVertical, reverseFill, baseWidth, baseHeight, baseFrameLevel)
+    holder._auraStackLayoutCount = count
+    holder._auraStackLayoutTexture = barTextureName
+    holder._auraStackLayoutBorderStyle = borderStyle
+    holder._auraStackLayoutBorderSize = borderSize
+    holder._auraStackLayoutVertical = isVertical
+    holder._auraStackLayoutReverseFill = reverseFill
+    holder._auraStackLayoutBaseWidth = baseWidth
+    holder._auraStackLayoutBaseHeight = baseHeight
+    holder._auraStackLayoutBaseFrameLevel = baseFrameLevel
+end
+
+local function ResourceAuraStackLayoutChanged(holder, settings)
+    local count = holder.auraStackSegments and #holder.auraStackSegments or 0
+    local barTextureName, borderStyle, borderSize, isVertical, reverseFill, baseWidth, baseHeight, baseFrameLevel =
+        GetResourceAuraStackLayoutInputs(holder, settings)
+
+    if holder._auraStackLayoutCount ~= count
+        or holder._auraStackLayoutTexture ~= barTextureName
+        or holder._auraStackLayoutBorderStyle ~= borderStyle
+        or holder._auraStackLayoutBorderSize ~= borderSize
+        or holder._auraStackLayoutVertical ~= isVertical
+        or holder._auraStackLayoutReverseFill ~= reverseFill
+        or holder._auraStackLayoutBaseWidth ~= baseWidth
+        or holder._auraStackLayoutBaseHeight ~= baseHeight
+        or holder._auraStackLayoutBaseFrameLevel ~= baseFrameLevel then
+        return true
+    end
+
+    return false
+end
+
+local function LayoutResourceAuraStackSegments(holder, settings, orientationOverride, reverseFillOverride)
+    if not holder or not holder.auraStackSegments or not holder.segments then return end
+    local count = #holder.auraStackSegments
+    local barTextureName, borderStyle, borderSize, isVertical, reverseFill, baseWidth, baseHeight, baseFrameLevel =
+        GetResourceAuraStackLayoutInputs(holder, settings, orientationOverride, reverseFillOverride)
+    local barTexture = CooldownCompanion:FetchStatusBar(barTextureName)
 
     for i, auraSeg in ipairs(holder.auraStackSegments) do
         local baseSeg = holder.segments[i]
@@ -276,12 +353,14 @@ local function LayoutResourceAuraStackSegments(holder, settings, orientationOver
             end
             auraSeg:SetStatusBarTexture(barTexture)
             auraSeg:SetOrientation(isVertical and "VERTICAL" or "HORIZONTAL")
-            auraSeg:SetReverseFill(isVertical and reverseFill or false)
+            auraSeg:SetReverseFill(reverseFill)
             auraSeg:SetFrameLevel(baseSeg:GetFrameLevel() + 4)
         else
             auraSeg:Hide()
         end
     end
+
+    UpdateResourceAuraStackLayoutState(holder, count, barTextureName, borderStyle, borderSize, isVertical, reverseFill, baseWidth, baseHeight, baseFrameLevel)
 end
 
 local function EnsureResourceAuraStackSegments(holder, settings)
@@ -305,9 +384,12 @@ local function EnsureResourceAuraStackSegments(holder, settings)
             seg:Hide()
             holder.auraStackSegments[i] = seg
         end
+        holder._auraStackLayoutCount = nil
     end
 
-    LayoutResourceAuraStackSegments(holder, settings)
+    if ResourceAuraStackLayoutChanged(holder, settings) then
+        LayoutResourceAuraStackSegments(holder, settings)
+    end
     return holder.auraStackSegments
 end
 
@@ -379,8 +461,9 @@ local function UpdateContinuousTickMarker(bar, powerType, settings, maxPower, ma
     local marker = bar.tickMarker
     marker:SetColorTexture(tickColor[1], tickColor[2], tickColor[3], tickColor[4] ~= nil and tickColor[4] or 1)
 
-    local borderStyle = settings and settings.borderStyle or "pixel"
-    local borderSize = (borderStyle == "pixel") and (settings.borderSize or 1) or 0
+    local style = GetResourceDisplayStyle(settings)
+    local borderStyle = style and style.borderStyle or "pixel"
+    local borderSize = (borderStyle == "pixel") and (style and style.borderSize or 1) or 0
     local width = bar:GetWidth() or 0
     local height = bar:GetHeight() or 0
     if width <= 0 or height <= 0 then
@@ -417,7 +500,8 @@ end
 local function ApplyContinuousFillColor(bar, powerType, settings, overrideColor)
     if not bar or not settings then return end
 
-    local texName = settings.barTexture or "Solid"
+    local style = GetResourceDisplayStyle(settings)
+    local texName = style and style.barTexture or "Solid"
     local atlasInfo = (texName == "blizzard_class") and POWER_ATLAS_INFO[powerType] or nil
     if atlasInfo then
         if overrideColor then
@@ -426,7 +510,7 @@ local function ApplyContinuousFillColor(bar, powerType, settings, overrideColor)
             return
         end
 
-        local brightness = settings.classBarBrightness or 1.3
+        local brightness = style and style.classBarBrightness or 1.3
         bar:SetStatusBarColor(1, 1, 1, 1)
         if brightness > 1.0 then
             bar.brightnessOverlay:SetAlpha(brightness - 1.0)
@@ -628,28 +712,47 @@ local function EnsureCustomAuraContinuousThresholdOverlay(bar)
 end
 
 local function EnsureCustomAuraSegmentThresholdOverlays(holder)
-    if not holder or not holder.segments or holder.thresholdSegments then return end
-    holder.thresholdSegments = {}
-    for i = 1, #holder.segments do
-        local seg = CreateFrame("StatusBar", nil, holder)
-        seg:SetFrameLevel(holder:GetFrameLevel() + 3)
-        seg:SetMinMaxValues(0, 1)
-        seg:SetValue(0)
-        seg:Hide()
-        holder.thresholdSegments[i] = seg
+    if not holder or not holder.segments then return end
+    holder.thresholdSegments = holder.thresholdSegments or {}
+    local count = holder._activeSegments or #holder.segments
+    for i = 1, count do
+        if not holder.thresholdSegments[i] then
+            local seg = CreateFrame("StatusBar", nil, holder)
+            seg:SetFrameLevel(holder:GetFrameLevel() + 3)
+            seg:SetMinMaxValues(0, 1)
+            seg:SetValue(0)
+            seg:Hide()
+            holder.thresholdSegments[i] = seg
+        end
+    end
+    for i = count + 1, #holder.thresholdSegments do
+        local seg = holder.thresholdSegments[i]
+        if seg then
+            seg:SetValue(0)
+            seg:Hide()
+        end
     end
 end
 
 local function EnsureCustomAuraOverlayThresholdOverlays(holder, halfSegments)
-    if not holder or holder.thresholdSegments then return end
-    holder.thresholdSegments = {}
+    if not holder then return end
+    holder.thresholdSegments = holder.thresholdSegments or {}
     for i = 1, halfSegments do
-        local seg = CreateFrame("StatusBar", nil, holder)
-        seg:SetFrameLevel(holder:GetFrameLevel() + 4)
-        seg:SetMinMaxValues(0, 1)
-        seg:SetValue(0)
-        seg:Hide()
-        holder.thresholdSegments[i] = seg
+        if not holder.thresholdSegments[i] then
+            local seg = CreateFrame("StatusBar", nil, holder)
+            seg:SetFrameLevel(holder:GetFrameLevel() + 4)
+            seg:SetMinMaxValues(0, 1)
+            seg:SetValue(0)
+            seg:Hide()
+            holder.thresholdSegments[i] = seg
+        end
+    end
+    for i = halfSegments + 1, #holder.thresholdSegments do
+        local seg = holder.thresholdSegments[i]
+        if seg then
+            seg:SetValue(0)
+            seg:Hide()
+        end
     end
 end
 
@@ -671,7 +774,7 @@ local function LayoutCustomAuraContinuousThresholdOverlay(bar, barTexture, borde
     end
     overlay:SetStatusBarTexture(barTexture)
     overlay:SetOrientation(isVertical and "VERTICAL" or "HORIZONTAL")
-    overlay:SetReverseFill(isVertical and reverseFill or false)
+    overlay:SetReverseFill(reverseFill)
 end
 
 ------------------------------------------------------------------------
@@ -757,14 +860,15 @@ end
 
 local function LayoutSegments(holder, totalWidth, totalHeight, gap, settings, orientationOverride, reverseFillOverride)
     if not holder or not holder.segments then return end
-    local n = #holder.segments
+    local n = holder._activeSegments or #holder.segments
     if n == 0 then return end
 
-    local barTexture = CooldownCompanion:FetchStatusBar(settings and settings.barTexture or "Solid")
-    local bgColor = settings and settings.backgroundColor or { 0, 0, 0, 0.5 }
-    local borderStyle = settings and settings.borderStyle or "pixel"
-    local borderColor = settings and settings.borderColor or { 0, 0, 0, 1 }
-    local borderSize = settings and settings.borderSize or 1
+    local style = GetResourceDisplayStyle(settings)
+    local barTexture = CooldownCompanion:FetchStatusBar(style and style.barTexture or "Solid")
+    local bgColor = style and style.backgroundColor or { 0, 0, 0, 0.5 }
+    local borderStyle = style and style.borderStyle or "pixel"
+    local borderColor = style and style.borderColor or { 0, 0, 0, 1 }
+    local borderSize = style and style.borderSize or 1
     local isVertical
     if orientationOverride == "vertical" then
         isVertical = true
@@ -774,24 +878,32 @@ local function LayoutSegments(holder, totalWidth, totalHeight, gap, settings, or
         isVertical = IsVerticalResourceLayout(settings)
     end
     local reverseFill = false
-    if isVertical then
-        if reverseFillOverride == nil then
-            reverseFill = IsVerticalFillReversed(settings)
-        else
-            reverseFill = reverseFillOverride == true
-        end
+    if reverseFillOverride ~= nil then
+        reverseFill = reverseFillOverride == true
+    elseif isVertical then
+        reverseFill = IsVerticalFillReversed(settings)
     end
     local subSize
     if isVertical then
+        gap = ClampSegmentGapToFit(totalHeight, n, gap)
         subSize = (totalHeight - (n - 1) * gap) / n
     else
+        gap = ClampSegmentGapToFit(totalWidth, n, gap)
         subSize = (totalWidth - (n - 1) * gap) / n
     end
     if subSize < 1 then subSize = 1 end
 
-    for i, seg in ipairs(holder.segments) do
+    for i = 1, #holder.segments do
+        local seg = holder.segments[i]
         seg:ClearAllPoints()
-        if isVertical then
+        if i > n then
+            seg:SetValue(0)
+            seg:Hide()
+            if holder.thresholdSegments and holder.thresholdSegments[i] then
+                holder.thresholdSegments[i]:SetValue(0)
+                holder.thresholdSegments[i]:Hide()
+            end
+        elseif isVertical then
             seg:SetSize(totalWidth, subSize)
             local yOfs
             if reverseFill then
@@ -803,33 +915,42 @@ local function LayoutSegments(holder, totalWidth, totalHeight, gap, settings, or
             seg:SetPoint("BOTTOMLEFT", holder, "BOTTOMLEFT", 0, yOfs)
         else
             seg:SetSize(subSize, totalHeight)
-            local xOfs = (i - 1) * (subSize + gap)
+            local xOfs
+            if reverseFill then
+                xOfs = totalWidth - subSize - ((i - 1) * (subSize + gap))
+                if xOfs < 0 then xOfs = 0 end
+            else
+                xOfs = (i - 1) * (subSize + gap)
+            end
             seg:SetPoint("TOPLEFT", holder, "TOPLEFT", xOfs, 0)
         end
 
-        seg:SetStatusBarTexture(barTexture)
-        seg:SetOrientation(isVertical and "VERTICAL" or "HORIZONTAL")
-        seg:SetReverseFill(isVertical and reverseFill or false)
-        seg.bg:SetColorTexture(bgColor[1], bgColor[2], bgColor[3], bgColor[4])
+        if i <= n then
+            seg:Show()
+            seg:SetStatusBarTexture(barTexture)
+            seg:SetOrientation(isVertical and "VERTICAL" or "HORIZONTAL")
+            seg:SetReverseFill(reverseFill)
+            seg.bg:SetColorTexture(bgColor[1], bgColor[2], bgColor[3], bgColor[4])
 
-        if borderStyle == "pixel" then
-            ApplyPixelBorders(seg.borders, seg, borderColor, borderSize)
-        else
-            HidePixelBorders(seg.borders)
-        end
-
-        if holder.thresholdSegments and holder.thresholdSegments[i] then
-            local thresholdSeg = holder.thresholdSegments[i]
-            thresholdSeg:ClearAllPoints()
             if borderStyle == "pixel" then
-                thresholdSeg:SetPoint("TOPLEFT", seg, "TOPLEFT", borderSize, -borderSize)
-                thresholdSeg:SetPoint("BOTTOMRIGHT", seg, "BOTTOMRIGHT", -borderSize, borderSize)
+                ApplyPixelBorders(seg.borders, seg, borderColor, borderSize)
             else
-                thresholdSeg:SetAllPoints(seg)
+                HidePixelBorders(seg.borders)
             end
-            thresholdSeg:SetStatusBarTexture(barTexture)
-            thresholdSeg:SetOrientation(isVertical and "VERTICAL" or "HORIZONTAL")
-            thresholdSeg:SetReverseFill(isVertical and reverseFill or false)
+
+            if holder.thresholdSegments and holder.thresholdSegments[i] then
+                local thresholdSeg = holder.thresholdSegments[i]
+                thresholdSeg:ClearAllPoints()
+                if borderStyle == "pixel" then
+                    thresholdSeg:SetPoint("TOPLEFT", seg, "TOPLEFT", borderSize, -borderSize)
+                    thresholdSeg:SetPoint("BOTTOMRIGHT", seg, "BOTTOMRIGHT", -borderSize, borderSize)
+                else
+                    thresholdSeg:SetAllPoints(seg)
+                end
+                thresholdSeg:SetStatusBarTexture(barTexture)
+                thresholdSeg:SetOrientation(isVertical and "VERTICAL" or "HORIZONTAL")
+                thresholdSeg:SetReverseFill(reverseFill)
+            end
         end
     end
 
@@ -892,11 +1013,12 @@ end
 local function LayoutOverlaySegments(holder, totalWidth, totalHeight, gap, settings, halfSegments, orientationOverride, reverseFillOverride)
     if not holder or not holder.segments then return end
 
-    local barTexture = CooldownCompanion:FetchStatusBar(settings and settings.barTexture or "Solid")
-    local bgColor = settings and settings.backgroundColor or { 0, 0, 0, 0.5 }
-    local borderStyle = settings and settings.borderStyle or "pixel"
-    local borderColor = settings and settings.borderColor or { 0, 0, 0, 1 }
-    local borderSize = settings and settings.borderSize or 1
+    local style = GetResourceDisplayStyle(settings)
+    local barTexture = CooldownCompanion:FetchStatusBar(style and style.barTexture or "Solid")
+    local bgColor = style and style.backgroundColor or { 0, 0, 0, 0.5 }
+    local borderStyle = style and style.borderStyle or "pixel"
+    local borderColor = style and style.borderColor or { 0, 0, 0, 1 }
+    local borderSize = style and style.borderSize or 1
     local isVertical
     if orientationOverride == "vertical" then
         isVertical = true
@@ -906,17 +1028,17 @@ local function LayoutOverlaySegments(holder, totalWidth, totalHeight, gap, setti
         isVertical = IsVerticalResourceLayout(settings)
     end
     local reverseFill = false
-    if isVertical then
-        if reverseFillOverride == nil then
-            reverseFill = IsVerticalFillReversed(settings)
-        else
-            reverseFill = reverseFillOverride == true
-        end
+    if reverseFillOverride ~= nil then
+        reverseFill = reverseFillOverride == true
+    elseif isVertical then
+        reverseFill = IsVerticalFillReversed(settings)
     end
     local subSize
     if isVertical then
+        gap = ClampSegmentGapToFit(totalHeight, halfSegments, gap)
         subSize = (totalHeight - (halfSegments - 1) * gap) / halfSegments
     else
+        gap = ClampSegmentGapToFit(totalWidth, halfSegments, gap)
         subSize = (totalWidth - (halfSegments - 1) * gap) / halfSegments
     end
     if subSize < 1 then subSize = 1 end
@@ -936,13 +1058,19 @@ local function LayoutOverlaySegments(holder, totalWidth, totalHeight, gap, setti
             seg:SetPoint("BOTTOMLEFT", holder, "BOTTOMLEFT", 0, yOfs)
         else
             seg:SetSize(subSize, totalHeight)
-            local xOfs = (i - 1) * (subSize + gap)
+            local xOfs
+            if reverseFill then
+                xOfs = totalWidth - subSize - ((i - 1) * (subSize + gap))
+                if xOfs < 0 then xOfs = 0 end
+            else
+                xOfs = (i - 1) * (subSize + gap)
+            end
             seg:SetPoint("TOPLEFT", holder, "TOPLEFT", xOfs, 0)
         end
 
         seg:SetStatusBarTexture(barTexture)
         seg:SetOrientation(isVertical and "VERTICAL" or "HORIZONTAL")
-        seg:SetReverseFill(isVertical and reverseFill or false)
+        seg:SetReverseFill(reverseFill)
         seg.bg:SetColorTexture(bgColor[1], bgColor[2], bgColor[3], bgColor[4])
 
         if borderStyle == "pixel" then
@@ -962,7 +1090,7 @@ local function LayoutOverlaySegments(holder, totalWidth, totalHeight, gap, setti
         end
         ov:SetStatusBarTexture(barTexture)
         ov:SetOrientation(isVertical and "VERTICAL" or "HORIZONTAL")
-        ov:SetReverseFill(isVertical and reverseFill or false)
+        ov:SetReverseFill(reverseFill)
 
         if holder.thresholdSegments and holder.thresholdSegments[i] then
             local thresholdSeg = holder.thresholdSegments[i]
@@ -975,7 +1103,24 @@ local function LayoutOverlaySegments(holder, totalWidth, totalHeight, gap, setti
             end
             thresholdSeg:SetStatusBarTexture(barTexture)
             thresholdSeg:SetOrientation(isVertical and "VERTICAL" or "HORIZONTAL")
-            thresholdSeg:SetReverseFill(isVertical and reverseFill or false)
+            thresholdSeg:SetReverseFill(reverseFill)
+        end
+    end
+    for i = halfSegments + 1, #holder.segments do
+        local seg = holder.segments[i]
+        if seg then
+            seg:SetValue(0)
+            seg:Hide()
+        end
+        local ov = holder.overlaySegments and holder.overlaySegments[i]
+        if ov then
+            ov:SetValue(0)
+            ov:Hide()
+        end
+        local thresholdSeg = holder.thresholdSegments and holder.thresholdSegments[i]
+        if thresholdSeg then
+            thresholdSeg:SetValue(0)
+            thresholdSeg:Hide()
         end
     end
 

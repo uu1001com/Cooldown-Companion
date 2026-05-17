@@ -124,7 +124,7 @@ local function AddAdvancedToggle(parentWidget, settingKey, tabInfoBtns, isEnable
     if isExpanded then
         btn._icon:SetVertexColor(1, 0.82, 0, 1)
     else
-        btn._icon:SetVertexColor(0.5, 0.5, 0.5, 0.7)
+        btn._icon:SetVertexColor(0.72, 0.72, 0.72, 0.85)
     end
 
     btn:SetScript("OnClick", function()
@@ -808,6 +808,30 @@ end
 
 local charCopyButtons = {}
 
+local CHARACTER_COPY_TOOLTIP_DETAILS = {
+    frameAnchoring = {
+        "Copies: enable state, unit-frame addon/custom frame choices, player/target anchors, mirroring, and alpha inheritance.",
+        "Does not copy: Resource Bars, Cast Bar, panels, or panel contents.",
+    },
+    castBar = {
+        "Copies: enable state, anchor/position mode, styling, icon, text, and cast effects.",
+        "Does not copy: Resource Bars, Unit Frames, panels, or panel contents.",
+    },
+    resourceBars = {
+        "Copies broad Resource Bar defaults from another character without replacing this character's spec-specific setup.",
+        "",
+        "What is copied:",
+        "- Enable state and panel anchor target",
+        "- Shared appearance defaults, like texture, text, and default colors",
+        "- Resource options that apply to this class",
+        "",
+        "What is not copied:",
+        "- The current spec's Layout tab or bar order",
+        "- Custom Bars",
+        "- Aura overlays and per-spec resource overrides",
+    },
+}
+
 local function CreateCharacterCopyButton(enableCb, systemKey, label, onCopied)
     local copyValues, copyOrder = CooldownCompanion:GetCharacterScopedSettingsCopyOptions(systemKey)
     if #copyOrder == 0 then return end
@@ -834,8 +858,21 @@ local function CreateCharacterCopyButton(enableCb, systemKey, label, onCopied)
 
     btn:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText(L["Copy "] .. label .. L[" Settings"])
-        GameTooltip:AddLine(L["Copy settings from another character on this profile."], 1, 1, 1, true)
+        GameTooltip:SetText("Copy " .. label .. " Settings")
+        local tooltipDetails = CHARACTER_COPY_TOOLTIP_DETAILS[systemKey]
+        if tooltipDetails then
+            for _, line in ipairs(tooltipDetails) do
+                if line == "" then
+                    GameTooltip:AddLine(" ")
+                elseif line == "What is copied:" or line == "What is not copied:" then
+                    GameTooltip:AddLine(line, 1, 0.82, 0, true)
+                else
+                    GameTooltip:AddLine(line, 1, 1, 1, true)
+                end
+            end
+        else
+            GameTooltip:AddLine("Copy settings from another character on this profile.", 1, 1, 1, true)
+        end
         GameTooltip:Show()
     end)
     btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -858,7 +895,7 @@ local function CreateCharacterCopyButton(enableCb, systemKey, label, onCopied)
                         CooldownCompanion:Print(L["Copy confirmation is unavailable."])
                         return
                     end
-                    ShowPopupAboveConfig("CDC_CONFIRM_CHARACTER_SCOPED_COPY", label, {
+                    ShowPopupAboveConfig("CDC_CONFIRM_CHARACTER_SCOPED_COPY", label .. " settings from " .. (vals[charKey] or charKey) .. " to this character", {
                         systemKey = systemKey,
                         systemLabel = label,
                         sourceCharKey = charKey,
@@ -881,6 +918,8 @@ local function CreateCharacterCopyButton(enableCb, systemKey, label, onCopied)
         btn:ClearAllPoints()
         btn:Hide()
     end)
+
+    return btn
 end
 
 -- Shared bar texture option builder (used by CastBarPanels and BarModeTabs)
@@ -1064,10 +1103,11 @@ ST._HookSliderEditBox = HookSliderEditBox
 -- config: table with alpha fields (baselineAlpha, forceAlpha*, forceHide*, fade*, etc.)
 -- refreshFn: function called after value changes (typically RefreshConfigPanel)
 -- collapseKey: string key for CS.collapsedSections
--- opts (optional): { onBaselineChanged = fn(val), isGlobal = bool }
+-- opts (optional): { onBaselineChanged = fn(val), isGlobal = bool, disabled = bool, infoButtons = table }
 local function BuildAlphaControls(container, config, refreshFn, collapseKey, opts)
     opts = opts or {}
-    local tabInfoBtns = CS.tabInfoButtons
+    local tabInfoBtns = opts.infoButtons or CS.tabInfoButtons
+    local controlsDisabled = opts.disabled == true
 
     local alphaHeading = AceGUI:Create("Heading")
     alphaHeading:SetText(L["Alpha"])
@@ -1088,7 +1128,9 @@ local function BuildAlphaControls(container, config, refreshFn, collapseKey, opt
     baseAlphaSlider:SetSliderValues(0, 1, 0.1)
     baseAlphaSlider:SetValue(config.baselineAlpha or 1)
     baseAlphaSlider:SetFullWidth(true)
+    baseAlphaSlider:SetDisabled(controlsDisabled)
     baseAlphaSlider:SetCallback("OnValueChanged", function(widget, event, val)
+        if controlsDisabled then return end
         config.baselineAlpha = val
         if opts.onBaselineChanged then
             opts.onBaselineChanged(val)
@@ -1124,7 +1166,9 @@ local function BuildAlphaControls(container, config, refreshFn, collapseKey, opt
             cb:SetLabel(TriStateLabel(label, val))
             cb:SetValue(val)
             cb:SetFullWidth(true)
+            cb:SetDisabled(controlsDisabled)
             cb:SetCallback("OnValueChanged", function(widget, event, newVal)
+                if controlsDisabled then return end
                 config[visibleKey] = (newVal == true)
                 config[hiddenKey] = (newVal == nil)
                 refreshFn()
@@ -1148,7 +1192,9 @@ local function BuildAlphaControls(container, config, refreshFn, collapseKey, opt
             travelCb:SetLabel(L["Include Druid Travel Form (applies to both)"])
             travelCb:SetValue(travelVal)
             travelCb:SetFullWidth(true)
+            travelCb:SetDisabled(controlsDisabled)
             travelCb:SetCallback("OnValueChanged", function(widget, event, val)
+                if controlsDisabled then return end
                 config.treatTravelFormAsMounted = val
             end)
             container:AddChild(travelCb)
@@ -1159,7 +1205,9 @@ local function BuildAlphaControls(container, config, refreshFn, collapseKey, opt
         targetCb:SetLabel(targetVal and L["Target Exists - |cff00ff00Fully Visible|r"] or L["Target Exists"])
         targetCb:SetValue(targetVal)
         targetCb:SetFullWidth(true)
+        targetCb:SetDisabled(controlsDisabled)
         targetCb:SetCallback("OnValueChanged", function(widget, event, val)
+            if controlsDisabled then return end
             config.forceAlphaTargetExists = val
             refreshFn()
         end)
@@ -1171,7 +1219,9 @@ local function BuildAlphaControls(container, config, refreshFn, collapseKey, opt
             enemyOnlyCb:SetLabel("Enemy Only")
             enemyOnlyCb:SetValue(enemyOnlyVal)
             enemyOnlyCb:SetFullWidth(true)
+            enemyOnlyCb:SetDisabled(controlsDisabled)
             enemyOnlyCb:SetCallback("OnValueChanged", function(widget, event, val)
+                if controlsDisabled then return end
                 config.forceAlphaTargetEnemyOnly = val
                 refreshFn()
             end)
@@ -1179,12 +1229,27 @@ local function BuildAlphaControls(container, config, refreshFn, collapseKey, opt
             ApplyCheckboxIndent(enemyOnlyCb, 20)
         end
 
+        local focusVal = config.forceAlphaFocusExists or false
+        local focusCb = AceGUI:Create("CheckBox")
+        focusCb:SetLabel(focusVal and "Focus Exists - |cff00ff00Fully Visible|r" or "Focus Exists")
+        focusCb:SetValue(focusVal)
+        focusCb:SetFullWidth(true)
+        focusCb:SetDisabled(controlsDisabled)
+        focusCb:SetCallback("OnValueChanged", function(widget, event, val)
+            if controlsDisabled then return end
+            config.forceAlphaFocusExists = val
+            refreshFn()
+        end)
+        container:AddChild(focusCb)
+
         local mouseoverVal = config.forceAlphaMouseover or false
         local mouseoverCb = AceGUI:Create("CheckBox")
         mouseoverCb:SetLabel(mouseoverVal and L["Mouseover - |cff00ff00Fully Visible|r"] or L["Mouseover"])
         mouseoverCb:SetValue(mouseoverVal)
         mouseoverCb:SetFullWidth(true)
+        mouseoverCb:SetDisabled(controlsDisabled)
         mouseoverCb:SetCallback("OnValueChanged", function(widget, event, val)
+            if controlsDisabled then return end
             config.forceAlphaMouseover = val
             refreshFn()
         end)
@@ -1199,7 +1264,9 @@ local function BuildAlphaControls(container, config, refreshFn, collapseKey, opt
         fadeCb:SetLabel(L["Custom Fade Settings"])
         fadeCb:SetValue(config.customFade or false)
         fadeCb:SetFullWidth(true)
+        fadeCb:SetDisabled(controlsDisabled)
         fadeCb:SetCallback("OnValueChanged", function(widget, event, val)
+            if controlsDisabled then return end
             config.customFade = val or nil
             refreshFn()
         end)
@@ -1211,7 +1278,9 @@ local function BuildAlphaControls(container, config, refreshFn, collapseKey, opt
         fadeDelaySlider:SetSliderValues(0, 5, 0.1)
         fadeDelaySlider:SetValue(config.fadeDelay or 1)
         fadeDelaySlider:SetFullWidth(true)
+        fadeDelaySlider:SetDisabled(controlsDisabled)
         fadeDelaySlider:SetCallback("OnValueChanged", function(widget, event, val)
+            if controlsDisabled then return end
             config.fadeDelay = val
         end)
         container:AddChild(fadeDelaySlider)
@@ -1221,7 +1290,9 @@ local function BuildAlphaControls(container, config, refreshFn, collapseKey, opt
         fadeInSlider:SetSliderValues(0, 5, 0.1)
         fadeInSlider:SetValue(config.fadeInDuration or 0.2)
         fadeInSlider:SetFullWidth(true)
+        fadeInSlider:SetDisabled(controlsDisabled)
         fadeInSlider:SetCallback("OnValueChanged", function(widget, event, val)
+            if controlsDisabled then return end
             config.fadeInDuration = val
         end)
         container:AddChild(fadeInSlider)
@@ -1231,7 +1302,9 @@ local function BuildAlphaControls(container, config, refreshFn, collapseKey, opt
         fadeOutSlider:SetSliderValues(0, 5, 0.1)
         fadeOutSlider:SetValue(config.fadeOutDuration or 0.2)
         fadeOutSlider:SetFullWidth(true)
+        fadeOutSlider:SetDisabled(controlsDisabled)
         fadeOutSlider:SetCallback("OnValueChanged", function(widget, event, val)
+            if controlsDisabled then return end
             config.fadeOutDuration = val
         end)
         container:AddChild(fadeOutSlider)

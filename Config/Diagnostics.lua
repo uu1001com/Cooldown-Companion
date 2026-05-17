@@ -172,8 +172,10 @@ local function BuildDiagnosticSnapshot()
     local resourceStores = rawget(db.profile, "resourceBarsByChar")
     if type(resourceStores) == "table" then
         for _, resourceSettings in pairs(resourceStores) do
-            if type(resourceSettings) == "table" and type(resourceSettings.customAuraBars) == "table" then
-                for sid in pairs(resourceSettings.customAuraBars) do
+            local customBars = type(resourceSettings) == "table"
+                and (type(resourceSettings.customBars) == "table" and resourceSettings.customBars or resourceSettings.customAuraBars)
+            if type(customBars) == "table" then
+                for sid in pairs(customBars) do
                     if sid ~= 0 then cacheSpecName(sid) end
                 end
             end
@@ -215,6 +217,29 @@ local function FormatDiagnosticAsText(diag)
         local parts = {}
         for k, v in pairs(t) do
             parts[#parts + 1] = tostring(k) .. "=" .. formatValue(v)
+        end
+        table.sort(parts)
+        return table.concat(parts, " ")
+    end
+
+    local ignoredCustomBarDiagnosticKeys = {
+        independentAnchorEnabled = true,
+        independentLocked = true,
+        independentAnchorTargetMode = true,
+        independentAnchorFrameName = true,
+        independentAnchorGroupId = true,
+        independentAnchor = true,
+        independentSize = true,
+        independentOrientation = true,
+        independentVerticalFillDirection = true,
+    }
+
+    local function dumpCustomBarKV(t)
+        local parts = {}
+        for k, v in pairs(t) do
+            if not ignoredCustomBarDiagnosticKeys[k] then
+                parts[#parts + 1] = tostring(k) .. "=" .. formatValue(v)
+            end
         end
         table.sort(parts)
         return table.concat(parts, " ")
@@ -361,9 +386,6 @@ local function FormatDiagnosticAsText(diag)
             if entry.hideWhenInactive then
                 parts[#parts + 1] = "hideWhenInactive=true"
             end
-            if entry.isIndependent then
-                parts[#parts + 1] = "independent=true"
-            end
             add("  " .. table.concat(parts, " "))
         end
     end
@@ -460,7 +482,7 @@ local function FormatDiagnosticAsText(diag)
     local containerAlphaKeys = {
         "baselineAlpha", "forceAlphaInCombat", "forceAlphaOutOfCombat",
         "forceAlphaRegularMounted", "forceAlphaDragonriding",
-        "forceAlphaTargetExists", "forceAlphaTargetEnemyOnly", "forceAlphaMouseover",
+        "forceAlphaTargetExists", "forceAlphaTargetEnemyOnly", "forceAlphaFocusExists", "forceAlphaMouseover",
         "forceHideInCombat", "forceHideOutOfCombat",
         "forceHideRegularMounted", "forceHideDragonriding",
         "treatTravelFormAsMounted",
@@ -473,7 +495,7 @@ local function FormatDiagnosticAsText(diag)
         specs=1, heroTalents=1, anchor=1, loadConditions=1, folderId=1, frameStrata=1,
         baselineAlpha=1, forceAlphaInCombat=1, forceAlphaOutOfCombat=1,
         forceAlphaRegularMounted=1, forceAlphaDragonriding=1,
-        forceAlphaTargetExists=1, forceAlphaTargetEnemyOnly=1, forceAlphaMouseover=1,
+        forceAlphaTargetExists=1, forceAlphaTargetEnemyOnly=1, forceAlphaFocusExists=1, forceAlphaMouseover=1,
         forceHideInCombat=1, forceHideOutOfCombat=1,
         forceHideRegularMounted=1, forceHideDragonriding=1,
         treatTravelFormAsMounted=1,
@@ -496,7 +518,7 @@ local function FormatDiagnosticAsText(diag)
         folderId=1, frameStrata=1,
         forceAlphaInCombat=1, forceAlphaOutOfCombat=1,
         forceAlphaRegularMounted=1, forceAlphaDragonriding=1,
-        forceAlphaTargetExists=1, forceAlphaTargetEnemyOnly=1, forceAlphaMouseover=1,
+        forceAlphaTargetExists=1, forceAlphaTargetEnemyOnly=1, forceAlphaFocusExists=1, forceAlphaMouseover=1,
         forceHideInCombat=1, forceHideOutOfCombat=1,
         forceHideRegularMounted=1, forceHideDragonriding=1,
         treatTravelFormAsMounted=1,
@@ -695,7 +717,7 @@ local function FormatDiagnosticAsText(diag)
         local hasAnchorGroupId = false
         for k, v in pairs(settings) do
             if k == "anchorGroupId" then hasAnchorGroupId = true end
-            if k ~= "resources" and k ~= "customAuraBars" then
+            if k ~= "resources" and k ~= "customAuraBars" and k ~= "customBars" then
                 rbSimple[#rbSimple + 1] = tostring(k) .. "=" .. formatValue(v)
             end
         end
@@ -720,26 +742,27 @@ local function FormatDiagnosticAsText(diag)
             end
         end
 
-        if settings.customAuraBars then
+        local customBars = type(settings.customBars) == "table" and settings.customBars or settings.customAuraBars
+        if customBars then
             local hasAny = false
-            for _ in pairs(settings.customAuraBars) do hasAny = true; break end
+            for _ in pairs(customBars) do hasAny = true; break end
             if hasAny then
-                add("  customAuraBars:")
+                add("  customBars:")
                 local specIds = {}
-                for sid in pairs(settings.customAuraBars) do specIds[#specIds + 1] = sid end
-                table.sort(specIds)
+                for sid in pairs(customBars) do specIds[#specIds + 1] = sid end
+                table.sort(specIds, function(a, b) return tostring(a) < tostring(b) end)
                 for _, sid in ipairs(specIds) do
                     local sName = sid == 0 and "Default" or specNames[sid]
                     local entryLabel = sName
                         and ("[%s] (%s)"):format(tostring(sid), sName)
                         or ("[%s]"):format(tostring(sid))
                     add(("    %s"):format(entryLabel))
-                    local specBars = settings.customAuraBars[sid]
+                    local specBars = customBars[sid]
                     local slots = {}
                     for slot in pairs(specBars) do slots[#slots + 1] = slot end
                     table.sort(slots, function(a, b) return tostring(a) < tostring(b) end)
                     for _, slot in ipairs(slots) do
-                        add(("      %s: %s"):format(tostring(slot), dumpKV(specBars[slot])))
+                        add(("      %s: %s"):format(tostring(slot), dumpCustomBarKV(specBars[slot])))
                     end
                 end
             end

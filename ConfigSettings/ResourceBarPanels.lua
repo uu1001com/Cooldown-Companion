@@ -11,6 +11,8 @@ local L = LibStub("AceLocale-3.0"):GetLocale("CooldownCompanion", true) or {}
 local AceGUI = LibStub("AceGUI-3.0")
 local LSM = LibStub("LibSharedMedia-3.0")
 local CS = ST._configState
+local IsPassiveOrProc = ST._IsPassiveOrProc
+local ShowPopupAboveConfig = CS.ShowPopupAboveConfig
 
 -- Imports from Helpers.lua
 local ColorHeading = ST._ColorHeading
@@ -30,6 +32,10 @@ local BuildBarAuraPulseControls = ST._BuildBarAuraPulseControls
 local BuildPandemicBarPulseControls = ST._BuildPandemicBarPulseControls
 local AddPreviewToggleButton = ST._AddPreviewToggleButton
 local RefreshConfigPanelForPreviewToggle = ST._RefreshConfigPanelForPreviewToggle
+local CleanRecycledEntry = ST._CleanRecycledEntry
+local ApplyConfigRowIcon = ST._ApplyConfigRowIcon
+local BindConfigShiftTooltip = ST._BindConfigShiftTooltip
+local AddDurationFormatDropdown = ST._AddDurationFormatDropdown
 local tabInfoButtons = CS.tabInfoButtons
 
 local function RefreshLayoutOrderPreview()
@@ -99,6 +105,14 @@ local DEFAULT_ESSENCE_RECHARGING_COLOR = RB.DEFAULT_ESSENCE_RECHARGING_COLOR
 local DEFAULT_ESSENCE_MAX_COLOR = RB.DEFAULT_ESSENCE_MAX_COLOR
 local GetResolvedCustomAuraBarAuraUnit = RB.GetResolvedCustomAuraBarAuraUnit
 local EnsureCustomAuraBarAuraUnit = RB.EnsureCustomAuraBarAuraUnit
+local GetCustomBarEntryType = RB.GetCustomBarEntryType
+local EnsureCustomBarId = RB.EnsureCustomBarId
+local EnsureCustomBarLayout = RB.EnsureCustomBarLayout
+local GetCustomBarLayout = RB.GetCustomBarLayout
+local GetResourceSpecOverrideTable = RB.GetResourceSpecOverrideTable
+local RESOURCE_HEALTH_DISPLAY_KEYS = RB.RESOURCE_HEALTH_DISPLAY_KEYS
+local resourceSpecCopyButton
+local resourceSpecCopyMenu
 
 local function IsHeroSpecProxyCondition(cond)
     return type(cond) == "table"
@@ -109,6 +123,33 @@ local function IsHeroSpecProxyCondition(cond)
         and type(cond.heroName) == "string"
         and cond.name == cond.heroName
 end
+local function IsSpellCustomBarConfig(cab)
+    if RB.IsSpellCustomBarConfig then
+        return RB.IsSpellCustomBarConfig(cab)
+    end
+    return GetCustomBarEntryType and GetCustomBarEntryType(cab) == "spell"
+end
+
+local function IsCustomBarAuraDisplayConfig(cab, isSpellCustomBar)
+    if isSpellCustomBar == nil then
+        isSpellCustomBar = IsSpellCustomBarConfig(cab)
+    end
+
+    return (not isSpellCustomBar) or (cab and cab.auraTracking == true)
+end
+
+local function GetCustomBarTrackingModeConfig(cab, isSpellCustomBar)
+    if RB.GetCustomBarTrackingMode then
+        return RB.GetCustomBarTrackingMode(cab, isSpellCustomBar)
+    end
+
+    local mode = cab and cab.trackingMode
+    if mode == "active" or mode == "stacks" then
+        return mode
+    end
+    return isSpellCustomBar and "active" or "stacks"
+end
+
 local RefreshCustomAuraBarAuraUnitForSpell = RB.RefreshCustomAuraBarAuraUnitForSpell
 
 -- Imports from ResourceBarPanelsHelpers
@@ -125,21 +166,73 @@ local GetSegmentedThresholdValueConfig = RBP.GetSegmentedThresholdValueConfig
 local GetContinuousTickModeConfig = RBP.GetContinuousTickModeConfig
 local GetContinuousTickPercentConfig = RBP.GetContinuousTickPercentConfig
 local GetContinuousTickAbsoluteConfig = RBP.GetContinuousTickAbsoluteConfig
-local AddCdmAuraReadinessWarning = RBP.AddCdmAuraReadinessWarning
 local ResolveAuraColorSpellIDFromText = RBP.ResolveAuraColorSpellIDFromText
 local GetAuraBarAutocompleteDisplayName = RBP.GetAuraBarAutocompleteDisplayName
 local GetAuraBarAutocompleteDisplayIcon = RBP.GetAuraBarAutocompleteDisplayIcon
 local GetAuraBarAutocompleteEntryName = RBP.GetAuraBarAutocompleteEntryName
+local ResolveAuraBarAutocompleteEntry = RBP.ResolveAuraBarAutocompleteEntry
 local ShowAuraBarAutocompleteResults = RBP.ShowAuraBarAutocompleteResults
+local BuildAuraBarAutocompleteCache = RBP.BuildAuraBarAutocompleteCache
 local IsResourceBarVerticalConfig = RBP.IsResourceBarVerticalConfig
 local GetResourceThicknessFieldConfig = RBP.GetResourceThicknessFieldConfig
 local GetResourceGapFieldConfig = RBP.GetResourceGapFieldConfig
+
+local function EnsureResourceLayoutAnchor(settings, layout)
+    if type(layout.independentAnchor) ~= "table" then
+        layout.independentAnchor = type(settings.independentAnchor) == "table" and CopyTable(settings.independentAnchor)
+            or { point = "CENTER", relativePoint = "CENTER", x = 0, y = 0 }
+    end
+    layout.independentAnchor.point = layout.independentAnchor.point or "CENTER"
+    layout.independentAnchor.relativePoint = layout.independentAnchor.relativePoint or "CENTER"
+    layout.independentAnchor.x = tonumber(layout.independentAnchor.x) or 0
+    layout.independentAnchor.y = tonumber(layout.independentAnchor.y) or 0
+    if layout.independentAnchorLocked == nil then
+        layout.independentAnchorLocked = settings.independentAnchorLocked
+    end
+    if layout.independentWidth == nil then
+        layout.independentWidth = settings.independentWidth
+    end
+end
 
 local ResolveSpecOverrideKey = ST._ResolveSpecOverrideKey
 local StartDragTracking = ST._StartDragTracking
 local GetDragIndicator = ST._GetDragIndicator
 local HideDragIndicator = ST._HideDragIndicator
 local ResetDragIndicatorStyle = ST._ResetDragIndicatorStyle
+
+local function CopyTableValue(value)
+    return type(value) == "table" and CopyTable(value) or value
+end
+
+local function SeedSpecResourceDisplaySettings(settings, powerType, specID, keys)
+    local specSettings = GetResourceSpecOverrideTable(settings, powerType, specID, true)
+    local baseSettings = settings and settings.resources and settings.resources[powerType]
+    if not specSettings then return baseSettings end
+    if type(baseSettings) == "table" and type(keys) == "table" then
+        for _, key in ipairs(keys) do
+            if specSettings[key] == nil and baseSettings[key] ~= nil then
+                specSettings[key] = CopyTableValue(baseSettings[key])
+            end
+        end
+    end
+    return specSettings
+end
+
+local function ReadDisplaySetting(baseSettings, specSettings, key, fallback)
+    if type(specSettings) == "table" and specSettings[key] ~= nil then
+        return specSettings[key]
+    end
+    if type(baseSettings) == "table" and baseSettings[key] ~= nil then
+        return baseSettings[key]
+    end
+    return fallback
+end
+
+CS._SeedSpecResourceDisplaySettings = SeedSpecResourceDisplaySettings
+CS._ReadResourceDisplaySetting = ReadDisplaySetting
+CS._GetCurrentConfigSpecID = GetCurrentConfigSpecID
+CS._GetSpecResourceDisplayProfile = RB.GetSpecResourceDisplayProfile
+CS._ResourceTextDisplayKeys = RB.RESOURCE_TEXT_DISPLAY_KEYS
 
 local HealthResource = { ID = RB.RESOURCE_HEALTH }
 
@@ -185,6 +278,26 @@ function HealthResource.EnsureSettings(settings)
     return settings.resources[HealthResource.ID]
 end
 
+function HealthResource.EnsureDisplaySettings(settings, specID)
+    local base = HealthResource.EnsureSettings(settings)
+    local health = SeedSpecResourceDisplaySettings(settings, HealthResource.ID, specID, RESOURCE_HEALTH_DISPLAY_KEYS)
+    if not health then return base end
+    if health.showAbsorbs == nil then health.showAbsorbs = base.showAbsorbs ~= false end
+    if health.showHealAbsorbs == nil then health.showHealAbsorbs = base.showHealAbsorbs ~= false end
+    if health.showIncomingHeals == nil then health.showIncomingHeals = base.showIncomingHeals ~= false end
+    if health.showLowHealthAlert == nil then health.showLowHealthAlert = base.showLowHealthAlert == true end
+    if health.healthLowHealthAlertMissingHealthOnly == nil then health.healthLowHealthAlertMissingHealthOnly = base.healthLowHealthAlertMissingHealthOnly == true end
+    if type(health.healthAbsorbColor) ~= "table" then health.healthAbsorbColor = CopyTableValue(base.healthAbsorbColor or DEFAULT_HEALTH_ABSORB_COLOR) end
+    if type(health.healthHealAbsorbColor) ~= "table" then health.healthHealAbsorbColor = CopyTableValue(base.healthHealAbsorbColor or DEFAULT_HEALTH_HEAL_ABSORB_COLOR) end
+    if type(health.healthIncomingHealColor) ~= "table" then health.healthIncomingHealColor = CopyTableValue(base.healthIncomingHealColor or DEFAULT_HEALTH_INCOMING_HEAL_COLOR) end
+    if type(health.healthLowHealthAlertColor) ~= "table" then health.healthLowHealthAlertColor = CopyTableValue(base.healthLowHealthAlertColor or DEFAULT_HEALTH_LOW_HEALTH_ALERT_COLOR) end
+    HealthResource.NormalizeEffectTexture(health, "healthAbsorbTexture")
+    HealthResource.NormalizeEffectTexture(health, "healthHealAbsorbTexture")
+    HealthResource.NormalizeEffectTexture(health, "healthIncomingHealTexture")
+    HealthResource.NormalizeEffectTexture(health, "healthLowHealthAlertTexture")
+    return health
+end
+
 function HealthResource.AddOpacitySlider(container, health, key, label, defaultValue, applyBars)
     local slider = AceGUI:Create("Slider")
     slider:SetLabel(label)
@@ -225,7 +338,15 @@ function HealthResource.AddEffectStyleControls(container, checkbox, health, opti
 end
 
 function HealthResource.BuildColorControls(container, settings, applyBars)
-    local health = HealthResource.EnsureSettings(settings)
+    local specID = GetCurrentConfigSpecID()
+    if not specID then
+        local label = AceGUI:Create("Label")
+        label:SetText("Specialization data loading...")
+        label:SetFullWidth(true)
+        container:AddChild(label)
+        return
+    end
+    local health = HealthResource.EnsureDisplaySettings(settings, specID)
     local fillGradientEnabled = health.healthBarGradient
     if fillGradientEnabled == nil then
         fillGradientEnabled = DEFAULT_HEALTH_BAR_GRADIENT
@@ -458,10 +579,106 @@ end
 
 CS.healthResourceUI = HealthResource
 
+local function AddResourceSpecCopyButton(enableCb, characterCopyButton)
+    local _, initialSpecOrder, currentSpecID = CooldownCompanion:GetResourceBarSpecCopyOptions()
+    if not currentSpecID or #initialSpecOrder == 0 then
+        return
+    end
+
+    local btn = resourceSpecCopyButton
+    if not btn then
+        btn = CreateFrame("Button", nil, enableCb.frame)
+        btn:SetSize(16, 16)
+
+        local icon = btn:CreateTexture(nil, "OVERLAY")
+        icon:SetSize(14, 14)
+        icon:SetPoint("CENTER")
+        icon:SetAtlas("BattleBar-SwapPetIcon", false)
+        icon:SetDesaturated(true)
+        icon:SetVertexColor(0.2, 0.45, 1.0)
+        btn.icon = icon
+
+        resourceSpecCopyButton = btn
+    else
+        btn:SetParent(enableCb.frame)
+    end
+
+    btn:ClearAllPoints()
+    if characterCopyButton then
+        btn:SetPoint("LEFT", characterCopyButton, "RIGHT", 2, 0)
+    else
+        btn:SetPoint("LEFT", enableCb.checkbg, "RIGHT", enableCb.text:GetStringWidth() + 4, 0)
+    end
+    btn:Show()
+
+    btn:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Copy From Another Spec")
+        GameTooltip:AddLine("Copies Column 2 tab settings from another spec into your current spec.", 1, 1, 1, true)
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine("What is copied:", 1, 0.82, 0, true)
+        GameTooltip:AddLine("- Styling tab", 1, 1, 1, true)
+        GameTooltip:AddLine("- Layout tab", 1, 1, 1, true)
+        GameTooltip:AddLine("- Colors tab settings that apply to the current spec", 1, 1, 1, true)
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine("What is not copied:", 1, 0.82, 0, true)
+        GameTooltip:AddLine("- Health settings", 1, 1, 1, true)
+        GameTooltip:AddLine("- Custom Bars", 1, 1, 1, true)
+        GameTooltip:AddLine("- Aura overlays", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    btn:SetScript("OnLeave", function()
+        GameTooltip:Hide()
+    end)
+    btn:SetScript("OnClick", function()
+        if not resourceSpecCopyMenu then
+            resourceSpecCopyMenu = CreateFrame("Frame", "CDCResourceSpecCopyMenu", UIParent, "UIDropDownMenuTemplate")
+        end
+
+        local specValues, specOrder, refreshedSpecID = CooldownCompanion:GetResourceBarSpecCopyOptions()
+        if not refreshedSpecID or #specOrder == 0 then
+            return
+        end
+
+        UIDropDownMenu_Initialize(resourceSpecCopyMenu, function(self, level)
+            for _, sourceSpecID in ipairs(specOrder) do
+                local sourceSpecName = specValues[sourceSpecID]
+                local info = UIDropDownMenu_CreateInfo()
+                info.text = sourceSpecName
+                info.notCheckable = true
+                info.func = function()
+                    CloseDropDownMenus()
+                    if not ShowPopupAboveConfig then
+                        CooldownCompanion:Print("Copy confirmation is unavailable.")
+                        return
+                    end
+                    ShowPopupAboveConfig("CDC_CONFIRM_RESOURCE_SPEC_COPY", sourceSpecName, {
+                        sourceSpecID = sourceSpecID,
+                    })
+                end
+                UIDropDownMenu_AddButton(info, level)
+            end
+        end, "MENU")
+
+        resourceSpecCopyMenu:SetFrameStrata("FULLSCREEN_DIALOG")
+        ToggleDropDownMenu(1, nil, resourceSpecCopyMenu, "cursor", 0, 0)
+    end)
+
+    local prevOnRelease = enableCb.events and enableCb.events["OnRelease"]
+    enableCb:SetCallback("OnRelease", function()
+        if prevOnRelease then
+            prevOnRelease(enableCb, "OnRelease")
+        end
+        btn:ClearAllPoints()
+        btn:Hide()
+    end)
+end
+
 local function BuildResourceBarAnchoringPanel(container)
     local db = CooldownCompanion.db.profile
     local settings = CooldownCompanion:GetResourceBarSettings()
-    local thicknessField, thicknessLabel = GetResourceThicknessFieldConfig(settings)
+    local layout = CooldownCompanion:GetSpecLayoutOrder()
+    local thicknessField, thicknessLabel = GetResourceThicknessFieldConfig(settings, layout)
 
     -- Enable Resource Bars
     local enableCb = AceGUI:Create("CheckBox")
@@ -476,47 +693,25 @@ local function BuildResourceBarAnchoringPanel(container)
     end)
     container:AddChild(enableCb)
 
-    CreateCharacterCopyButton(enableCb, "resourceBars", L["Resource Bars"], function()
+    local characterCopyButton = CreateCharacterCopyButton(enableCb, "resourceBars", "Resource Bars", function()
         CooldownCompanion:EvaluateResourceBars()
         CooldownCompanion:UpdateAnchorStacking()
         CooldownCompanion:RefreshConfigPanel()
     end)
+    AddResourceSpecCopyButton(enableCb, characterCopyButton)
 
     if not settings.enabled then return end
     if not settings.resources then settings.resources = {} end
 
-    local isIndependentStack = settings.independentAnchorEnabled == true
-
-    -- Anchoring Mode dropdown
-    local anchorModeDrop = AceGUI:Create("Dropdown")
-    anchorModeDrop:SetLabel(L["Anchoring Mode"])
-    anchorModeDrop:SetList({
-        attached = L["Attached to Panel"],
-        independent = L["Independent"],
-    }, { "attached", "independent" })
-    anchorModeDrop:SetValue(isIndependentStack and "independent" or "attached")
-    anchorModeDrop:SetFullWidth(true)
-    anchorModeDrop:SetCallback("OnValueChanged", function(widget, event, val)
-        settings.independentAnchorEnabled = (val == "independent")
-        CooldownCompanion:EvaluateResourceBars()
-        CooldownCompanion:UpdateAnchorStacking()
-        CooldownCompanion:RefreshConfigPanel()
-    end)
-    container:AddChild(anchorModeDrop)
-
-    -- Inherit panel alpha (only when attached to panel)
-    if not isIndependentStack then
-        local inheritCb = AceGUI:Create("CheckBox")
-        inheritCb:SetLabel(L["Inherit panel alpha"])
-        inheritCb:SetValue(settings.inheritAlpha)
-        inheritCb:SetFullWidth(true)
-        inheritCb:SetCallback("OnValueChanged", function(widget, event, val)
-            settings.inheritAlpha = val
-            CooldownCompanion:ApplyResourceBars()
-            CooldownCompanion:RefreshConfigPanel()
-        end)
-        container:AddChild(inheritCb)
+    if not layout then
+        local label = AceGUI:Create("Label")
+        label:SetText("Specialization data loading...")
+        label:SetFullWidth(true)
+        container:AddChild(label)
+        return
     end
+
+    local isIndependentStack = layout.independentAnchorEnabled == true
 
     -- Preview toggle (ephemeral)
     local previewCb = AceGUI:Create("CheckBox")
@@ -601,31 +796,36 @@ local function BuildResourceBarAnchoringPanel(container)
             end)
             container:AddChild(resCb)
 
-            if settings.customBarHeights then
+            if layout.customBarHeights then
                 local advExpanded = AddAdvancedToggle(resCb, "rbHeight_" .. pt, rbHeightAdvBtns, enabled)
                 if advExpanded then
+                    if type(layout.resources[pt]) ~= "table" then
+                        layout.resources[pt] = {}
+                    end
+                    local resLayout = layout.resources[pt]
                     local resHeightSlider = AceGUI:Create("Slider")
                     resHeightSlider:SetLabel(thicknessLabel)
                     resHeightSlider:SetSliderValues(4, 40, 0.1)
                     if thicknessField == "barWidth" then
                         resHeightSlider:SetValue(
-                            settings.resources[pt].barWidth or settings.resources[pt].barHeight
-                            or settings.barWidth or settings.barHeight or 12
+                            resLayout.barWidth or resLayout.barHeight
+                            or layout.barWidth or layout.barHeight or settings.barWidth or settings.barHeight or 12
                         )
                     else
                         resHeightSlider:SetValue(
-                            settings.resources[pt].barHeight or settings.resources[pt].barWidth
-                            or settings.barHeight or settings.barWidth or 12
+                            resLayout.barHeight or resLayout.barWidth
+                            or layout.barHeight or layout.barWidth or settings.barHeight or settings.barWidth or 12
                         )
                     end
                     resHeightSlider:SetFullWidth(true)
                     local capturedPt = pt
                     resHeightSlider:SetCallback("OnValueChanged", function(widget, event, val)
-                        if not settings.resources[capturedPt] then
-                            settings.resources[capturedPt] = {}
+                        if not layout.resources[capturedPt] then
+                            layout.resources[capturedPt] = {}
                         end
-                        settings.resources[capturedPt][thicknessField] = val
+                        layout.resources[capturedPt][thicknessField] = val
                         CooldownCompanion:ApplyResourceBars()
+                        CooldownCompanion:RepositionCastBar()
                         CooldownCompanion:UpdateAnchorStacking()
                     end)
                     container:AddChild(resHeightSlider)
@@ -635,19 +835,21 @@ local function BuildResourceBarAnchoringPanel(container)
     end
 
     -- ============ Alpha Section ============
-    if isIndependentStack or not settings.inheritAlpha then
-        local group = db.groups[CS.selectedGroup]
-        BuildAlphaControls(container, settings, function()
-            CooldownCompanion:ApplyResourceBars()
-            CooldownCompanion:RefreshConfigPanel()
-        end, "rb_alpha", { isGlobal = group and group.isGlobal })
-    end
+    local group = db.groups[CS.selectedGroup]
+    BuildAlphaControls(container, settings, function()
+        CooldownCompanion:ApplyResourceBars()
+        CooldownCompanion:RefreshConfigPanel()
+    end, "rb_alpha", {
+        isGlobal = group and group.isGlobal,
+        disabled = not isIndependentStack and layout.inheritAlpha == true,
+    })
 end
 
 ------------------------------------------------------------------------
 
 local function BuildResourceBarPositioningPanel(container)
     local settings = CooldownCompanion:GetResourceBarSettings()
+    local layout = CooldownCompanion:GetSpecLayoutOrder()
 
     if not settings.enabled then
         local label = AceGUI:Create("Label")
@@ -657,9 +859,35 @@ local function BuildResourceBarPositioningPanel(container)
         return
     end
 
-    local isVerticalLayout = IsResourceBarVerticalConfig(settings)
-    local gapField, gapLabel = GetResourceGapFieldConfig(settings)
-    local isIndependentStack = settings.independentAnchorEnabled == true
+    if not layout then
+        local label = AceGUI:Create("Label")
+        label:SetText("Specialization data loading...")
+        label:SetFullWidth(true)
+        container:AddChild(label)
+        return
+    end
+
+    local isVerticalLayout = IsResourceBarVerticalConfig(settings, layout)
+    local gapField, gapLabel = GetResourceGapFieldConfig(settings, layout)
+    local isIndependentStack = layout.independentAnchorEnabled == true
+
+    -- Anchoring Mode dropdown
+    local anchorModeDrop = AceGUI:Create("Dropdown")
+    anchorModeDrop:SetLabel("Anchoring Mode")
+    anchorModeDrop:SetList({
+        attached = "Attached to Panel",
+        independent = "Independent",
+    }, { "attached", "independent" })
+    anchorModeDrop:SetValue(isIndependentStack and "independent" or "attached")
+    anchorModeDrop:SetFullWidth(true)
+    anchorModeDrop:SetCallback("OnValueChanged", function(widget, event, val)
+        layout.independentAnchorEnabled = (val == "independent")
+        CooldownCompanion:EvaluateResourceBars()
+        CooldownCompanion:RepositionCastBar()
+        CooldownCompanion:UpdateAnchorStacking()
+        CooldownCompanion:RefreshConfigPanel()
+    end)
+    container:AddChild(anchorModeDrop)
 
     -- Bar Orientation
     local orientDrop = AceGUI:Create("Dropdown")
@@ -668,11 +896,12 @@ local function BuildResourceBarPositioningPanel(container)
         horizontal = L["Horizontal"],
         vertical = L["Vertical"],
     }, { "horizontal", "vertical" })
-    orientDrop:SetValue(settings.orientation or "horizontal")
+    orientDrop:SetValue(layout.orientation or settings.orientation or "horizontal")
     orientDrop:SetFullWidth(true)
     orientDrop:SetCallback("OnValueChanged", function(widget, event, val)
-        settings.orientation = val
+        layout.orientation = val
         CooldownCompanion:ApplyResourceBars()
+        CooldownCompanion:RepositionCastBar()
         CooldownCompanion:UpdateAnchorStacking()
         CooldownCompanion:RefreshConfigPanel()
     end)
@@ -685,12 +914,13 @@ local function BuildResourceBarPositioningPanel(container)
         bottom_to_top = L["Bottom to Top"],
         top_to_bottom = L["Top to Bottom"],
     }, { "bottom_to_top", "top_to_bottom" })
-    fillDirDrop:SetValue(settings.verticalFillDirection or "bottom_to_top")
+    fillDirDrop:SetValue(layout.verticalFillDirection or settings.verticalFillDirection or "bottom_to_top")
     fillDirDrop:SetDisabled(not isVerticalLayout)
     fillDirDrop:SetFullWidth(true)
     fillDirDrop:SetCallback("OnValueChanged", function(widget, event, val)
-        settings.verticalFillDirection = val
+        layout.verticalFillDirection = val
         CooldownCompanion:ApplyResourceBars()
+        CooldownCompanion:RepositionCastBar()
         CooldownCompanion:UpdateAnchorStacking()
     end)
     container:AddChild(fillDirDrop)
@@ -699,11 +929,12 @@ local function BuildResourceBarPositioningPanel(container)
     local spacingSlider = AceGUI:Create("Slider")
     spacingSlider:SetLabel(L["Bar Spacing"])
     spacingSlider:SetSliderValues(0, 20, 0.1)
-    spacingSlider:SetValue(settings.barSpacing or 3.6)
+    spacingSlider:SetValue(layout.barSpacing or settings.barSpacing or 3.6)
     spacingSlider:SetFullWidth(true)
     spacingSlider:SetCallback("OnValueChanged", function(widget, event, val)
-        settings.barSpacing = val
+        layout.barSpacing = val
         CooldownCompanion:ApplyResourceBars()
+        CooldownCompanion:RepositionCastBar()
         CooldownCompanion:UpdateAnchorStacking()
     end)
     container:AddChild(spacingSlider)
@@ -712,16 +943,16 @@ local function BuildResourceBarPositioningPanel(container)
     local segGapSlider = AceGUI:Create("Slider")
     segGapSlider:SetLabel(L["Segment Gap"])
     segGapSlider:SetSliderValues(0, 20, 0.1)
-    segGapSlider:SetValue(settings.segmentGap or 4)
+    segGapSlider:SetValue(layout.segmentGap or settings.segmentGap or 4)
     segGapSlider:SetFullWidth(true)
     segGapSlider:SetCallback("OnValueChanged", function(widget, event, val)
-        settings.segmentGap = val
+        layout.segmentGap = val
         CooldownCompanion:ApplyResourceBars()
     end)
     container:AddChild(segGapSlider)
 
     -- Bar Height + Custom Heights
-    ST._BuildBarHeightControls(container, settings)
+    ST._BuildBarHeightControls(container, settings, layout)
 
     -- ============ Anchor Settings (independent mode only) ============
     if isIndependentStack then
@@ -740,17 +971,15 @@ local function BuildResourceBarPositioningPanel(container)
         end)
 
         if not stackPosCollapsed then
-            if type(settings.independentAnchor) ~= "table" then
-                settings.independentAnchor = { point = "CENTER", relativePoint = "CENTER", x = 0, y = 0 }
-            end
-            local anchor = settings.independentAnchor
+            EnsureResourceLayoutAnchor(settings, layout)
+            local anchor = layout.independentAnchor
 
             local unlockCb = AceGUI:Create("CheckBox")
-            unlockCb:SetLabel(L["Unlock Placement"])
-            unlockCb:SetValue(not settings.independentAnchorLocked)
+            unlockCb:SetLabel("Unlock Placement")
+            unlockCb:SetValue(not layout.independentAnchorLocked)
             unlockCb:SetFullWidth(true)
             unlockCb:SetCallback("OnValueChanged", function(widget, event, val)
-                settings.independentAnchorLocked = not val
+                layout.independentAnchorLocked = not val
                 CooldownCompanion:ApplyResourceBars()
             end)
             container:AddChild(unlockCb)
@@ -758,10 +987,10 @@ local function BuildResourceBarPositioningPanel(container)
             local widthSlider = AceGUI:Create("Slider")
             widthSlider:SetLabel(L["Bar Width"])
             widthSlider:SetSliderValues(20, 600, 1)
-            widthSlider:SetValue(settings.independentWidth or 200)
+            widthSlider:SetValue(layout.independentWidth or settings.independentWidth or 200)
             widthSlider:SetFullWidth(true)
             widthSlider:SetCallback("OnValueChanged", function(widget, event, val)
-                settings.independentWidth = val
+                layout.independentWidth = val
                 CooldownCompanion:ApplyResourceBars()
                 CooldownCompanion:UpdateAnchorStacking()
             end)
@@ -826,23 +1055,25 @@ local function BuildResourceBarPositioningPanel(container)
             gapSlider:SetLabel(gapLabel)
             gapSlider:SetSliderValues(-100, 100, 0.1)
             if gapField == "verticalXOffset" then
-                gapSlider:SetValue(settings.verticalXOffset or settings.yOffset or 3)
+                gapSlider:SetValue(layout.verticalXOffset or layout.yOffset or settings.verticalXOffset or settings.yOffset or 3)
             else
-                gapSlider:SetValue(settings.yOffset or settings.verticalXOffset or 3)
+                gapSlider:SetValue(layout.yOffset or layout.verticalXOffset or settings.yOffset or settings.verticalXOffset or 3)
             end
             gapSlider:SetFullWidth(true)
             gapSlider:SetCallback("OnValueChanged", function(widget, event, val)
-                settings[gapField] = val
+                layout[gapField] = val
                 CooldownCompanion:ApplyResourceBars()
+                CooldownCompanion:RepositionCastBar()
                 CooldownCompanion:UpdateAnchorStacking()
             end)
             container:AddChild(gapSlider)
 
             if ST._BuildAttachedCastBarOffsetControls then
-                ST._BuildAttachedCastBarOffsetControls(container)
+                ST._BuildAttachedCastBarOffsetControls(container, layout)
             end
         end
     end
+
 end
 
 ------------------------------------------------------------------------
@@ -857,33 +1088,49 @@ local function GetResourceBarTextureOptions()
 end
 
 -- Extracted to its own function to keep upvalue counts manageable in the caller.
-local function BuildBarHeightControls(container, settings)
-    local thicknessField, thicknessLabel, customThicknessLabel = GetResourceThicknessFieldConfig(settings)
+local function BuildBarHeightControls(container, settings, layout)
+    layout = layout or settings
+    local thicknessField, thicknessLabel, customThicknessLabel = GetResourceThicknessFieldConfig(settings, layout)
 
     local hSlider = AceGUI:Create("Slider")
     hSlider:SetLabel(thicknessLabel)
     hSlider:SetSliderValues(4, 40, 0.1)
     if thicknessField == "barWidth" then
-        hSlider:SetValue(settings.barWidth or settings.barHeight or 12)
+        hSlider:SetValue(layout.barWidth or layout.barHeight or settings.barWidth or settings.barHeight or 12)
     else
-        hSlider:SetValue(settings.barHeight or settings.barWidth or 12)
+        hSlider:SetValue(layout.barHeight or layout.barWidth or settings.barHeight or settings.barWidth or 12)
     end
     hSlider:SetFullWidth(true)
     hSlider:SetCallback("OnValueChanged", function(widget, event, val)
-        settings[thicknessField] = val
+        layout[thicknessField] = val
         CooldownCompanion:ApplyResourceBars()
+        CooldownCompanion:RepositionCastBar()
         CooldownCompanion:UpdateAnchorStacking()
     end)
-    hSlider:SetDisabled(settings.customBarHeights or false)
+    hSlider:SetDisabled(layout.customBarHeights or false)
     container:AddChild(hSlider)
+
+    if layout.independentAnchorEnabled ~= true then
+        local inheritCb = AceGUI:Create("CheckBox")
+        inheritCb:SetLabel("Inherit panel alpha")
+        inheritCb:SetValue(layout.inheritAlpha)
+        inheritCb:SetFullWidth(true)
+        inheritCb:SetCallback("OnValueChanged", function(widget, event, val)
+            layout.inheritAlpha = val == true
+            CooldownCompanion:ApplyResourceBars()
+            CooldownCompanion:RefreshConfigPanel()
+        end)
+        container:AddChild(inheritCb)
+    end
 
     local customHeightsCb = AceGUI:Create("CheckBox")
     customHeightsCb:SetLabel(customThicknessLabel)
-    customHeightsCb:SetValue(settings.customBarHeights or false)
+    customHeightsCb:SetValue(layout.customBarHeights or false)
     customHeightsCb:SetFullWidth(true)
     customHeightsCb:SetCallback("OnValueChanged", function(widget, event, val)
-        settings.customBarHeights = val
+        layout.customBarHeights = val
         CooldownCompanion:ApplyResourceBars()
+        CooldownCompanion:RepositionCastBar()
         CooldownCompanion:UpdateAnchorStacking()
         CooldownCompanion:RefreshConfigPanel()
     end)
@@ -916,6 +1163,15 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
 
     local applyBars = function() CooldownCompanion:ApplyResourceBars() end
     local healthResourceID = -1 -- Keep aligned with RB.RESOURCE_HEALTH without adding an upvalue here.
+    local displaySpecID = CS._GetCurrentConfigSpecID()
+    local displayProfile = displaySpecID and CS._GetSpecResourceDisplayProfile(settings, displaySpecID) or nil
+    if not displaySpecID or not displayProfile then
+        local label = AceGUI:Create("Label")
+        label:SetText("Specialization data loading...")
+        label:SetFullWidth(true)
+        container:AddChild(label)
+        return
+    end
     local function isHealthTextFormat(textFormat)
         return textFormat == "percent"
             or textFormat == "percent_no_sign"
@@ -930,10 +1186,10 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
     local texDrop = AceGUI:Create("Dropdown")
     texDrop:SetLabel(L["Bar Texture"])
     texDrop:SetList(GetResourceBarTextureOptions())
-    texDrop:SetValue(settings.barTexture or "Solid")
+    texDrop:SetValue(displayProfile.barTexture or settings.barTexture or "Solid")
     texDrop:SetFullWidth(true)
     texDrop:SetCallback("OnValueChanged", function(widget, event, val)
-        settings.barTexture = val
+        displayProfile.barTexture = val
         CooldownCompanion:ApplyResourceBars()
         -- Defer panel rebuild to next frame so it doesn't interfere with current callback
         C_Timer.After(0, function() CooldownCompanion:RefreshConfigPanel() end)
@@ -941,21 +1197,21 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
     container:AddChild(texDrop)
 
     -- Brightness slider (only for Blizzard Class texture)
-    if settings.barTexture == "blizzard_class" then
+    if (displayProfile.barTexture or settings.barTexture) == "blizzard_class" then
         local brightSlider = AceGUI:Create("Slider")
         brightSlider:SetLabel(L["Class Texture Brightness"])
         brightSlider:SetSliderValues(0.5, 2.0, 0.1)
-        brightSlider:SetValue(settings.classBarBrightness or 1.3)
+        brightSlider:SetValue(displayProfile.classBarBrightness or settings.classBarBrightness or 1.3)
         brightSlider:SetFullWidth(true)
         brightSlider:SetCallback("OnValueChanged", function(widget, event, val)
-            settings.classBarBrightness = val
+            displayProfile.classBarBrightness = val
             CooldownCompanion:ApplyResourceBars()
         end)
         container:AddChild(brightSlider)
     end
 
     -- Resource Background Color
-    AddColorPicker(container, settings, "backgroundColor", "Resource Background Color", { 0, 0, 0, 0.5 }, true, applyBars)
+    AddColorPicker(container, displayProfile, "backgroundColor", "Resource Background Color", { 0, 0, 0, 0.5 }, true, applyBars)
 
     -- Border Style
     local borderDrop = AceGUI:Create("Dropdown")
@@ -964,26 +1220,26 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
         pixel = "Pixel",
         none = "None",
     }, { "pixel", "none" })
-    borderDrop:SetValue(settings.borderStyle or "pixel")
+    borderDrop:SetValue(displayProfile.borderStyle or settings.borderStyle or "pixel")
     borderDrop:SetFullWidth(true)
     borderDrop:SetCallback("OnValueChanged", function(widget, event, val)
-        settings.borderStyle = val
+        displayProfile.borderStyle = val
         CooldownCompanion:ApplyResourceBars()
         CooldownCompanion:RefreshConfigPanel()
     end)
     container:AddChild(borderDrop)
 
-    if settings.borderStyle == "pixel" then
-        AddColorPicker(container, settings, "borderColor", L["Border Color"], { 0, 0, 0, 1 }, true, applyBars)
+    if (displayProfile.borderStyle or settings.borderStyle or "pixel") == "pixel" then
+        AddColorPicker(container, displayProfile, "borderColor", "Border Color", { 0, 0, 0, 1 }, true, applyBars)
 
         local borderSizeSlider = AceGUI:Create("Slider")
         borderSizeSlider:SetLabel(L["Border Size"])
         borderSizeSlider:SetSliderValues(0, 4, 0.1)
-        borderSizeSlider:SetValue(settings.borderSize or 1)
+        borderSizeSlider:SetValue(displayProfile.borderSize or settings.borderSize or 1)
         borderSizeSlider:SetIsPercent(false)
         borderSizeSlider:SetFullWidth(true)
         borderSizeSlider:SetCallback("OnValueChanged", function(widget, event, val)
-            settings.borderSize = val
+            displayProfile.borderSize = val
             CooldownCompanion:ApplyResourceBars()
         end)
         container:AddChild(borderSizeSlider)
@@ -1022,15 +1278,17 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
             elseif not settings.resources[capturedPt] then
                 settings.resources[capturedPt] = {}
             end
-            local resSettings = settings.resources[capturedPt]
-            local name = POWER_NAMES[capturedPt] or (L["Power "] .. capturedPt)
+            local baseSettings = settings.resources[capturedPt]
+            local resSettings = CS._SeedSpecResourceDisplaySettings(settings, capturedPt, displaySpecID, CS._ResourceTextDisplayKeys) or baseSettings
+            local name = POWER_NAMES[capturedPt] or ("Power " .. capturedPt)
 
             local showTextEnabled
+            local showTextValue = CS._ReadResourceDisplaySetting(baseSettings, resSettings, "showText", nil)
             if isHealthResource or isSegmentedResource then
                 -- Segmented resources and Health are off by default unless explicitly enabled.
-                showTextEnabled = resSettings.showText == true
+                showTextEnabled = showTextValue == true
             else
-                showTextEnabled = resSettings.showText ~= false
+                showTextEnabled = showTextValue ~= false
             end
 
             local cb = AceGUI:Create("CheckBox")
@@ -1038,21 +1296,15 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
             cb:SetValue(showTextEnabled)
             cb:SetFullWidth(true)
             cb:SetCallback("OnValueChanged", function(widget, event, val)
-                if not settings.resources[capturedPt] then settings.resources[capturedPt] = {} end
                 if isHealthResource then
-                    local healthSettings = settings.resources[capturedPt]
-                    healthSettings.showText = val and true or false
-                    if not isHealthTextFormat(healthSettings.textFormat) then
-                        healthSettings.textFormat = "percent"
+                    resSettings.showText = val and true or false
+                    if not isHealthTextFormat(resSettings.textFormat) then
+                        resSettings.textFormat = "percent"
                     end
                 elseif isSegmentedResource then
-                    settings.resources[capturedPt].showText = val and true or nil
+                    resSettings.showText = val == true
                 else
-                    if val then
-                        settings.resources[capturedPt].showText = nil
-                    else
-                        settings.resources[capturedPt].showText = false
-                    end
+                    resSettings.showText = val == true
                 end
                 CooldownCompanion:ApplyResourceBars()
                 CooldownCompanion:RefreshConfigPanel()
@@ -1097,7 +1349,7 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
                     textFormatOrder = { "current", "current_max", "percent" }
                 end
                 textFormatDrop:SetList(textFormatOptions, textFormatOrder)
-                local textFormatValue = resSettings.textFormat or (isHealthResource and "percent" or DEFAULT_RESOURCE_TEXT_FORMAT)
+                local textFormatValue = CS._ReadResourceDisplaySetting(baseSettings, resSettings, "textFormat", isHealthResource and "percent" or DEFAULT_RESOURCE_TEXT_FORMAT)
                 if isHealthResource then
                     if not isHealthTextFormat(textFormatValue) then
                         textFormatValue = "percent"
@@ -1116,21 +1368,21 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
                 textFormatDrop:SetCallback("OnValueChanged", function(widget, event, val)
                     if isHealthResource then
                         if isHealthTextFormat(val) then
-                            settings.resources[capturedPt].textFormat = val
+                            resSettings.textFormat = val
                         else
-                            settings.resources[capturedPt].textFormat = "percent"
+                            resSettings.textFormat = "percent"
                         end
                     elseif isSegmentedResource then
                         if val == "current" or val == "current_max" then
-                            settings.resources[capturedPt].textFormat = val
+                            resSettings.textFormat = val
                         else
-                            settings.resources[capturedPt].textFormat = DEFAULT_RESOURCE_TEXT_FORMAT
+                            resSettings.textFormat = DEFAULT_RESOURCE_TEXT_FORMAT
                         end
                     else
                         if val == "current" or val == "current_max" or val == "percent" then
-                            settings.resources[capturedPt].textFormat = val
+                            resSettings.textFormat = val
                         else
-                            settings.resources[capturedPt].textFormat = DEFAULT_RESOURCE_TEXT_FORMAT
+                            resSettings.textFormat = DEFAULT_RESOURCE_TEXT_FORMAT
                         end
                     end
                     CooldownCompanion:ApplyResourceBars()
@@ -1140,10 +1392,10 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
                 local fontDrop = AceGUI:Create("Dropdown")
                 fontDrop:SetLabel(L["Font"])
                 CS.SetupFontDropdown(fontDrop)
-                fontDrop:SetValue(resSettings.textFont or DEFAULT_RESOURCE_TEXT_FONT)
+                fontDrop:SetValue(CS._ReadResourceDisplaySetting(baseSettings, resSettings, "textFont", DEFAULT_RESOURCE_TEXT_FONT))
                 fontDrop:SetFullWidth(true)
                 fontDrop:SetCallback("OnValueChanged", function(widget, event, val)
-                    settings.resources[capturedPt].textFont = val
+                    resSettings.textFont = val
                     CooldownCompanion:ApplyResourceBars()
                 end)
                 container:AddChild(fontDrop)
@@ -1151,10 +1403,10 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
                 local sizeDrop = AceGUI:Create("Slider")
                 sizeDrop:SetLabel(L["Font Size"])
                 sizeDrop:SetSliderValues(6, 24, 1)
-                sizeDrop:SetValue(resSettings.textFontSize or DEFAULT_RESOURCE_TEXT_SIZE)
+                sizeDrop:SetValue(CS._ReadResourceDisplaySetting(baseSettings, resSettings, "textFontSize", DEFAULT_RESOURCE_TEXT_SIZE))
                 sizeDrop:SetFullWidth(true)
                 sizeDrop:SetCallback("OnValueChanged", function(widget, event, val)
-                    settings.resources[capturedPt].textFontSize = val
+                    resSettings.textFontSize = val
                     CooldownCompanion:ApplyResourceBars()
                 end)
                 container:AddChild(sizeDrop)
@@ -1162,15 +1414,15 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
                 local outlineDrop = AceGUI:Create("Dropdown")
                 outlineDrop:SetLabel(L["Outline"])
                 outlineDrop:SetList(CS.outlineOptions)
-                outlineDrop:SetValue(resSettings.textFontOutline or DEFAULT_RESOURCE_TEXT_OUTLINE)
+                outlineDrop:SetValue(CS._ReadResourceDisplaySetting(baseSettings, resSettings, "textFontOutline", DEFAULT_RESOURCE_TEXT_OUTLINE))
                 outlineDrop:SetFullWidth(true)
                 outlineDrop:SetCallback("OnValueChanged", function(widget, event, val)
-                    settings.resources[capturedPt].textFontOutline = val
+                    resSettings.textFontOutline = val
                     CooldownCompanion:ApplyResourceBars()
                 end)
                 container:AddChild(outlineDrop)
 
-                AddColorPicker(container, settings.resources[capturedPt], "textFontColor", L["Text Color"], DEFAULT_RESOURCE_TEXT_COLOR, true, applyBars)
+                AddColorPicker(container, resSettings, "textFontColor", "Text Color", DEFAULT_RESOURCE_TEXT_COLOR, true, applyBars)
 
                 local textAnchorDrop = AceGUI:Create("Dropdown")
                 textAnchorDrop:SetLabel(L["Text Anchor"])
@@ -1179,10 +1431,10 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
                     textAnchorValues[pt] = CS.anchorPointLabels[pt]
                 end
                 textAnchorDrop:SetList(textAnchorValues, CS.anchorPoints)
-                textAnchorDrop:SetValue(resSettings.textAnchor or DEFAULT_RESOURCE_TEXT_ANCHOR)
+                textAnchorDrop:SetValue(CS._ReadResourceDisplaySetting(baseSettings, resSettings, "textAnchor", DEFAULT_RESOURCE_TEXT_ANCHOR))
                 textAnchorDrop:SetFullWidth(true)
                 textAnchorDrop:SetCallback("OnValueChanged", function(widget, event, val)
-                    settings.resources[capturedPt].textAnchor = val
+                    resSettings.textAnchor = val
                     CooldownCompanion:ApplyResourceBars()
                 end)
                 container:AddChild(textAnchorDrop)
@@ -1190,10 +1442,10 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
                 local textXSlider = AceGUI:Create("Slider")
                 textXSlider:SetLabel(L["Text X Offset"])
                 textXSlider:SetSliderValues(-50, 50, 0.1)
-                textXSlider:SetValue(resSettings.textXOffset or DEFAULT_RESOURCE_TEXT_X_OFFSET)
+                textXSlider:SetValue(CS._ReadResourceDisplaySetting(baseSettings, resSettings, "textXOffset", DEFAULT_RESOURCE_TEXT_X_OFFSET))
                 textXSlider:SetFullWidth(true)
                 textXSlider:SetCallback("OnValueChanged", function(widget, event, val)
-                    settings.resources[capturedPt].textXOffset = val
+                    resSettings.textXOffset = val
                     CooldownCompanion:ApplyResourceBars()
                 end)
                 container:AddChild(textXSlider)
@@ -1201,22 +1453,21 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
                 local textYSlider = AceGUI:Create("Slider")
                 textYSlider:SetLabel(L["Text Y Offset"])
                 textYSlider:SetSliderValues(-50, 50, 0.1)
-                textYSlider:SetValue(resSettings.textYOffset or DEFAULT_RESOURCE_TEXT_Y_OFFSET)
+                textYSlider:SetValue(CS._ReadResourceDisplaySetting(baseSettings, resSettings, "textYOffset", DEFAULT_RESOURCE_TEXT_Y_OFFSET))
                 textYSlider:SetFullWidth(true)
                 textYSlider:SetCallback("OnValueChanged", function(widget, event, val)
-                    settings.resources[capturedPt].textYOffset = val
+                    resSettings.textYOffset = val
                     CooldownCompanion:ApplyResourceBars()
                 end)
                 container:AddChild(textYSlider)
 
                 if HIDE_AT_ZERO_ELIGIBLE[capturedPt] then
                     local hideAtZeroCb = AceGUI:Create("CheckBox")
-                    hideAtZeroCb:SetLabel(L["Hide at 0"])
-                    hideAtZeroCb:SetValue(resSettings.hideTextAtZero == true)
+                    hideAtZeroCb:SetLabel("Hide at 0")
+                    hideAtZeroCb:SetValue(CS._ReadResourceDisplaySetting(baseSettings, resSettings, "hideTextAtZero", false) == true)
                     hideAtZeroCb:SetFullWidth(true)
                     hideAtZeroCb:SetCallback("OnValueChanged", function(widget, event, val)
-                        if not settings.resources[capturedPt] then settings.resources[capturedPt] = {} end
-                        settings.resources[capturedPt].hideTextAtZero = val and true or nil
+                        resSettings.hideTextAtZero = val == true
                         CooldownCompanion:ApplyResourceBars()
                     end)
                     container:AddChild(hideAtZeroCb)
@@ -1255,14 +1506,9 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
         CooldownCompanion:RefreshConfigPanel()
     end)
 
-    local colorInfoBtn = CreateInfoButton(colorHeading.frame, colorCollapseBtn, "LEFT", "RIGHT", 4, 0, {
-        "Per-Resource Colors",
-        {"Resource colors are saved per specialization.", 1, 1, 1, true},
-    }, colorHeading)
-
     colorHeading.right:ClearAllPoints()
     colorHeading.right:SetPoint("RIGHT", colorHeading.frame, "RIGHT", -3, 0)
-    colorHeading.right:SetPoint("LEFT", colorInfoBtn, "RIGHT", 4, 0)
+    colorHeading.right:SetPoint("LEFT", colorCollapseBtn, "RIGHT", 4, 0)
 
     local _colorSpecID = GetCurrentConfigSpecID()
 
@@ -1281,7 +1527,7 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
             end
 
             if pt == healthResourceID then
-                -- Health colors are character-level and rendered above.
+                -- Health colors are rendered in the Health tab.
             elseif pt == 4 then
                 -- Combo Points: two color pickers (normal vs at max)
                 local _p4n = { comboColor = ReadSpecOverrideKey(settings, 4, _colorSpecID, "comboColor", DEFAULT_COMBO_COLOR) }
@@ -1418,7 +1664,7 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
             else
                 local name = POWER_NAMES[pt] or (L["Power "] .. pt)
 
-                if settings.barTexture == "blizzard_class" and ST.POWER_ATLAS_TYPES and ST.POWER_ATLAS_TYPES[pt] then
+                if (displayProfile.barTexture or settings.barTexture) == "blizzard_class" and ST.POWER_ATLAS_TYPES and ST.POWER_ATLAS_TYPES[pt] then
                     -- Atlas-backed type; color picker not applicable
                 else
                     local capturedGenericPt = pt
@@ -1675,76 +1921,8 @@ local function BuildResourceBarHealthStylingPanel(container)
 end
 
 ------------------------------------------------------------------------
--- Custom Aura Bar Panel (col2 takeover when resource bar panel active)
+-- Custom Bars detail panel
 ------------------------------------------------------------------------
-
-local function ClampCustomAuraIndependentDimension(value, fallback)
-    local dimension = tonumber(value) or tonumber(fallback) or 120
-    if dimension < 4 then
-        dimension = 4
-    elseif dimension > 1200 then
-        dimension = 1200
-    end
-    return dimension
-end
-
-local function IsTruthyConfigFlag(value)
-    return value == true or value == 1 or value == "1" or value == "true"
-end
-
-local function NormalizeCustomAuraIndependentOrientation(value)
-    if value == "horizontal" or value == "vertical" then
-        return value
-    end
-    return nil
-end
-
-local function NormalizeCustomAuraIndependentVerticalFillDirection(value)
-    if value == "bottom_to_top" or value == "top_to_bottom" or value == "inherit" then
-        return value
-    end
-    return "inherit"
-end
-
-local function GetResolvedCustomAuraIndependentOrientation(cab, settings)
-    local orientation = NormalizeCustomAuraIndependentOrientation(cab and cab.independentOrientation)
-    if orientation then
-        return orientation
-    end
-    return IsResourceBarVerticalConfig(settings) and "vertical" or "horizontal"
-end
-
-local function EnsureCustomAuraIndependentConfig(cab, settings)
-    if type(cab) ~= "table" then return end
-
-    if cab.independentAnchorEnabled ~= nil then
-        cab.independentAnchorEnabled = IsTruthyConfigFlag(cab.independentAnchorEnabled) and true or nil
-    end
-
-    if cab.independentAnchorTargetMode ~= "group" and cab.independentAnchorTargetMode ~= "frame" then
-        cab.independentAnchorTargetMode = "group"
-    end
-    if type(cab.independentLocked) ~= "boolean" then
-        cab.independentLocked = IsTruthyConfigFlag(cab.independentLocked) and true or false
-    end
-
-    cab.independentOrientation = NormalizeCustomAuraIndependentOrientation(cab.independentOrientation)
-    cab.independentVerticalFillDirection = NormalizeCustomAuraIndependentVerticalFillDirection(cab.independentVerticalFillDirection)
-
-    if type(cab.independentAnchor) ~= "table" then
-        cab.independentAnchor = {}
-    end
-    cab.independentAnchor.point = cab.independentAnchor.point or "CENTER"
-    cab.independentAnchor.relativePoint = cab.independentAnchor.relativePoint or "CENTER"
-    cab.independentAnchor.x = tonumber(cab.independentAnchor.x) or 0
-    cab.independentAnchor.y = tonumber(cab.independentAnchor.y) or 0
-
-    if type(cab.independentSize) ~= "table" then
-        cab.independentSize = {}
-    end
-    cab.independentSize.width = ClampCustomAuraIndependentDimension(cab.independentSize.width, 120)
-    cab.independentSize.height = ClampCustomAuraIndependentDimension(cab.independentSize.height, settings and (settings.barHeight or settings.barWidth or 12) or 12)
-end
 
 local function ApplyCustomAuraBarPanelChanges(opts)
     CooldownCompanion:ApplyResourceBars()
@@ -1759,501 +1937,1921 @@ local function ApplyCustomAuraBarPanelChanges(opts)
     end
 end
 
-local function SetCustomAuraBarTrackedSpell(customBars, capturedIdx, spellId, labelOverride)
-    customBars[capturedIdx].spellID = spellId
-    if spellId then
-        customBars[capturedIdx].label = labelOverride
-            or GetAuraBarAutocompleteDisplayName(spellId)
-            or C_Spell.GetSpellName(spellId)
-            or ""
-    else
-        customBars[capturedIdx].label = ""
+local function FindCustomBarIndexById(customBars, customBarId)
+    if type(customBars) ~= "table" or type(customBarId) ~= "string" then
+        return nil
     end
-    RefreshCustomAuraBarAuraUnitForSpell(customBars[capturedIdx], spellId)
+    for index, entry in ipairs(customBars) do
+        if type(entry) == "table" and entry.customBarId == customBarId then
+            return index
+        end
+    end
+    return nil
 end
 
-local function BuildCustomAuraBarAnchorSettings(container, customBars, settings, capturedIdx)
-    local cab = customBars[capturedIdx]
-    if not cab then return end
-    EnsureCustomAuraIndependentConfig(cab, settings)
+local function EnsureCustomBarRowTextBadge(frame, key)
+    local badge = frame[key]
+    if not badge then
+        badge = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        frame[key] = badge
+    end
+    badge:ClearAllPoints()
+    badge:SetJustifyH("RIGHT")
+    badge:SetJustifyV("MIDDLE")
+    badge:Show()
+    return badge
+end
 
-    local unlockCb = AceGUI:Create("CheckBox")
-    unlockCb:SetLabel(L["Unlock Placement"])
-    unlockCb:SetValue(cab.independentLocked ~= true)
-    unlockCb:SetFullWidth(true)
-    unlockCb:SetCallback("OnValueChanged", function(widget, event, val)
-        local unlocked = IsTruthyConfigFlag(val)
-        customBars[capturedIdx].independentLocked = not unlocked
-        CooldownCompanion:ApplyResourceBars()
-        CooldownCompanion:RefreshConfigPanel()
-    end)
-    container:AddChild(unlockCb)
-
-    local modeDrop = AceGUI:Create("Dropdown")
-    modeDrop:SetLabel(L["Anchor Target"])
-    modeDrop:SetList({
-        group = L["Group"],
-        frame = L["Frame Name / Pick"],
-    }, { "group", "frame" })
-    modeDrop:SetValue(cab.independentAnchorTargetMode or "group")
-    modeDrop:SetFullWidth(true)
-    modeDrop:SetCallback("OnValueChanged", function(widget, event, val)
-        customBars[capturedIdx].independentAnchorTargetMode = val
-        CooldownCompanion:ApplyResourceBars()
-        CooldownCompanion:RefreshConfigPanel()
-    end)
-    container:AddChild(modeDrop)
-
-    if (cab.independentAnchorTargetMode or "group") == "group" then
-        local groupDrop = AceGUI:Create("Dropdown")
-        groupDrop:SetLabel(L["Anchor to Panel"])
-        CooldownCompanion:PopulateAnchorDropdown(groupDrop)
-        groupDrop:SetValue(cab.independentAnchorGroupId and tostring(cab.independentAnchorGroupId) or "")
-        groupDrop:SetFullWidth(true)
-        groupDrop:SetCallback("OnValueChanged", function(widget, event, val)
-            customBars[capturedIdx].independentAnchorGroupId = val ~= "" and tonumber(val) or nil
-            CooldownCompanion:ApplyResourceBars()
+local function EnsureCustomBarRowIconBadge(frame, key, atlas)
+    local badge = frame[key]
+    if not badge then
+        badge = CreateFrame("Button", nil, frame)
+        badge:SetSize(16, 16)
+        badge.icon = badge:CreateTexture(nil, "OVERLAY")
+        badge.icon:SetAllPoints()
+        badge:SetScript("OnEnter", function(self)
+            if not self._cdcTooltipText then return end
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:AddLine(
+                self._cdcTooltipText,
+                self._cdcTooltipR or 1,
+                self._cdcTooltipG or 1,
+                self._cdcTooltipB or 1,
+                true
+            )
+            GameTooltip:Show()
         end)
-        container:AddChild(groupDrop)
-    else
-        local frameRow = AceGUI:Create("SimpleGroup")
-        frameRow:SetLayout("Flow")
-        frameRow:SetFullWidth(true)
-
-        local frameEdit = AceGUI:Create("EditBox")
-        if frameEdit.editbox.Instructions then frameEdit.editbox.Instructions:Hide() end
-        frameEdit:SetLabel(L["Anchor to Frame"])
-        frameEdit:SetText(cab.independentAnchorFrameName or "")
-        frameEdit:SetRelativeWidth(0.68)
-        frameEdit:SetCallback("OnEnterPressed", function(widget, event, text)
-            customBars[capturedIdx].independentAnchorFrameName = text or ""
-            CooldownCompanion:ApplyResourceBars()
+        badge:SetScript("OnLeave", function()
+            GameTooltip:Hide()
         end)
-        frameRow:AddChild(frameEdit)
+        frame[key] = badge
+    end
 
-        local pickBtn = AceGUI:Create("Button")
-        pickBtn:SetText(L["Pick"])
-        pickBtn:SetRelativeWidth(0.24)
-        pickBtn:SetCallback("OnClick", function()
-            CS.StartPickFrame(function(name)
-                if CS.configFrame then
-                    CS.configFrame.frame:Show()
+    badge:ClearAllPoints()
+    badge:SetSize(16, 16)
+    badge.icon:SetAtlas(atlas, false)
+    badge.icon:SetVertexColor(1, 1, 1, 1)
+    badge._cdcTooltipText = nil
+    badge._cdcTooltipR, badge._cdcTooltipG, badge._cdcTooltipB = nil, nil, nil
+    badge:SetFrameLevel(frame:GetFrameLevel() + 5)
+    badge:Show()
+    return badge
+end
+
+local function SetCustomBarRowBadgeTooltip(badge, text, r, g, b)
+    badge._cdcTooltipText = text
+    badge._cdcTooltipR = r or 1
+    badge._cdcTooltipG = g or 1
+    badge._cdcTooltipB = b or 1
+end
+
+local function StripCustomBarEntryTypeWords(text)
+    if type(text) ~= "string" then
+        return text
+    end
+
+    return text
+        :gsub("%s*%(([%w%s]+)%)%s*$", function(kind)
+            local normalized = kind and kind:lower():gsub("^%s+", ""):gsub("%s+$", "")
+            if normalized == "buff" or normalized == "cooldown" or normalized == "aura" then
+                return ""
+            end
+            return " (" .. kind .. ")"
+        end)
+        :gsub("%s+$", "")
+end
+
+local function GetCustomBarEntryTypeIcons(entry)
+    if entry and entry.entryType == "spell" then
+        local icons = "|A:ui_adv_atk:15:15|a"
+        if entry.auraTracking == true then
+            icons = icons .. " |A:ui_adv_health:15:15|a"
+        end
+        return icons
+    end
+
+    return "|A:ui_adv_health:15:15|a"
+end
+
+local function ResolveCustomBarAuraTrackingStatus(entry, resolvedAuraUnit)
+    local spellID = tonumber(entry and entry.spellID)
+    local cdmEnabled = C_CVar.GetCVarBool("cooldownViewerEnabled") == true
+    local isSpellEntry = entry and entry.entryType == "spell"
+    local auraTrackingEnabled = true
+    if isSpellEntry then
+        auraTrackingEnabled = entry.auraTracking == true
+    end
+    local auraSpellID = entry and entry.auraSpellID or nil
+    local buttonData = spellID and {
+        type = "spell",
+        id = spellID,
+        auraSpellID = auraSpellID,
+        auraTracking = auraTrackingEnabled,
+        auraUnit = resolvedAuraUnit,
+        addedAs = isSpellEntry and nil or "aura",
+    } or nil
+    local viewerFrame = buttonData and CooldownCompanion:ResolveButtonAuraViewerFrame(buttonData) or nil
+
+    return buttonData and CooldownCompanion:ResolveAuraTrackingConfigStatus(buttonData, cdmEnabled, viewerFrame)
+        or { state = "noAssociatedAura", ready = false, cdmEnabled = cdmEnabled }
+end
+
+local function ConfigureCustomBarAddInstructions(addBox, placeholderText)
+    local editFrame = addBox and addBox.editbox
+    if not editFrame then
+        return function() end
+    end
+
+    local instructions = editFrame._cdcCustomBarAddInstructions
+    if not instructions then
+        instructions = editFrame:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+        instructions:SetPoint("LEFT", editFrame, "LEFT", 6, 0)
+        instructions:SetPoint("RIGHT", editFrame, "RIGHT", -6, 0)
+        instructions:SetJustifyH("LEFT")
+        instructions:SetTextColor(0.5, 0.5, 0.5)
+        editFrame._cdcCustomBarAddInstructions = instructions
+    end
+    instructions:SetText(placeholderText)
+
+    local function Update(text)
+        instructions:SetShown((text or "") == "")
+    end
+
+    local prevOnRelease = addBox.events and addBox.events["OnRelease"]
+    addBox:SetCallback("OnRelease", function(widget)
+        if prevOnRelease then
+            prevOnRelease(widget, "OnRelease")
+        end
+        instructions:Hide()
+        instructions:SetText("")
+    end)
+
+    Update(editFrame:GetText())
+    return Update
+end
+
+local function RemoveCustomBarById(customBars, customBarId)
+    if type(customBars) ~= "table" or type(customBarId) ~= "string" then
+        return false
+    end
+
+    for removeIndex, removeEntry in ipairs(customBars) do
+        if type(removeEntry) == "table" and removeEntry.customBarId == customBarId then
+            table.remove(customBars, removeIndex)
+            return true
+        end
+    end
+    return false
+end
+
+local function ClearCustomBarLayoutById(settings, specID, customBarId)
+    if type(settings) ~= "table" or type(settings.layoutOrder) ~= "table" or type(customBarId) ~= "string" or not specID then
+        return
+    end
+
+    specID = tonumber(specID) or specID
+    local layout = settings.layoutOrder[specID]
+    if type(layout) ~= "table" then
+        local stringSpecID = tostring(specID)
+        if stringSpecID ~= specID then
+            layout = settings.layoutOrder[stringSpecID]
+        end
+    end
+
+    if type(layout) == "table" and type(layout.customBars) == "table" then
+        layout.customBars[customBarId] = nil
+    end
+end
+
+local function ClearLegacyCustomAuraBarSeedForSpec(settings, specID)
+    if type(settings) ~= "table" or type(settings.customAuraBars) ~= "table" or not specID then
+        return
+    end
+
+    specID = tonumber(specID) or specID
+    settings.customAuraBars[specID] = nil
+
+    local stringSpecID = tostring(specID)
+    if stringSpecID ~= specID then
+        settings.customAuraBars[stringSpecID] = nil
+    end
+
+    local layout = type(settings.layoutOrder) == "table" and settings.layoutOrder[specID] or nil
+    if type(layout) ~= "table" and stringSpecID ~= specID and type(settings.layoutOrder) == "table" then
+        layout = settings.layoutOrder[stringSpecID]
+    end
+    if type(layout) == "table" then
+        layout.customAuraBarSlots = nil
+    end
+end
+
+local function DeleteCustomBarById(settings, specID, customBars, customBarId)
+    if not RemoveCustomBarById(customBars, customBarId) then
+        return false
+    end
+
+    ClearCustomBarLayoutById(settings, specID, customBarId)
+    if #customBars == 0 then
+        ClearLegacyCustomAuraBarSeedForSpec(settings, specID)
+    end
+    return true
+end
+
+local function DuplicateCustomBarById(settings, specID, customBars, customBarId)
+    local sourceIndex = FindCustomBarIndexById(customBars, customBarId)
+    local sourceEntry = sourceIndex and customBars[sourceIndex]
+    if type(settings) ~= "table" or type(sourceEntry) ~= "table" then
+        return nil
+    end
+
+    local sourceLayout = GetCustomBarLayout(settings, specID, sourceEntry, false)
+    local copy = CopyTable(sourceEntry)
+    copy.customBarId = nil
+
+    local newId = EnsureCustomBarId(settings, copy)
+    if not newId then
+        return nil
+    end
+
+    table.insert(customBars, sourceIndex + 1, copy)
+
+    local targetLayout = EnsureCustomBarLayout(settings, specID, newId, 1000 + sourceIndex + 1)
+    if type(sourceLayout) == "table" and type(targetLayout) == "table" then
+        for key, value in pairs(sourceLayout) do
+            targetLayout[key] = CopyTableValue(value)
+        end
+        if sourceLayout.order ~= nil then
+            targetLayout.order = (tonumber(sourceLayout.order) or 1000) + 1
+        end
+        if sourceLayout.verticalOrder ~= nil then
+            targetLayout.verticalOrder = (tonumber(sourceLayout.verticalOrder) or 1000) + 1
+        end
+    end
+
+    return newId
+end
+
+local function HideCustomBarRowDecorations(frame)
+    if not frame then return end
+    if frame._cdcCustomBarTypeBadge then frame._cdcCustomBarTypeBadge:Hide() end
+    if frame._cdcCustomBarAuraStatusBadge then frame._cdcCustomBarAuraStatusBadge:Hide() end
+    if frame._cdcCustomBarDisabledBadge then frame._cdcCustomBarDisabledBadge:Hide() end
+    if frame._cdcModeBadgeHitRect then frame._cdcModeBadgeHitRect:Hide() end
+    if frame._cdcGenericRenameBadge then frame._cdcGenericRenameBadge:Hide() end
+    if frame._cdcAddBtn then frame._cdcAddBtn:Hide() end
+    if frame._cdcAnchorBadge then frame._cdcAnchorBadge:Hide() end
+    if frame._cdcHeaderDisabledBadge then frame._cdcHeaderDisabledBadge:Hide() end
+    if frame._cdcBadges then
+        for _, badge in ipairs(frame._cdcBadges) do
+            badge:Hide()
+        end
+    end
+end
+
+local function ClearCustomBarPreviewState()
+    CooldownCompanion:ClearAllCustomAuraBarPreviews()
+    if CS.customBarIndicatorPreviewActive then
+        CooldownCompanion:StopResourceBarPreview()
+    end
+end
+
+local function OpenCustomBarRowMenu(customBars, specID, customBarId, entry)
+    if not CS.customBarContextMenu then
+        CS.customBarContextMenu = CreateFrame("Frame", "CDCCustomBarContextMenu", UIParent, "UIDropDownMenuTemplate")
+    end
+
+    UIDropDownMenu_Initialize(CS.customBarContextMenu, function(_, level)
+        if level ~= 1 then return end
+
+        local toggleInfo = UIDropDownMenu_CreateInfo()
+        toggleInfo.text = (entry.enabled == true) and "Disable" or "Enable"
+        toggleInfo.notCheckable = true
+        toggleInfo.func = function()
+            CloseDropDownMenus()
+            entry.enabled = entry.enabled ~= true
+            if entry.enabled and not entry.trackingMode then
+                entry.trackingMode = "active"
+            end
+            ApplyCustomAuraBarPanelChanges({
+                updateAnchors = true,
+                refreshConfig = true,
+            })
+        end
+        UIDropDownMenu_AddButton(toggleInfo, level)
+
+        local duplicateInfo = UIDropDownMenu_CreateInfo()
+        duplicateInfo.text = "Duplicate"
+        duplicateInfo.notCheckable = true
+        duplicateInfo.func = function()
+            CloseDropDownMenus()
+            local newId = DuplicateCustomBarById(CooldownCompanion:GetResourceBarSettings(), specID, customBars, customBarId)
+            if newId then
+                ClearCustomBarPreviewState()
+                CS.selectedCustomBarId = newId
+                CS.customBarSettingsTab = "appearance"
+            end
+            ApplyCustomAuraBarPanelChanges({
+                updateAnchors = true,
+                refreshConfig = true,
+            })
+        end
+        UIDropDownMenu_AddButton(duplicateInfo, level)
+
+        local removeInfo = UIDropDownMenu_CreateInfo()
+        removeInfo.text = "Remove"
+        removeInfo.notCheckable = true
+        removeInfo.func = function()
+            CloseDropDownMenus()
+            local settings = CooldownCompanion:GetResourceBarSettings()
+            if DeleteCustomBarById(settings, specID, customBars, customBarId) then
+                if CS.selectedCustomBarId == customBarId then
+                    ClearCustomBarPreviewState()
+                    CS.selectedCustomBarId = nil
+                    CS.customBarSettingsTab = "appearance"
                 end
-                if name then
-                    customBars[capturedIdx].independentAnchorFrameName = name
-                    CooldownCompanion:ApplyResourceBars()
-                end
+            end
+            ApplyCustomAuraBarPanelChanges({
+                updateAnchors = true,
+                refreshConfig = true,
+            })
+        end
+        UIDropDownMenu_AddButton(removeInfo, level)
+    end, "MENU")
+
+    CS.customBarContextMenu:SetFrameStrata("FULLSCREEN_DIALOG")
+    ToggleDropDownMenu(1, nil, CS.customBarContextMenu, "cursor", 0, 0)
+end
+
+local function BuildSortedCustomBarSoundOptionOrder(soundOptions)
+    local order = {}
+    for optionKey in pairs(soundOptions or {}) do
+        order[#order + 1] = optionKey
+    end
+    table.sort(order, function(a, b)
+        if a == "None" then return true end
+        if b == "None" then return false end
+        local aLabel = soundOptions[a] or tostring(a)
+        local bLabel = soundOptions[b] or tostring(b)
+        if aLabel == bLabel then
+            return tostring(a) < tostring(b)
+        end
+        return aLabel < bLabel
+    end)
+    return order
+end
+
+local function BuildCustomBarSoundAlertsTab(container, cab, infoButtons)
+    local soundHeading = AceGUI:Create("Heading")
+    soundHeading:SetText("Sound Alerts")
+    ColorHeading(soundHeading)
+    soundHeading:SetHeight(22)
+    soundHeading:SetFullWidth(true)
+    soundHeading.label:ClearAllPoints()
+    soundHeading.label:SetPoint("CENTER", soundHeading.frame, "CENTER", 0, 2)
+    soundHeading.left:ClearAllPoints()
+    soundHeading.left:SetPoint("LEFT", soundHeading.frame, "LEFT", 3, 0)
+    soundHeading.left:SetPoint("RIGHT", soundHeading.label, "LEFT", -5, 0)
+    soundHeading.right:ClearAllPoints()
+    soundHeading.right:SetPoint("RIGHT", soundHeading.frame, "RIGHT", -3, 0)
+    soundHeading.right:SetPoint("LEFT", soundHeading.label, "RIGHT", 5, 0)
+    container:AddChild(soundHeading)
+
+    local soundInfoBtn = CreateInfoButton(soundHeading.frame, soundHeading.label, "LEFT", "RIGHT", 4, 0, {
+        "Sound Alerts",
+        {"Sound alerts are played through the Master channel and follow your game's Master volume setting.", 1, 1, 1, true},
+    }, infoButtons)
+    soundHeading.right:ClearAllPoints()
+    soundHeading.right:SetPoint("RIGHT", soundHeading.frame, "RIGHT", -3, 0)
+    soundHeading.right:SetPoint("LEFT", soundInfoBtn, "RIGHT", 4, 0)
+
+    local validEvents = CooldownCompanion:GetScopedValidSoundAlertEventsForCustomBar(cab)
+    if not validEvents then
+        local noEvents = AceGUI:Create("Label")
+        noEvents:SetText("|cff888888No alertable sound events are available for this Custom Bar entry.|r")
+        noEvents:SetFullWidth(true)
+        container:AddChild(noEvents)
+        return
+    end
+
+    local soundOptions = CooldownCompanion:GetSoundAlertOptions()
+    local soundOptionOrder = BuildSortedCustomBarSoundOptionOrder(soundOptions)
+    local eventOrder = CooldownCompanion:GetSoundAlertEventOrder()
+
+    for _, eventKey in ipairs(eventOrder) do
+        if validEvents[eventKey] then
+            local soundDrop = AceGUI:Create("Dropdown")
+            soundDrop:SetLabel(CooldownCompanion:GetCustomBarSoundAlertEventLabel(cab, eventKey))
+            soundDrop:SetList(soundOptions, soundOptionOrder)
+            soundDrop:SetValue(CooldownCompanion:GetCustomBarSoundAlertSelection(cab, eventKey))
+            soundDrop:SetFullWidth(true)
+            soundDrop:SetCallback("OnValueChanged", function(widget, event, val)
+                CooldownCompanion:SetCustomBarSoundAlertEvent(cab, eventKey, val)
                 CooldownCompanion:RefreshConfigPanel()
             end)
+            container:AddChild(soundDrop)
+        end
+    end
+end
+
+local function BuildCustomBarLoadConditionsTab(container, cab, infoButtons)
+    local addScopedLoadConditionToggles = ST._AddScopedLoadConditionToggles
+    if type(addScopedLoadConditionToggles) ~= "function" then
+        local unavailable = AceGUI:Create("Label")
+        unavailable:SetText("|cff888888Load condition controls are not available yet.|r")
+        unavailable:SetFullWidth(true)
+        container:AddChild(unavailable)
+        return
+    end
+
+    addScopedLoadConditionToggles(container, {
+        target = cab,
+        defaults = CooldownCompanion:GetLocalLoadConditionDefaults(),
+        inheritedSources = {},
+        headingText = "Hide This Entry In",
+        headingTextWhenInherited = "Also Hide This Entry In",
+        inheritedCollapsedKey = "loadconditions_custombar_inherited",
+        localCollapsedKey = "loadconditions_custombar_local",
+        preserveMissing = true,
+        onChanged = function()
+            if cab.loadConditions and not next(cab.loadConditions) then
+                cab.loadConditions = nil
+            end
+            CooldownCompanion:ApplyResourceBars()
+            CooldownCompanion:UpdateAnchorStacking()
+            CooldownCompanion:RefreshConfigPanel()
+        end,
+    })
+
+    if CooldownCompanion:HasLocalLoadConditions(cab) then
+        local clearBtn = AceGUI:Create("Button")
+        clearBtn:SetText("Clear Entry Load Conditions")
+        clearBtn:SetFullWidth(true)
+        clearBtn:SetCallback("OnClick", function()
+            cab.loadConditions = nil
+            CooldownCompanion:ApplyResourceBars()
+            CooldownCompanion:UpdateAnchorStacking()
+            CooldownCompanion:RefreshConfigPanel()
         end)
-        frameRow:AddChild(pickBtn)
+        container:AddChild(clearBtn)
+    end
+end
 
-        container:AddChild(frameRow)
+local function AddCustomBarAuraTrackingGap(container)
+    local spacer = AceGUI:Create("Label")
+    spacer:SetText(" ")
+    spacer:SetFullWidth(true)
+    container:AddChild(spacer)
+end
+
+local function TrimCustomBarTrackedAuraText(text)
+    return tostring(text or ""):gsub("^%s+", ""):gsub("%s+$", "")
+end
+
+local function BuildCustomBarTrackedAuraError(token, reason)
+    if reason == "ambiguous" then
+        return "Multiple CDM auras match " .. token .. ". Pick the specific aura from the dropdown, or enter its aura spell ID."
+    end
+    return token .. " is not a CDM Tracked Buff/Bar aura."
+end
+
+local function ResolveCustomBarTrackedAuraText(rawText, shouldSkipToken)
+    local text = TrimCustomBarTrackedAuraText(rawText)
+    if text == "" then
+        return nil
+    end
+    if not CS.ResolveCDMAuraAutocompleteEntry then
+        return nil, "CDM aura autocomplete is not ready. Try again in a moment."
     end
 
-    local pointValues = {}
-    for _, pt in ipairs(CS.anchorPoints) do
-        pointValues[pt] = CS.anchorPointLabels[pt]
+    local resolvedIDs = {}
+    for token in text:gmatch("[^,]+") do
+        local cleaned = TrimCustomBarTrackedAuraText(token)
+        if cleaned ~= "" then
+            local skipToken = shouldSkipToken and shouldSkipToken(cleaned)
+            if not skipToken then
+                local entry, reason = CS.ResolveCDMAuraAutocompleteEntry(cleaned)
+                local auraID = entry and tonumber(entry.id)
+                if not auraID or auraID <= 0 then
+                    return nil, BuildCustomBarTrackedAuraError(cleaned, reason)
+                end
+                resolvedIDs[#resolvedIDs + 1] = auraID
+            end
+        end
     end
 
-    local anchorPointDrop = AceGUI:Create("Dropdown")
-    anchorPointDrop:SetLabel(L["Anchor Point"])
-    anchorPointDrop:SetList(pointValues, CS.anchorPoints)
-    anchorPointDrop:SetValue(cab.independentAnchor.point or "CENTER")
-    anchorPointDrop:SetFullWidth(true)
-    anchorPointDrop:SetCallback("OnValueChanged", function(widget, event, val)
-        customBars[capturedIdx].independentAnchor.point = val
-        CooldownCompanion:ApplyResourceBars()
+    return #resolvedIDs > 0 and resolvedIDs or nil
+end
+
+local function BuildCustomBarStandaloneAuraButtonData(cab, spellID, rawAuraSpellID)
+    spellID = tonumber(spellID)
+    if not spellID or IsSpellCustomBarConfig(cab) then
+        return nil
+    end
+
+    return {
+        type = "spell",
+        id = spellID,
+        auraSpellID = rawAuraSpellID,
+        auraTracking = true,
+        addedAs = "aura",
+    }
+end
+
+local function GetCustomBarStandaloneAuraFallbackSpellIDText(cab, spellID, rawAuraSpellID)
+    local buttonData = BuildCustomBarStandaloneAuraButtonData(cab, spellID, rawAuraSpellID)
+    if not buttonData or not CooldownCompanion.GetStandaloneAuraFallbackSpellIDText then
+        return rawAuraSpellID
+    end
+    return CooldownCompanion:GetStandaloneAuraFallbackSpellIDText(buttonData, rawAuraSpellID)
+end
+
+local function IsCustomBarOriginalStandaloneAuraID(cab, spellID, auraID)
+    auraID = tonumber(auraID)
+    local buttonData = auraID and BuildCustomBarStandaloneAuraButtonData(cab, spellID)
+    if not buttonData or not CooldownCompanion.GetStandaloneAuraCandidateGroups then
+        return false
+    end
+
+    local originalAuraIDs = CooldownCompanion:GetStandaloneAuraCandidateGroups(buttonData)
+    for _, originalAuraID in ipairs(originalAuraIDs or {}) do
+        if auraID == tonumber(originalAuraID) then
+            return true
+        end
+    end
+    return false
+end
+
+local function GetCustomBarTrackedAuraIDList(cab, spellID)
+    local ids = {}
+    local seen = {}
+    local rawIDs = cab and cab.auraSpellID
+    rawIDs = IsSpellCustomBarConfig(cab)
+        and rawIDs
+        or GetCustomBarStandaloneAuraFallbackSpellIDText(cab, spellID, rawIDs)
+    if rawIDs then
+        for id in tostring(rawIDs):gmatch("%d+") do
+            local auraID = tonumber(id)
+            if auraID and auraID > 0 and not seen[auraID] then
+                seen[auraID] = true
+                ids[#ids + 1] = auraID
+            end
+        end
+    end
+    return ids
+end
+
+local function SetCustomBarTrackedAuraIDList(cab, spellID, ids)
+    local normalizedIDs = {}
+    local seen = {}
+    for _, id in ipairs(ids or {}) do
+        local auraID = tonumber(id)
+        if auraID and auraID > 0 and not seen[auraID] then
+            seen[auraID] = true
+            normalizedIDs[#normalizedIDs + 1] = tostring(auraID)
+        end
+    end
+
+    local rawText = #normalizedIDs > 0 and table.concat(normalizedIDs, ",") or nil
+    cab.auraSpellID = IsSpellCustomBarConfig(cab)
+        and rawText
+        or GetCustomBarStandaloneAuraFallbackSpellIDText(cab, spellID, rawText)
+    EnsureCustomAuraBarAuraUnit(cab, spellID)
+end
+
+local function AddCustomBarTrackedAuraID(cab, spellID, auraID)
+    auraID = tonumber(auraID)
+    if not auraID or auraID <= 0 then
+        return false
+    end
+    if IsCustomBarOriginalStandaloneAuraID(cab, spellID, auraID) then
+        return false
+    end
+
+    local ids = GetCustomBarTrackedAuraIDList(cab, spellID)
+    for _, existingID in ipairs(ids) do
+        if existingID == auraID then
+            return false
+        end
+    end
+
+    ids[#ids + 1] = auraID
+    SetCustomBarTrackedAuraIDList(cab, spellID, ids)
+    return true
+end
+
+local function AddCustomBarTrackedAuraIDText(cab, spellID, rawText)
+    local resolvedIDs, errorText = ResolveCustomBarTrackedAuraText(rawText, function(cleaned)
+        local auraID = cleaned:match("^%d+$") and tonumber(cleaned) or nil
+        return IsCustomBarOriginalStandaloneAuraID(cab, spellID, auraID)
     end)
-    container:AddChild(anchorPointDrop)
+    if not resolvedIDs then
+        if errorText then
+            CooldownCompanion:Print(errorText)
+        end
+        return false
+    end
 
-    local relativePointDrop = AceGUI:Create("Dropdown")
-    relativePointDrop:SetLabel(L["Relative Point"])
-    relativePointDrop:SetList(pointValues, CS.anchorPoints)
-    relativePointDrop:SetValue(cab.independentAnchor.relativePoint or "CENTER")
-    relativePointDrop:SetFullWidth(true)
-    relativePointDrop:SetCallback("OnValueChanged", function(widget, event, val)
-        customBars[capturedIdx].independentAnchor.relativePoint = val
-        CooldownCompanion:ApplyResourceBars()
+    local ids = GetCustomBarTrackedAuraIDList(cab, spellID)
+    local seen = {}
+    for _, auraID in ipairs(ids) do
+        seen[auraID] = true
+    end
+
+    local added = false
+    for _, auraID in ipairs(resolvedIDs) do
+        if auraID and auraID > 0 and not seen[auraID] and not IsCustomBarOriginalStandaloneAuraID(cab, spellID, auraID) then
+            seen[auraID] = true
+            ids[#ids + 1] = auraID
+            added = true
+        end
+    end
+
+    if added then
+        SetCustomBarTrackedAuraIDList(cab, spellID, ids)
+    end
+    return added
+end
+
+local function MoveCustomBarTrackedAuraID(cab, spellID, sourceIndex, targetIndex)
+    local ids = GetCustomBarTrackedAuraIDList(cab, spellID)
+    sourceIndex = tonumber(sourceIndex)
+    targetIndex = tonumber(targetIndex)
+    if not sourceIndex or not targetIndex or sourceIndex < 1 or sourceIndex > #ids then
+        return false
+    end
+    if targetIndex < 1 then targetIndex = 1 end
+    if targetIndex > #ids then targetIndex = #ids end
+    if targetIndex == sourceIndex then
+        return false
+    end
+
+    local movedID = table.remove(ids, sourceIndex)
+    if not movedID then
+        return false
+    end
+    table.insert(ids, targetIndex, movedID)
+    SetCustomBarTrackedAuraIDList(cab, spellID, ids)
+    return true
+end
+
+local function RemoveCustomBarTrackedAuraID(cab, spellID, rowIndex)
+    local ids = GetCustomBarTrackedAuraIDList(cab, spellID)
+    rowIndex = tonumber(rowIndex)
+    if not rowIndex or rowIndex < 1 or rowIndex > #ids then
+        return false
+    end
+
+    table.remove(ids, rowIndex)
+    SetCustomBarTrackedAuraIDList(cab, spellID, ids)
+    return true
+end
+
+local function RefreshCustomBarTrackedAuraEntry(cab, spellID)
+    if CS.HideAutocomplete then
+        CS.HideAutocomplete()
+    end
+    EnsureCustomAuraBarAuraUnit(cab, spellID)
+    ApplyCustomAuraBarPanelChanges({
+        updateAnchors = true,
+        refreshConfig = true,
+    })
+end
+
+local function GetCustomBarTrackedAuraDisplayName(auraID)
+    return C_Spell.GetSpellName(auraID) or ("Spell " .. tostring(auraID))
+end
+
+local function BuildCustomBarTrackedAuraRowText(auraID, rowIndex)
+    return ("%d. %s |cff888888%s|r"):format(
+        rowIndex,
+        GetCustomBarTrackedAuraDisplayName(auraID),
+        tostring(auraID)
+    )
+end
+
+local function ConfigureCustomBarTrackedAuraMoveButton(button, rotation, tooltipTitle, tooltipBody, disabled, onClick)
+    local isDisabled = disabled or CS.browseMode
+    button:SetSize(18, 18)
+    if button.text then
+        button.text:Hide()
+    end
+    if not button.icon then
+        button.icon = button:CreateTexture(nil, "ARTWORK")
+        button.icon:SetPoint("TOPLEFT", 2, -2)
+        button.icon:SetPoint("BOTTOMRIGHT", -2, 2)
+    end
+    if button.highlight then
+        button.highlight:Hide()
+        button.highlight:SetAlpha(0)
+    end
+    button.icon:SetAtlas("arrow-short", false)
+    button.icon:SetRotation(rotation)
+    if button.icon.SetDesaturated then
+        button.icon:SetDesaturated(isDisabled == true)
+    end
+    button.icon:SetVertexColor(1, 0.82, 0, isDisabled and 0.45 or 1)
+    button.icon:Show()
+    button:SetAlpha(isDisabled and 0.35 or 1)
+    button:EnableMouse(true)
+    button:SetScript("OnClick", isDisabled and nil or onClick)
+    button:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine(tooltipTitle)
+        GameTooltip:AddLine(tooltipBody, 1, 1, 1, true)
+        GameTooltip:Show()
     end)
-    container:AddChild(relativePointDrop)
-
-    local xSlider = AceGUI:Create("Slider")
-    xSlider:SetLabel(L["X Offset"])
-    xSlider:SetSliderValues(-2000, 2000, 0.1)
-    xSlider:SetValue(cab.independentAnchor.x or 0)
-    xSlider:SetFullWidth(true)
-    xSlider:SetCallback("OnValueChanged", function(widget, event, val)
-        customBars[capturedIdx].independentAnchor.x = val
-        CooldownCompanion:ApplyResourceBars()
+    button:SetScript("OnLeave", function()
+        GameTooltip:Hide()
     end)
-    container:AddChild(xSlider)
+    button:Show()
+end
 
-    local ySlider = AceGUI:Create("Slider")
-    ySlider:SetLabel(L["Y Offset"])
-    ySlider:SetSliderValues(-2000, 2000, 0.1)
-    ySlider:SetValue(cab.independentAnchor.y or 0)
-    ySlider:SetFullWidth(true)
-    ySlider:SetCallback("OnValueChanged", function(widget, event, val)
-        customBars[capturedIdx].independentAnchor.y = val
-        CooldownCompanion:ApplyResourceBars()
-    end)
-    container:AddChild(ySlider)
+local function EnsureCustomBarTrackedAuraMoveButtons(entry, cab, spellID, rowIndex, rowCount)
+    local frame = entry.frame
+    local upBtn = frame._cdcCustomBarAuraUpBtn
+    if not upBtn then
+        upBtn = CreateFrame("Button", nil, frame)
+        frame._cdcCustomBarAuraUpBtn = upBtn
+    end
+    local downBtn = frame._cdcCustomBarAuraDownBtn
+    if not downBtn then
+        downBtn = CreateFrame("Button", nil, frame)
+        frame._cdcCustomBarAuraDownBtn = downBtn
+    end
 
-    local widthSlider = AceGUI:Create("Slider")
-    widthSlider:SetLabel(L["Width"])
-    widthSlider:SetSliderValues(4, 1200, 0.1)
-    widthSlider:SetValue(cab.independentSize.width or 120)
-    widthSlider:SetFullWidth(true)
-    widthSlider:SetCallback("OnValueChanged", function(widget, event, val)
-        customBars[capturedIdx].independentSize.width = ClampCustomAuraIndependentDimension(val, 120)
-        CooldownCompanion:ApplyResourceBars()
-    end)
-    container:AddChild(widthSlider)
+    upBtn:ClearAllPoints()
+    upBtn:SetPoint("RIGHT", frame, "RIGHT", -24, 0)
+    upBtn:SetFrameLevel(frame:GetFrameLevel() + 6)
+    ConfigureCustomBarTrackedAuraMoveButton(
+        upBtn,
+        math.pi / 2,
+        "Move Up",
+        "Move this aura one priority slot higher.",
+        rowIndex <= 1,
+        function()
+            if MoveCustomBarTrackedAuraID(cab, spellID, rowIndex, rowIndex - 1) then
+                RefreshCustomBarTrackedAuraEntry(cab, spellID)
+            end
+        end
+    )
 
-    local heightSlider = AceGUI:Create("Slider")
-    heightSlider:SetLabel(L["Height"])
-    heightSlider:SetSliderValues(4, 1200, 0.1)
-    heightSlider:SetValue(cab.independentSize.height or 12)
-    heightSlider:SetFullWidth(true)
-    heightSlider:SetCallback("OnValueChanged", function(widget, event, val)
-        customBars[capturedIdx].independentSize.height = ClampCustomAuraIndependentDimension(val, 12)
-        CooldownCompanion:ApplyResourceBars()
-    end)
-    container:AddChild(heightSlider)
+    downBtn:ClearAllPoints()
+    downBtn:SetPoint("RIGHT", frame, "RIGHT", -4, 0)
+    downBtn:SetFrameLevel(frame:GetFrameLevel() + 6)
+    ConfigureCustomBarTrackedAuraMoveButton(
+        downBtn,
+        -math.pi / 2,
+        "Move Down",
+        "Move this aura one priority slot lower.",
+        rowIndex >= rowCount,
+        function()
+            if MoveCustomBarTrackedAuraID(cab, spellID, rowIndex, rowIndex + 1) then
+                RefreshCustomBarTrackedAuraEntry(cab, spellID)
+            end
+        end
+    )
+end
 
-    local resolvedOrientation = GetResolvedCustomAuraIndependentOrientation(cab, settings)
+local function ShowCustomBarTrackedAuraRowMenu(cab, spellID, rowIndex)
+    if CS.browseMode then
+        return
+    end
 
-    local orientationDrop = AceGUI:Create("Dropdown")
-    orientationDrop:SetLabel(L["Orientation"])
-    orientationDrop:SetList({
-        horizontal = L["Horizontal"],
-        vertical = L["Vertical"],
-    }, { "horizontal", "vertical" })
-    orientationDrop:SetValue(resolvedOrientation)
-    orientationDrop:SetFullWidth(true)
-    orientationDrop:SetCallback("OnValueChanged", function(widget, event, val)
-        if val ~= "horizontal" and val ~= "vertical" then
+    if not CS.customBarTrackedAuraContextMenu then
+        CS.customBarTrackedAuraContextMenu = CreateFrame("Frame", "CDCCustomBarTrackedAuraContextMenu", UIParent, "UIDropDownMenuTemplate")
+    end
+
+    UIDropDownMenu_Initialize(CS.customBarTrackedAuraContextMenu, function(_, level)
+        if level ~= 1 then return end
+        local info = UIDropDownMenu_CreateInfo()
+        info.text = "|cffff4444Delete|r"
+        info.notCheckable = true
+        info.registerForAnyClick = true
+        info.func = function()
+            CloseDropDownMenus()
+            if RemoveCustomBarTrackedAuraID(cab, spellID, rowIndex) then
+                RefreshCustomBarTrackedAuraEntry(cab, spellID)
+            end
+        end
+        UIDropDownMenu_AddButton(info, level)
+    end, "MENU")
+    CS.customBarTrackedAuraContextMenu:SetFrameStrata("FULLSCREEN_DIALOG")
+    ToggleDropDownMenu(1, nil, CS.customBarTrackedAuraContextMenu, "cursor", 0, 0)
+end
+
+local function InstallCustomBarTrackedAuraRowMenu(entry, cab, spellID, rowIndex)
+    entry.frame:SetScript("OnMouseUp", function(_, button)
+        if CS.browseMode then
             return
         end
-        customBars[capturedIdx].independentOrientation = val
-        CooldownCompanion:ApplyResourceBars()
-        CooldownCompanion:RefreshConfigPanel()
+        if button == "RightButton" then
+            ShowCustomBarTrackedAuraRowMenu(cab, spellID, rowIndex)
+        end
     end)
-    container:AddChild(orientationDrop)
+end
 
-    if resolvedOrientation == "vertical" then
-        local fillDrop = AceGUI:Create("Dropdown")
-        fillDrop:SetLabel(L["Vertical Fill Direction"])
-        fillDrop:SetList({
-            inherit = L["Inherit Global"],
-            bottom_to_top = L["Bottom to Top"],
-            top_to_bottom = L["Top to Bottom"],
-        }, { "inherit", "bottom_to_top", "top_to_bottom" })
-        fillDrop:SetValue(cab.independentVerticalFillDirection or "inherit")
-        fillDrop:SetFullWidth(true)
-        fillDrop:SetCallback("OnValueChanged", function(widget, event, val)
-            customBars[capturedIdx].independentVerticalFillDirection = NormalizeCustomAuraIndependentVerticalFillDirection(val)
-            CooldownCompanion:ApplyResourceBars()
+local function CreateCustomBarTrackedAuraRow(container, cab, spellID, auraID, rowIndex, rowCount)
+    local row = AceGUI:Create("InteractiveLabel")
+    local icon = C_Spell.GetSpellTexture(auraID) or 134400
+    CleanRecycledEntry(row)
+    row:SetText(BuildCustomBarTrackedAuraRowText(auraID, rowIndex))
+    row:SetFullWidth(true)
+    row:SetFontObject(GameFontHighlightSmall)
+    row:SetHighlight("Interface\\QuestFrame\\UI-QuestTitleHighlight")
+    ApplyConfigRowIcon(row, icon, { rightPad = 48 })
+    if BindConfigShiftTooltip then
+        BindConfigShiftTooltip(row, "spell", auraID, row.frame, "ANCHOR_RIGHT")
+    end
+    row._cdcAfterConfigRowLayout = function(self)
+        local frame = self.frame
+        local label = self.label
+        local image = self.image
+        self:SetHeight(22)
+        frame:SetHeight(22)
+        frame.height = 22
+        if image then
+            image:ClearAllPoints()
+            image:SetTexture(icon)
+            image:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+            image:SetSize(18, 18)
+            image:SetPoint("LEFT", frame, "LEFT", 2, 0)
+            image:Show()
+        end
+        if label then
+            label:ClearAllPoints()
+            label:SetPoint("LEFT", frame, "LEFT", 24, 0)
+            label:SetPoint("RIGHT", frame, "RIGHT", -48, 0)
+            label:SetJustifyH("LEFT")
+            label:SetJustifyV("MIDDLE")
+            if label.SetWordWrap then
+                label:SetWordWrap(false)
+            end
+            if label.SetNonSpaceWrap then
+                label:SetNonSpaceWrap(false)
+            end
+            if label.SetMaxLines then
+                label:SetMaxLines(1)
+            end
+        end
+    end
+    row:_cdcAfterConfigRowLayout()
+    EnsureCustomBarTrackedAuraMoveButtons(row, cab, spellID, rowIndex, rowCount)
+    InstallCustomBarTrackedAuraRowMenu(row, cab, spellID, rowIndex)
+    container:AddChild(row)
+    return row
+end
+
+local function AddCustomBarSettingsHeading(container, text, infoButtons, tooltip)
+    local heading = AceGUI:Create("Heading")
+    heading:SetText(text)
+    ColorHeading(heading)
+    heading:SetFullWidth(true)
+    container:AddChild(heading)
+
+    if tooltip then
+        local tooltipLines = { text }
+        if type(tooltip) == "table" then
+            for _, line in ipairs(tooltip) do
+                tooltipLines[#tooltipLines + 1] = { line, 1, 1, 1, true }
+            end
+        else
+            tooltipLines[#tooltipLines + 1] = { tooltip, 1, 1, 1, true }
+        end
+        local infoBtn = CreateInfoButton(heading.frame, heading.label, "LEFT", "RIGHT", 4, 0, {
+            unpack(tooltipLines)
+        }, infoButtons)
+        heading.right:ClearAllPoints()
+        heading.right:SetPoint("RIGHT", heading.frame, "RIGHT", -3, 0)
+        heading.right:SetPoint("LEFT", infoBtn, "RIGHT", 4, 0)
+    end
+end
+
+local function BuildCustomBarAuraTrackingSection(container, cab, resolvedAuraUnit, infoButtons)
+    local isSpellCustomBar = IsSpellCustomBarConfig(cab)
+    local spellID = tonumber(cab and cab.spellID)
+    if isSpellCustomBar and spellID and not (resolvedAuraUnit == "player" or resolvedAuraUnit == "target") then
+        resolvedAuraUnit = EnsureCustomAuraBarAuraUnit(cab, spellID)
+    end
+
+    local heading = AceGUI:Create("Heading")
+    heading:SetText("Aura Tracking")
+    ColorHeading(heading)
+    heading:SetFullWidth(true)
+    container:AddChild(heading)
+
+    local infoBtn = CreateInfoButton(heading.frame, heading.label, "LEFT", "RIGHT", 4, 0, {
+        "Aura Tracking",
+        {isSpellCustomBar and "Shows a tracked buff or debuff on top of this spell Custom Bar." or "Shows the tracked aura's remaining duration or stack state on this Custom Bar.", 1, 1, 1, true},
+        " ",
+        {isSpellCustomBar and "This follows the same Tracked Auras model used by spell entries in bar panels." or "Custom Bars keep their tracked aura identity in the entry row. This section shows whether that aura is ready to drive the bar.", 1, 1, 1, true},
+        " ",
+        "Requires:",
+        {"- Blizzard Cooldown Manager (CDM) must be enabled.", 1, 1, 1, true},
+        {"- In Edit Mode, the CDM Buffs/Debuffs visibility setting must be set to Always Visible.", 1, 1, 1, true},
+        {"- The aura must be tracked in CDM as a Tracked Buff or Tracked Bar.", 1, 1, 1, true},
+    }, infoButtons)
+    heading.right:ClearAllPoints()
+    heading.right:SetPoint("RIGHT", heading.frame, "RIGHT", -3, 0)
+    heading.right:SetPoint("LEFT", infoBtn, "RIGHT", 4, 0)
+
+    local cdmEnabled = C_CVar.GetCVarBool("cooldownViewerEnabled") == true
+    local auraTrackingEnabled = true
+    if isSpellCustomBar then
+        auraTrackingEnabled = cab.auraTracking == true
+    end
+    local auraSpellID = cab.auraSpellID
+    local buttonData = spellID and {
+            type = "spell",
+            id = spellID,
+            auraSpellID = auraSpellID,
+            auraTracking = auraTrackingEnabled,
+            auraUnit = resolvedAuraUnit,
+            addedAs = isSpellCustomBar and nil or "aura",
+        } or nil
+    local viewerFrame = buttonData and CooldownCompanion:ResolveButtonAuraViewerFrame(buttonData) or nil
+    local auraStatus = buttonData and CooldownCompanion:ResolveAuraTrackingConfigStatus(buttonData, cdmEnabled, viewerFrame)
+        or { state = "noAssociatedAura", ready = false, cdmEnabled = cdmEnabled }
+    local auraConfigReady = auraStatus.ready == true
+    local inactiveColor = auraStatus.state == "associatedAuraNotTracked" and "|cffffff00" or "|cffff0000"
+
+    local auraLabel = "Aura Tracking"
+    auraLabel = auraLabel .. (auraConfigReady and ": |cff00ff00Active|r" or ": " .. inactiveColor .. "Inactive|r")
+
+    if isSpellCustomBar then
+        local auraCb = AceGUI:Create("CheckBox")
+        auraCb:SetLabel(auraLabel)
+        auraCb:SetValue(cab.auraTracking == true)
+        auraCb:SetFullWidth(true)
+        auraCb:SetCallback("OnValueChanged", function(_, _, value)
+            cab.auraTracking = value and true or false
+            if value then
+                EnsureCustomAuraBarAuraUnit(cab, spellID)
+            else
+                CooldownCompanion:SetCustomAuraBarActivePreview(cab, false)
+                CooldownCompanion:SetCustomAuraBarPandemicPreview(cab, false)
+            end
+            ApplyCustomAuraBarPanelChanges({
+                updateAnchors = true,
+                refreshConfig = true,
+            })
         end)
-        container:AddChild(fillDrop)
+        container:AddChild(auraCb)
+
+        if cab.auraTracking ~= true then
+            AddCustomBarAuraTrackingGap(container)
+            return
+        end
+    end
+
+    local trackedAuraFieldLabel = isSpellCustomBar and "Tracked Auras" or "Additional Auras"
+    local trackedAuraFieldTooltip = isSpellCustomBar
+        and "Most spells are tracked automatically, but some abilities apply a buff or debuff with a different aura ID than the spell itself. Search for CDM tracked auras by name, or enter CDM aura spell IDs, to choose which auras should count for this Custom Bar.\n\nUse arrows to set tracked aura priority. Right-click a row to delete it. Use \"Pick CDM\" below to visually select an aura from the Cooldown Manager."
+        or "The original aura is checked first. Add CDM tracked auras here when another aura should also count for this Custom Bar.\n\nUse arrows to set additional aura priority. Right-click a row to delete it. Use \"Pick CDM\" below to visually select an aura from the Cooldown Manager."
+    local auraIDList = GetCustomBarTrackedAuraIDList(cab, spellID)
+    local auraEditBox = AceGUI:Create("EditBox")
+    if auraEditBox.editbox.Instructions then
+        auraEditBox.editbox.Instructions:Hide()
+    end
+    auraEditBox:SetLabel(trackedAuraFieldLabel)
+    auraEditBox:SetText("")
+    auraEditBox:DisableButton(true)
+    auraEditBox:SetFullWidth(true)
+    local function CommitCustomBarTrackedAuraEntry(widget, entry)
+        CS.HideAutocomplete()
+        if not (entry and AddCustomBarTrackedAuraIDText(cab, spellID, tostring(entry.id))) then
+            return
+        end
+        widget:SetText("")
+        RefreshCustomBarTrackedAuraEntry(cab, spellID)
+    end
+    auraEditBox:SetCallback("OnTextChanged", function(widget, _, text)
+        if CS.browseMode then
+            CS.HideAutocomplete()
+            return
+        end
+        if text and #text >= 1 and CS.SearchCDMAuraAutocomplete then
+            CS.ShowAutocompleteResults(CS.SearchCDMAuraAutocomplete(text), widget, function(entry)
+                CommitCustomBarTrackedAuraEntry(widget, entry)
+            end, { requireExactNumericEnter = true })
+        else
+            CS.HideAutocomplete()
+        end
+    end)
+    auraEditBox:SetCallback("OnEnterPressed", function(widget, _, text)
+        if CS.browseMode then
+            CS.HideAutocomplete()
+            return
+        end
+        if CS.ConsumeAutocompleteEnter and CS.ConsumeAutocompleteEnter() then
+            return
+        end
+        CS.HideAutocomplete()
+        if not AddCustomBarTrackedAuraIDText(cab, spellID, text) then
+            return
+        end
+        widget:SetText("")
+        RefreshCustomBarTrackedAuraEntry(cab, spellID)
+    end)
+    if CS.SetupAutocompleteKeyHandler then
+        CS.SetupAutocompleteKeyHandler(auraEditBox)
+    end
+    container:AddChild(auraEditBox)
+
+    CreateInfoButton(auraEditBox.frame, auraEditBox.frame, "TOPLEFT", "TOPLEFT", auraEditBox.label:GetStringWidth() + 4, -2, {
+        trackedAuraFieldLabel,
+        {trackedAuraFieldTooltip, 1, 1, 1, true},
+    }, infoButtons)
+
+    for index, auraID in ipairs(auraIDList) do
+        CreateCustomBarTrackedAuraRow(container, cab, spellID, auraID, index, #auraIDList)
+    end
+
+    AddCustomBarAuraTrackingGap(container)
+
+    if isSpellCustomBar then
+        if not (cab.auraUnit == "player" or cab.auraUnit == "target") then
+            resolvedAuraUnit = EnsureCustomAuraBarAuraUnit(cab, spellID)
+        end
+
+        local auraUnitDrop = AceGUI:Create("Dropdown")
+        auraUnitDrop:SetLabel("Aura Unit")
+        auraUnitDrop:SetList({
+            player = "Player",
+            target = "Target",
+        }, { "player", "target" })
+        auraUnitDrop:SetValue((cab.auraUnitExplicit == true and cab.auraUnit) or resolvedAuraUnit or "player")
+        auraUnitDrop:SetFullWidth(true)
+        auraUnitDrop:SetCallback("OnValueChanged", function(_, _, value)
+            if value ~= "player" and value ~= "target" then
+                return
+            end
+            EnsureCustomAuraBarAuraUnit(cab, spellID, value)
+            ApplyCustomAuraBarPanelChanges({
+                updateAnchors = true,
+                refreshConfig = true,
+            })
+        end)
+        container:AddChild(auraUnitDrop)
+        CreateInfoButton(auraUnitDrop.frame, auraUnitDrop.label, "LEFT", "RIGHT", 4, 0, {
+            "Aura Unit",
+            {"This is an entry-wide setting. It controls where every Tracked Aura or Additional Aura on this Custom Bar is expected to exist. Use Target for debuffs on your target, or Player for buffs/procs on yourself, even if the Custom Bar's spell is something else.", 1, 1, 1, true},
+        }, infoButtons)
+
+        AddCustomBarAuraTrackingGap(container)
+    end
+
+    local cdmToggleBtn = AceGUI:Create("Button")
+    cdmToggleBtn:SetText(cdmEnabled and "Blizzard CDM: |cff00ff00Active|r" or "Blizzard CDM: |cffff0000Inactive|r")
+    cdmToggleBtn:SetFullWidth(true)
+    cdmToggleBtn:SetCallback("OnClick", function()
+        local current = C_CVar.GetCVarBool("cooldownViewerEnabled") == true
+        C_CVar.SetCVar("cooldownViewerEnabled", current and "0" or "1")
+        CooldownCompanion:RefreshConfigPanel()
+        if not current then
+            C_Timer.After(0.2, function()
+                CooldownCompanion:BuildViewerAuraMap()
+                CooldownCompanion:RefreshConfigPanel()
+            end)
+        end
+    end)
+    container:AddChild(cdmToggleBtn)
+
+    local cdmRow = AceGUI:Create("SimpleGroup")
+    cdmRow:SetFullWidth(true)
+    cdmRow:SetLayout("Flow")
+
+    local openCdmBtn = AceGUI:Create("Button")
+    openCdmBtn:SetText("CDM Settings")
+    openCdmBtn:SetRelativeWidth(0.5)
+    openCdmBtn:SetCallback("OnClick", function()
+        if CooldownViewerSettings then
+            CooldownViewerSettings:TogglePanel()
+        end
+    end)
+    cdmRow:AddChild(openCdmBtn)
+
+    local pickCDMBtn = AceGUI:Create("Button")
+    pickCDMBtn:SetText("Pick CDM")
+    pickCDMBtn:SetRelativeWidth(0.5)
+    pickCDMBtn:SetCallback("OnClick", function()
+        CS.StartPickCDM(function(pickedSpellID)
+            if CS.configFrame then
+                CS.configFrame.frame:Show()
+            end
+            if pickedSpellID then
+                AddCustomBarTrackedAuraID(cab, spellID, pickedSpellID)
+            end
+            ApplyCustomAuraBarPanelChanges({
+                updateAnchors = true,
+                refreshConfig = true,
+            })
+        end)
+    end)
+    pickCDMBtn:SetCallback("OnEnter", function(widget)
+        GameTooltip:SetOwner(widget.frame, "ANCHOR_TOP")
+        GameTooltip:AddLine("Pick from Cooldown Manager")
+        GameTooltip:AddLine("Shows a list of Tracked Buff/Tracked Bar auras currently tracked in the Cooldown Manager. Click one to add it to " .. trackedAuraFieldLabel .. ".", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    pickCDMBtn:SetCallback("OnLeave", function()
+        GameTooltip:Hide()
+    end)
+    cdmRow:AddChild(pickCDMBtn)
+    container:AddChild(cdmRow)
+
+    AddCustomBarAuraTrackingGap(container)
+
+    local statusLabel = AceGUI:Create("Label")
+    statusLabel:SetText(auraConfigReady and "|cff00ff00Aura tracking is active and ready.|r" or (inactiveColor .. "Aura tracking is not ready.|r"))
+    statusLabel:SetFullWidth(true)
+    statusLabel:SetJustifyH("CENTER")
+    container:AddChild(statusLabel)
+    AddCustomBarAuraTrackingGap(container)
+
+    local explainText
+    if auraStatus.state == "cdmDisabled" then
+        explainText = "|cff888888Blizzard Cooldown Manager is disabled. Enable it above to allow aura tracking.|r"
+    elseif auraStatus.state == "noAssociatedAura" then
+        explainText = "|cff888888This aura was not found in Blizzard CDM's tracked buff or tracked bar data.|r"
+    elseif auraStatus.state == "trackedAuraUnavailable" then
+        explainText = "|cff888888This aura is tracked in Blizzard CDM, but its Buffs/Debuffs viewer is not currently readable. Set the CDM Buffs/Debuffs visibility to Always Visible.|r"
+    elseif auraStatus.state == "associatedAuraNotTracked" then
+        explainText = "|cff888888This aura was found, but it is not currently tracked in CDM as a Tracked Buff or Tracked Bar.|r"
+    end
+
+    if explainText then
+        local explainLabel = AceGUI:Create("Label")
+        explainLabel:SetText(explainText)
+        explainLabel:SetFullWidth(true)
+        container:AddChild(explainLabel)
+        AddCustomBarAuraTrackingGap(container)
     end
 
 end
 
-local function BuildCustomAuraBarPanel(container, slotIdx)
-    local settings = CooldownCompanion:GetResourceBarSettings()
-    local thicknessField, thicknessLabel = GetResourceThicknessFieldConfig(settings)
-    local customBars = CooldownCompanion:GetSpecCustomAuraBars()
-    local maxSlots = ST.MAX_CUSTOM_AURA_BARS or 3
-    local rbCabTextAdvBtns = {}
-    local selectedSlot = tonumber(slotIdx) or 1
-
-    if selectedSlot < 1 then
-        selectedSlot = 1
-    elseif selectedSlot > maxSlots then
-        selectedSlot = maxSlots
+local function BuildCustomBarVisibilityRulesSection(container, customBars, capturedIdx, cab, resolvedAuraUnit, capturedKey, infoButtons)
+    if cab.hideWhenInactive == true and cab.hideWhileAuraActive == true then
+        cab.hideWhileAuraActive = nil
+        cab.hideAuraActiveExceptPandemic = nil
     end
 
-    if not customBars[selectedSlot] then
-        customBars[selectedSlot] = { enabled = false, trackingMode = "active" }
-    end
-    local cab = customBars[selectedSlot]
-    local capturedIdx = selectedSlot
-    EnsureCustomAuraIndependentConfig(cab, settings)
-    local resolvedAuraUnit = GetResolvedCustomAuraBarAuraUnit(cab, cab.spellID)
+    local heading = AceGUI:Create("Heading")
+    heading:SetText("Visibility Rules")
+    ColorHeading(heading)
+    heading:SetFullWidth(true)
+    container:AddChild(heading)
 
-    local function ClassColorText(text)
-        local safeText = tostring(text or "")
-        local classColor = C_ClassColor.GetClassColor(select(2, UnitClass("player")))
-        if classColor then
-            if classColor.WrapTextInColorCode then
-                return classColor:WrapTextInColorCode(safeText)
-            end
-            local r = math.floor(((classColor.r or 1) * 255) + 0.5)
-            local g = math.floor(((classColor.g or 1) * 255) + 0.5)
-            local b = math.floor(((classColor.b or 1) * 255) + 0.5)
-            return string.format("|cff%02x%02x%02x%s|r", r, g, b, safeText)
-        end
-        return safeText
+    local visibilityKey = "cab_visibility_" .. tostring(capturedKey)
+    local visibilityCollapsed = resourceBarCollapsedSections[visibilityKey]
+    local collapseBtn = AttachCollapseButton(heading, visibilityCollapsed, function()
+        resourceBarCollapsedSections[visibilityKey] = not resourceBarCollapsedSections[visibilityKey]
+        CooldownCompanion:RefreshConfigPanel()
+    end)
+
+    local infoBtn = CreateInfoButton(heading.frame, collapseBtn, "LEFT", "RIGHT", 2, 0, {
+        "Visibility Rules",
+        {"Show or hide this Custom Bar based on whether its tracked aura is active.", 1, 1, 1, true},
+    }, infoButtons)
+    heading.right:ClearAllPoints()
+    heading.right:SetPoint("RIGHT", heading.frame, "RIGHT", -3, 0)
+    heading.right:SetPoint("LEFT", infoBtn, "RIGHT", 4, 0)
+
+    if visibilityCollapsed then
+        return
     end
 
-    -- Enable checkbox
-    local enableCab = AceGUI:Create("CheckBox")
-    enableCab:SetLabel(L["Enable"])
-    enableCab:SetValue(cab.enabled == true)
-    enableCab:SetFullWidth(true)
-    enableCab:SetCallback("OnValueChanged", function(widget, event, val)
-        customBars[capturedIdx].enabled = val
-        if val and not customBars[capturedIdx].trackingMode then
-            customBars[capturedIdx].trackingMode = "active"
+    local hideAuraCb = AceGUI:Create("CheckBox")
+    hideAuraCb:SetLabel("Hide While Aura Active")
+    hideAuraCb:SetValue(cab.hideWhileAuraActive == true)
+    hideAuraCb:SetFullWidth(true)
+    hideAuraCb:SetCallback("OnValueChanged", function(widget, event, val)
+        customBars[capturedIdx].hideWhileAuraActive = val or nil
+        if val then
+            customBars[capturedIdx].hideWhenInactive = nil
+        else
+            customBars[capturedIdx].hideAuraActiveExceptPandemic = nil
         end
         ApplyCustomAuraBarPanelChanges({
             updateAnchors = true,
             refreshConfig = true,
         })
     end)
-    container:AddChild(enableCab)
+    container:AddChild(hideAuraCb)
+    CreateInfoButton(hideAuraCb.frame, hideAuraCb.checkbg, "LEFT", "RIGHT", hideAuraCb.text:GetStringWidth() + 4, 0, {
+        "Hide While Aura Active",
+        {"Hides this Custom Bar while the tracked aura is currently active.", 1, 1, 1, true},
+    }, infoButtons)
 
-    if cab.enabled then
-        local independentCb = AceGUI:Create("CheckBox")
-        independentCb:SetLabel(L["Independent Anchor & Size"])
-        independentCb:SetValue(IsTruthyConfigFlag(cab.independentAnchorEnabled))
-        independentCb:SetFullWidth(true)
-        independentCb:SetCallback("OnValueChanged", function(widget, event, val)
-            local bars = CooldownCompanion:GetSpecCustomAuraBars()
-            if not bars[capturedIdx] then
-                bars[capturedIdx] = { enabled = false, trackingMode = "active" }
-            end
-
-            local enabled = IsTruthyConfigFlag(val)
-            local wasEnabled = IsTruthyConfigFlag(bars[capturedIdx].independentAnchorEnabled)
-            bars[capturedIdx].independentAnchorEnabled = enabled and true or nil
-            if enabled then
-                EnsureCustomAuraIndependentConfig(bars[capturedIdx], settings)
-                bars[capturedIdx].independentLocked = false
-                if CS.customAuraBarSubTabs then
-                    local prior = CS.customAuraBarSubTabs[capturedIdx]
-                    if prior ~= "settings" and prior ~= "anchor" and prior ~= "alpha" then
-                        CS.customAuraBarSubTabs[capturedIdx] = "settings"
-                    end
-                end
-                if not wasEnabled and CooldownCompanion.InitializeCustomAuraIndependentAnchor then
-                    CooldownCompanion:InitializeCustomAuraIndependentAnchor(capturedIdx)
-                end
-            elseif CS.customAuraBarSubTabs then
-                CS.customAuraBarSubTabs[capturedIdx] = nil
-            end
-
+    if resolvedAuraUnit == "target" then
+        local pandemicCb = AceGUI:Create("CheckBox")
+        pandemicCb:SetLabel("Except in Pandemic")
+        pandemicCb:SetValue(cab.hideAuraActiveExceptPandemic == true)
+        pandemicCb:SetFullWidth(true)
+        if cab.hideWhileAuraActive ~= true then
+            pandemicCb:SetDisabled(true)
+        end
+        pandemicCb:SetCallback("OnValueChanged", function(widget, event, val)
+            customBars[capturedIdx].hideAuraActiveExceptPandemic = val or nil
             ApplyCustomAuraBarPanelChanges({
                 updateAnchors = true,
                 refreshConfig = true,
             })
         end)
-        container:AddChild(independentCb)
+        container:AddChild(pandemicCb)
+        ApplyCheckboxIndent(pandemicCb, 20)
+        CreateInfoButton(pandemicCb.frame, pandemicCb.checkbg, "LEFT", "RIGHT", pandemicCb.text:GetStringWidth() + 4, 0, {
+            "Except in Pandemic",
+            {"Shows the bar during the pandemic window so you know when to reapply the target aura.", 1, 1, 1, true},
+        }, infoButtons)
     end
 
-    local independentSubTab = "settings"
-    if cab.enabled and IsTruthyConfigFlag(cab.independentAnchorEnabled) then
-        independentSubTab = CS.customAuraBarSubTabs and CS.customAuraBarSubTabs[capturedIdx] or "settings"
-        if independentSubTab ~= "settings" and independentSubTab ~= "anchor" and independentSubTab ~= "alpha" then
-            independentSubTab = "settings"
+    local hideNoAuraCb = AceGUI:Create("CheckBox")
+    hideNoAuraCb:SetLabel("Hide While Aura Not Active")
+    hideNoAuraCb:SetValue(cab.hideWhenInactive == true)
+    hideNoAuraCb:SetFullWidth(true)
+    hideNoAuraCb:SetCallback("OnValueChanged", function(widget, event, val)
+        customBars[capturedIdx].hideWhenInactive = val or nil
+        if val then
+            customBars[capturedIdx].hideWhileAuraActive = nil
+            customBars[capturedIdx].hideAuraActiveExceptPandemic = nil
         end
-        if CS.customAuraBarSubTabs then
-            CS.customAuraBarSubTabs[capturedIdx] = independentSubTab
-        end
+        ApplyCustomAuraBarPanelChanges({
+            updateAnchors = true,
+            refreshConfig = true,
+        })
+    end)
+    container:AddChild(hideNoAuraCb)
+    CreateInfoButton(hideNoAuraCb.frame, hideNoAuraCb.checkbg, "LEFT", "RIGHT", hideNoAuraCb.text:GetStringWidth() + 4, 0, {
+        "Hide While Aura Not Active",
+        {"Hides this Custom Bar until the tracked aura is active.", 1, 1, 1, true},
+    }, infoButtons)
+end
 
-        local subTabRow = AceGUI:Create("SimpleGroup")
-        subTabRow:SetLayout("Flow")
-        subTabRow:SetFullWidth(true)
-
-        local settingsBtn = AceGUI:Create("Button")
-        settingsBtn:SetText(independentSubTab == "settings" and ClassColorText("[Settings]") or "Settings")
-        settingsBtn:SetRelativeWidth(0.32)
-        settingsBtn:SetCallback("OnClick", function()
-            local currentTab = CS.customAuraBarSubTabs and CS.customAuraBarSubTabs[capturedIdx] or "settings"
-            if currentTab == "settings" then return end
-            if CS.customAuraBarSubTabs then
-                CS.customAuraBarSubTabs[capturedIdx] = "settings"
-            end
-            CooldownCompanion:ApplyResourceBars()
-            CooldownCompanion:RefreshConfigPanel()
-        end)
-        subTabRow:AddChild(settingsBtn)
-
-        local anchorBtn = AceGUI:Create("Button")
-        anchorBtn:SetText(independentSubTab == "anchor" and ClassColorText("[Anchor]") or "Anchor")
-        anchorBtn:SetRelativeWidth(0.32)
-        anchorBtn:SetCallback("OnClick", function()
-            local currentTab = CS.customAuraBarSubTabs and CS.customAuraBarSubTabs[capturedIdx] or "settings"
-            if currentTab == "anchor" then return end
-            if CS.customAuraBarSubTabs then
-                CS.customAuraBarSubTabs[capturedIdx] = "anchor"
-            end
-            CooldownCompanion:ApplyResourceBars()
-            CooldownCompanion:RefreshConfigPanel()
-        end)
-        subTabRow:AddChild(anchorBtn)
-
-        local alphaBtn = AceGUI:Create("Button")
-        alphaBtn:SetText(independentSubTab == "alpha" and ClassColorText("[Alpha]") or "Alpha")
-        alphaBtn:SetRelativeWidth(0.32)
-        alphaBtn:SetCallback("OnClick", function()
-            local currentTab = CS.customAuraBarSubTabs and CS.customAuraBarSubTabs[capturedIdx] or "settings"
-            if currentTab == "alpha" then return end
-            if CS.customAuraBarSubTabs then
-                CS.customAuraBarSubTabs[capturedIdx] = "alpha"
-            end
-            CooldownCompanion:ApplyResourceBars()
-            CooldownCompanion:RefreshConfigPanel()
-        end)
-        subTabRow:AddChild(alphaBtn)
-
-        container:AddChild(subTabRow)
-
-        local subTabDivider = AceGUI:Create("Heading")
-        subTabDivider:SetFullWidth(true)
-        container:AddChild(subTabDivider)
-    elseif cab.enabled and CS.customAuraBarSubTabs then
-        CS.customAuraBarSubTabs[capturedIdx] = nil
+local function BuildCustomBarsListPanel(container)
+    local settings = CooldownCompanion:GetResourceBarSettings()
+    local customBarsSpecID = GetCurrentConfigSpecID()
+    local customBars = CooldownCompanion:GetSpecCustomAuraBars()
+    local selectedId = CS.selectedCustomBarId
+    if selectedId and not FindCustomBarIndexById(customBars, selectedId) then
+        CS.selectedCustomBarId = nil
+        selectedId = nil
     end
 
-    if cab.enabled and independentSubTab == "settings" then
+    local addBox = AceGUI:Create("EditBox")
+    if addBox.editbox.Instructions then addBox.editbox.Instructions:Hide() end
+    addBox:SetLabel("")
+    addBox:SetFullWidth(true)
+    addBox:DisableButton(true)
+    local updatePlaceholder = ConfigureCustomBarAddInstructions(addBox, "Add spell or aura by name or ID")
 
-            local trackedAuraName = cab.spellID
-                and (GetAuraBarAutocompleteDisplayName(cab.spellID)
-                    or (type(cab.label) == "string" and cab.label ~= "" and cab.label))
-            local trackedAuraIcon = cab.spellID and GetAuraBarAutocompleteDisplayIcon(cab.spellID)
-            local trackedAuraLabel = AceGUI:Create("Label")
-            local trackedAuraText
-            if trackedAuraName then
-                local iconPrefix = trackedAuraIcon and ("|T" .. trackedAuraIcon .. ":16:16:0:0|t ") or ""
-                trackedAuraText = L["|cffffcc00Tracking Aura:|r "] .. iconPrefix
-                    .. "|cffffffff" .. trackedAuraName .. "|r"
-            elseif cab.spellID then
-                trackedAuraText = L["|cffffcc00Tracking Aura:|r |cffffffffSpell ID "]
-                    .. tostring(cab.spellID) .. "|r"
+    local function GetCustomBarEntryTypeForAutocomplete(entry)
+        if type(entry) ~= "table" then
+            return "spell"
+        end
+        if entry.forceAura == true or entry.isPassive == true then
+            return "aura"
+        end
+        if entry.forceAura == false then
+            return "spell"
+        end
+        if IsPassiveOrProc and entry.id and IsPassiveOrProc(entry.id) then
+            return "aura"
+        end
+        return "spell"
+    end
+
+    local function StripExplicitCustomBarEntryTypeSuffix(text)
+        local cleaned = text and text:gsub("^%s+", ""):gsub("%s+$", ""):lower() or ""
+        if cleaned:match("%s%((buff)%)$") or cleaned:match("%s%((aura)%)$") then
+            return (text or ""):gsub("%s+%([Bb][Uu][Ff][Ff]%)%s*$", ""):gsub("%s+%([Aa][Uu][Rr][Aa]%)%s*$", ""), "aura"
+        end
+        if cleaned:match("%s%((cooldown)%)$") then
+            return (text or ""):gsub("%s+%([Cc][Oo][Oo][Ll][Dd][Oo][Ww][Nn]%)%s*$", ""), "spell"
+        end
+        return text, nil
+    end
+
+    local function GetCustomBarEntryTypeForSpellID(spellId, explicitType)
+        if explicitType then
+            return explicitType
+        end
+        if not spellId or not C_Spell.GetSpellInfo(spellId) then
+            return "aura"
+        end
+        local sawAuraEntry = false
+        local sawSpellEntry = false
+        local cache = BuildAuraBarAutocompleteCache and BuildAuraBarAutocompleteCache() or nil
+        for _, entry in ipairs(cache or {}) do
+            if entry.id == spellId then
+                if GetCustomBarEntryTypeForAutocomplete(entry) == "aura" then
+                    sawAuraEntry = true
+                else
+                    sawSpellEntry = true
+                end
+            end
+        end
+        if sawAuraEntry and not sawSpellEntry then
+            return "aura"
+        elseif sawSpellEntry and not sawAuraEntry then
+            return "spell"
+        end
+        if IsPassiveOrProc and IsPassiveOrProc(spellId) then
+            return "aura"
+        end
+        return "spell"
+    end
+
+    local function AddCustomBarFromSpell(spellId, labelOverride, entryType)
+        if not spellId then return false end
+        entryType = entryType == "aura" and "aura" or "spell"
+        local entry = {
+            entryType = entryType,
+            enabled = true,
+            spellID = spellId,
+            label = labelOverride or GetAuraBarAutocompleteDisplayName(spellId) or C_Spell.GetSpellName(spellId) or "",
+        }
+        if entryType == "aura" then
+            entry.trackingMode = "active"
+            RefreshCustomAuraBarAuraUnitForSpell(entry, spellId)
+        else
+            local charges = C_Spell.GetSpellCharges(spellId)
+            local maxCharges = charges and tonumber(charges.maxCharges)
+            if maxCharges and maxCharges > 1 then
+                entry.hasCharges = true
+                entry.maxCharges = maxCharges
+            end
+        end
+        local id = EnsureCustomBarId(settings, entry)
+        customBars[#customBars + 1] = entry
+        EnsureCustomBarLayout(settings, nil, id, 1000 + #customBars)
+        CS.selectedCustomBarId = id
+        ApplyCustomAuraBarPanelChanges({
+            updateAnchors = true,
+            refreshConfig = true,
+        })
+        return true
+    end
+
+    local function CommitCustomBarText(widget, text)
+        local lookupText, explicitType = StripExplicitCustomBarEntryTypeSuffix(text)
+        local autocompleteEntry = ResolveAuraBarAutocompleteEntry and (
+            ResolveAuraBarAutocompleteEntry(text)
+            or (lookupText ~= text and ResolveAuraBarAutocompleteEntry(lookupText))
+        )
+        if autocompleteEntry and AddCustomBarFromSpell(
+            autocompleteEntry.id,
+            GetAuraBarAutocompleteEntryName(autocompleteEntry),
+            explicitType or GetCustomBarEntryTypeForAutocomplete(autocompleteEntry)
+        ) then
+            widget:SetText("")
+            return true
+        end
+
+        local id, explicitClear = ResolveAuraColorSpellIDFromText(lookupText)
+        if explicitClear then
+            widget:SetText("")
+            return true
+        end
+        if AddCustomBarFromSpell(id, nil, GetCustomBarEntryTypeForSpellID(id, explicitType)) then
+            widget:SetText("")
+            return true
+        end
+
+        local cleaned = text and text:gsub("^%s+", ""):gsub("%s+$", "") or ""
+        if cleaned ~= "" then
+            CooldownCompanion:Print("Custom Bar spell or aura not found: " .. cleaned)
+        end
+        return false
+    end
+
+    local function onAuraBarSelect(entry)
+        CS.HideAutocomplete()
+        if entry and AddCustomBarFromSpell(
+            entry.id,
+            GetAuraBarAutocompleteEntryName(entry),
+            GetCustomBarEntryTypeForAutocomplete(entry)
+        ) then
+            addBox._cdcCustomBarAutocompleteCommitted = true
+            addBox:SetText("")
+        end
+    end
+
+    addBox:SetCallback("OnTextChanged", function(widget, event, text)
+        updatePlaceholder(text)
+        ShowAuraBarAutocompleteResults(text, widget, onAuraBarSelect)
+    end)
+    addBox:SetCallback("OnEnterPressed", function(widget, event, text)
+        if CS.ConsumeAutocompleteEnter then
+            CS.ConsumeAutocompleteEnter()
+        end
+        if widget._cdcCustomBarAutocompleteCommitted then
+            widget._cdcCustomBarAutocompleteCommitted = nil
+            return
+        end
+        CS.HideAutocomplete()
+        CommitCustomBarText(widget, text)
+    end)
+    CS.SetupAutocompleteKeyHandler(addBox)
+    addBox.editbox:SetPoint("BOTTOMRIGHT", 1, 0)
+    container:AddChild(addBox)
+
+    local listHeading = AceGUI:Create("Heading")
+    listHeading:SetText("Entries")
+    ColorHeading(listHeading)
+    listHeading:SetFullWidth(true)
+    container:AddChild(listHeading)
+
+    if #customBars == 0 then
+        local empty = AceGUI:Create("Label")
+        empty:SetText("|cff888888No Custom Bars yet.|r")
+        empty:SetFullWidth(true)
+        container:AddChild(empty)
+        return
+    end
+
+    for index, entry in ipairs(customBars) do
+        local customBarId = EnsureCustomBarId(settings, entry)
+        local spellName = entry.label
+            or (entry.spellID and GetAuraBarAutocompleteDisplayName(entry.spellID))
+            or (entry.spellID and C_Spell.GetSpellName(entry.spellID))
+            or ("Custom Bar " .. tostring(index))
+        local rowText = StripCustomBarEntryTypeWords(spellName)
+        local typeIcons = GetCustomBarEntryTypeIcons(entry)
+        if typeIcons and typeIcons ~= "" then
+            rowText = (rowText or ("Custom Bar " .. tostring(index))) .. "  " .. typeIcons
+        end
+        local selected = customBarId == selectedId
+        local icon = entry.spellID and (GetAuraBarAutocompleteDisplayIcon(entry.spellID) or C_Spell.GetSpellTexture(entry.spellID)) or 134400
+
+        local row = AceGUI:Create("InteractiveLabel")
+        if CleanRecycledEntry then CleanRecycledEntry(row) end
+        HideCustomBarRowDecorations(row.frame)
+        row:SetText(rowText)
+        row:SetFullWidth(true)
+        row:SetFontObject(GameFontHighlight)
+        row:SetHighlight("Interface\\QuestFrame\\UI-QuestTitleHighlight")
+        if row.frame and row.frame.RegisterForClicks then
+            row.frame:RegisterForClicks("AnyUp")
+        end
+        if ApplyConfigRowIcon then
+            ApplyConfigRowIcon(row, icon, { rightPad = 126 })
+        elseif icon then
+            row:SetImage(icon, 0.08, 0.92, 0.08, 0.92)
+            row:SetImageSize(18, 18)
+        end
+        if selected then
+            row:SetColor(0.4, 0.7, 1.0)
+        elseif entry.enabled ~= true then
+            row:SetColor(0.55, 0.55, 0.55)
+        end
+
+        local rowFrame = row.frame
+        local isSpellCustomBar = IsSpellCustomBarConfig(entry)
+        local resolvedRowAuraUnit = GetResolvedCustomAuraBarAuraUnit(entry, entry.spellID)
+        local showAuraStatusBadge = (not isSpellCustomBar) or entry.auraTracking == true
+        local auraStatus = showAuraStatusBadge and ResolveCustomBarAuraTrackingStatus(entry, resolvedRowAuraUnit) or nil
+        local rightBadgeAnchor = rowFrame
+        local rightBadgePoint = "RIGHT"
+        local rightBadgeOffset = -4
+
+        if entry.enabled == false then
+            local disabledBadge = EnsureCustomBarRowIconBadge(rowFrame, "_cdcCustomBarDisabledBadge", "GM-icon-visibleDis-pressed")
+            disabledBadge:SetPoint("RIGHT", rowFrame, "RIGHT", rightBadgeOffset, 0)
+            SetCustomBarRowBadgeTooltip(disabledBadge, "Disabled", 0.6, 0.6, 0.6)
+            rightBadgeAnchor = disabledBadge
+            rightBadgePoint = "LEFT"
+            rightBadgeOffset = -4
+        end
+
+        if showAuraStatusBadge then
+            local auraStatusBadge = EnsureCustomBarRowIconBadge(rowFrame, "_cdcCustomBarAuraStatusBadge", "icon_trackedbuffs")
+            auraStatusBadge:SetPoint("RIGHT", rightBadgeAnchor, rightBadgePoint, rightBadgeOffset, 0)
+            if auraStatus.ready == true then
+                auraStatusBadge.icon:SetVertexColor(1, 1, 1, 1)
+                SetCustomBarRowBadgeTooltip(auraStatusBadge, "Aura tracking: Active", 0.2, 1, 0.2)
             else
-                trackedAuraText = L["|cffffcc00Tracking Aura:|r |cff999999None selected|r"]
-            end
-            trackedAuraLabel:SetText(trackedAuraText)
-            trackedAuraLabel:SetFullWidth(true)
-            container:AddChild(trackedAuraLabel)
-
-            -- Spell ID edit box with autocomplete
-            local spellEdit = AceGUI:Create("EditBox")
-            if spellEdit.editbox.Instructions then spellEdit.editbox.Instructions:Hide() end
-            spellEdit:SetLabel(L["Spell ID or Name"])
-            spellEdit:SetText(cab.spellID and tostring(cab.spellID) or "")
-            spellEdit:SetFullWidth(true)
-            spellEdit:DisableButton(true)
-
-            -- Autocomplete: onSelect closure for this slot
-            local function onAuraBarSelect(entry)
-                CS.HideAutocomplete()
-                local bars = CooldownCompanion:GetSpecCustomAuraBars()
-                SetCustomAuraBarTrackedSpell(bars, capturedIdx, entry.id, GetAuraBarAutocompleteEntryName(entry))
-                ApplyCustomAuraBarPanelChanges({
-                    updateAnchors = true,
-                    refreshConfig = true,
-                })
-            end
-
-            spellEdit:SetCallback("OnEnterPressed", function(widget, event, text)
-                if CS.ConsumeAutocompleteEnter() then return end
-                CS.HideAutocomplete()
-                local id, explicitClear = ResolveAuraColorSpellIDFromText(text)
-                if not id and not explicitClear then
-                    return
+                auraStatusBadge.icon:SetVertexColor(1, 0.2, 0.2, 1)
+                local tooltipText = "Aura tracking: Inactive"
+                if auraStatus.state == "cdmDisabled" then
+                    tooltipText = "Aura tracking: Inactive (Blizzard CDM disabled)"
+                elseif auraStatus.state == "trackedAuraUnavailable" then
+                    tooltipText = "Aura tracking: Inactive (tracked in CDM, but the Buffs/Debuffs viewer is not currently readable)"
+                elseif auraStatus.state == "associatedAuraNotTracked" then
+                    tooltipText = "Aura tracking: Inactive (associated aura is not currently tracked in CDM)"
+                elseif auraStatus.state == "noAssociatedAura" then
+                    tooltipText = "Aura tracking: Inactive (no associated aura found)"
                 end
-                local bars = CooldownCompanion:GetSpecCustomAuraBars()
-                SetCustomAuraBarTrackedSpell(bars, capturedIdx, id)
-                ApplyCustomAuraBarPanelChanges({
-                    updateAnchors = true,
-                    refreshConfig = true,
-                })
-            end)
-            spellEdit:SetCallback("OnTextChanged", function(widget, event, text)
-                ShowAuraBarAutocompleteResults(text, widget, onAuraBarSelect)
-            end)
+                SetCustomBarRowBadgeTooltip(auraStatusBadge, tooltipText, 1, 0.2, 0.2)
+            end
+        end
 
-            CS.SetupAutocompleteKeyHandler(spellEdit)
-
-            container:AddChild(spellEdit)
-
-            AddCdmAuraReadinessWarning(container, cab.spellID)
-
-            local auraUnitDrop = AceGUI:Create("Dropdown")
-            auraUnitDrop:SetLabel("Aura Unit")
-            auraUnitDrop:SetList({
-                player = "Player",
-                target = "Target",
-            }, { "player", "target" })
-            auraUnitDrop:SetValue(resolvedAuraUnit)
-            auraUnitDrop:SetFullWidth(true)
-            auraUnitDrop:SetCallback("OnValueChanged", function(widget, event, val)
-                if val ~= "player" and val ~= "target" then
-                    return
+        row:SetCallback("OnClick", function(widget, event, mouseButton)
+            if mouseButton == "RightButton" then
+                local selectionChanged = CS.selectedCustomBarId ~= customBarId
+                if selectionChanged then
+                    ClearCustomBarPreviewState()
                 end
-                EnsureCustomAuraBarAuraUnit(customBars[capturedIdx], customBars[capturedIdx].spellID, val, true)
-                ApplyCustomAuraBarPanelChanges({
-                    updateAnchors = true,
-                    refreshConfig = true,
-                })
+                CS.selectedCustomBarId = customBarId
+                wipe(CS.selectedButtons)
+                if selectionChanged then
+                    CooldownCompanion:RefreshConfigPanel()
+                end
+                OpenCustomBarRowMenu(customBars, customBarsSpecID, customBarId, entry)
+            elseif mouseButton == "LeftButton" then
+                if CS.selectedCustomBarId == customBarId then
+                    ClearCustomBarPreviewState()
+                    CS.selectedCustomBarId = nil
+                    CS.customBarSettingsTab = "appearance"
+                else
+                    if CS.selectedCustomBarId ~= customBarId then
+                        ClearCustomBarPreviewState()
+                    end
+                    CS.selectedCustomBarId = customBarId
+                end
+                CooldownCompanion:RefreshConfigPanel()
+            end
+        end)
+        container:AddChild(row)
+    end
+end
+
+local function BuildCustomBarIndicatorsTab(container, customBars, capturedIdx, cab, isSpellCustomBar, resolvedAuraUnit, capturedKey, infoButtons)
+    local cabIdx = capturedIdx
+    local cabApplyBars = function() CooldownCompanion:ApplyResourceBars() end
+    local renderedControls = false
+
+    if not cab.spellID then
+        local emptyLabel = AceGUI:Create("Label")
+        emptyLabel:SetText("|cff888888This Custom Bar has no indicator settings yet.|r")
+        emptyLabel:SetFullWidth(true)
+        container:AddChild(emptyLabel)
+        return
+    end
+
+    local hasAuraDisplayControls = IsCustomBarAuraDisplayConfig(cab, isSpellCustomBar)
+    local trackingMode = GetCustomBarTrackingModeConfig(cab, isSpellCustomBar)
+    local isActiveTracking = hasAuraDisplayControls and trackingMode == "active"
+    local hasActiveAuraIndicatorControls = isActiveTracking
+
+    if hasActiveAuraIndicatorControls then
+        renderedControls = true
+
+        local indicatorsHeading = AceGUI:Create("Heading")
+        indicatorsHeading:SetText("Active Aura")
+        ColorHeading(indicatorsHeading)
+        indicatorsHeading:SetFullWidth(true)
+        container:AddChild(indicatorsHeading)
+
+        local activeAuraEnabled = (cab.barAuraEffect or "none") ~= "none"
+
+        local activeAuraCb = AceGUI:Create("CheckBox")
+        activeAuraCb:SetLabel("Show Active Aura Indicator")
+        activeAuraCb:SetValue(activeAuraEnabled)
+        activeAuraCb:SetFullWidth(true)
+        activeAuraCb:SetCallback("OnValueChanged", function(widget, event, val)
+            if val then
+                local effect = customBars[cabIdx].barAuraEffect
+                if effect == nil or effect == "none" then
+                    effect = "pixel"
+                end
+                customBars[cabIdx].barAuraEffect = effect
+            else
+                customBars[cabIdx].barAuraEffect = "none"
+            end
+            CooldownCompanion:ApplyResourceBars()
+            CooldownCompanion:RefreshConfigPanel()
+        end)
+        container:AddChild(activeAuraCb)
+
+        local activeAuraAdvExpanded = AddAdvancedToggle(activeAuraCb, "rbCabActiveAura_" .. capturedKey, infoButtons, activeAuraEnabled)
+        if activeAuraAdvExpanded and activeAuraEnabled then
+            local activeAuraCombatCb = AceGUI:Create("CheckBox")
+            activeAuraCombatCb:SetLabel("Show Only In Combat")
+            activeAuraCombatCb:SetValue(cab.auraGlowCombatOnly or false)
+            activeAuraCombatCb:SetFullWidth(true)
+            activeAuraCombatCb:SetCallback("OnValueChanged", function(widget, event, val)
+                customBars[cabIdx].auraGlowCombatOnly = val
+                CooldownCompanion:ApplyResourceBars()
             end)
-            container:AddChild(auraUnitDrop)
-            CreateInfoButton(auraUnitDrop.frame, auraUnitDrop.label, "LEFT", "RIGHT",
-                4, 0, {
-                "Aura Unit",
-                {"This controls where the tracked aura is expected to exist. Use Target for debuffs on your target, or Player for buffs and procs on yourself.", 1, 1, 1, true},
-            }, tabInfoButtons)
+            container:AddChild(activeAuraCombatCb)
+            ApplyCheckboxIndent(activeAuraCombatCb, 20)
 
-            local auraUnitSpacer = AceGUI:Create("Label")
-            auraUnitSpacer:SetText(" ")
-            auraUnitSpacer:SetFullWidth(true)
-            container:AddChild(auraUnitSpacer)
+            BuildBarActiveAuraControls(container, customBars[cabIdx], cabApplyBars, {
+                hidePrimaryColorPicker = not isSpellCustomBar,
+            })
+            BuildBarAuraPulseControls(container, customBars[cabIdx], cabApplyBars)
 
-            -- Tracking Mode dropdown
+            if AddPreviewToggleButton then
+                AddPreviewToggleButton(container, "Preview Active Aura Effects", function()
+                    return CooldownCompanion:IsCustomAuraBarActivePreviewActive(customBars[cabIdx])
+                end, function(show)
+                    CooldownCompanion:SetCustomAuraBarActivePreview(customBars[cabIdx], show)
+                end)
+            end
+        else
+            CooldownCompanion:SetCustomAuraBarActivePreview(customBars[cabIdx], false)
+        end
+
+        if resolvedAuraUnit == "target" then
+            local pandemicEnabled = cab.showPandemicGlow == true
+
+            local pandemicCb = AceGUI:Create("CheckBox")
+            pandemicCb:SetLabel("Show Pandemic Indicator")
+            pandemicCb:SetValue(pandemicEnabled)
+            pandemicCb:SetFullWidth(true)
+            pandemicCb:SetCallback("OnValueChanged", function(widget, event, val)
+                customBars[cabIdx].showPandemicGlow = val and true or false
+                CooldownCompanion:ApplyResourceBars()
+                CooldownCompanion:RefreshConfigPanel()
+            end)
+            container:AddChild(pandemicCb)
+
+            local pandemicAdvExpanded = AddAdvancedToggle(pandemicCb, "rbCabPandemic_" .. capturedKey, infoButtons, pandemicEnabled)
+            if pandemicAdvExpanded and pandemicEnabled then
+                local pandemicCombatCb = AceGUI:Create("CheckBox")
+                pandemicCombatCb:SetLabel("Show Only In Combat")
+                pandemicCombatCb:SetValue(cab.pandemicGlowCombatOnly or false)
+                pandemicCombatCb:SetFullWidth(true)
+                pandemicCombatCb:SetCallback("OnValueChanged", function(widget, event, val)
+                    customBars[cabIdx].pandemicGlowCombatOnly = val
+                    CooldownCompanion:ApplyResourceBars()
+                end)
+                container:AddChild(pandemicCombatCb)
+                ApplyCheckboxIndent(pandemicCombatCb, 20)
+
+                BuildPandemicBarControls(container, customBars[cabIdx], cabApplyBars)
+                BuildPandemicBarPulseControls(container, customBars[cabIdx], cabApplyBars)
+
+                if AddPreviewToggleButton then
+                    AddPreviewToggleButton(container, "Preview Pandemic Effects", function()
+                        return CooldownCompanion:IsCustomAuraBarPandemicPreviewActive(customBars[cabIdx])
+                    end, function(show)
+                        CooldownCompanion:SetCustomAuraBarPandemicPreview(customBars[cabIdx], show)
+                    end)
+                end
+            else
+                CooldownCompanion:SetCustomAuraBarPandemicPreview(customBars[cabIdx], false)
+            end
+        else
+            CooldownCompanion:SetCustomAuraBarPandemicPreview(customBars[cabIdx], false)
+        end
+    elseif not isSpellCustomBar and hasAuraDisplayControls then
+        renderedControls = true
+
+        local thresholdHeading = AceGUI:Create("Heading")
+        thresholdHeading:SetText("Stack Threshold")
+        ColorHeading(thresholdHeading)
+        thresholdHeading:SetFullWidth(true)
+        container:AddChild(thresholdHeading)
+
+        local thresholdCb = AceGUI:Create("CheckBox")
+        thresholdCb:SetLabel("Enable Max Stack Color")
+        thresholdCb:SetValue(cab.thresholdColorEnabled == true)
+        thresholdCb:SetFullWidth(true)
+        thresholdCb:SetCallback("OnValueChanged", function(widget, event, val)
+            customBars[cabIdx].thresholdColorEnabled = val or nil
+            CooldownCompanion:ApplyResourceBars()
+            CooldownCompanion:RefreshConfigPanel()
+        end)
+        container:AddChild(thresholdCb)
+
+        if cab.thresholdColorEnabled == true then
+            AddColorPicker(container, customBars[cabIdx], "thresholdMaxColor", "Max Stack Color", DEFAULT_CUSTOM_AURA_MAX_COLOR, false,
+                cabApplyBars, function() CooldownCompanion:RecolorCustomAuraBar(customBars[cabIdx]) end)
+        end
+    end
+
+    if not isSpellCustomBar and hasAuraDisplayControls and not isActiveTracking then
+        renderedControls = true
+
+        local indicatorsHeading = AceGUI:Create("Heading")
+        indicatorsHeading:SetText("Max Stack Indicator")
+        ColorHeading(indicatorsHeading)
+        indicatorsHeading:SetFullWidth(true)
+        container:AddChild(indicatorsHeading)
+
+        local glowCb = AceGUI:Create("CheckBox")
+        glowCb:SetLabel("Max Stack Indicator")
+        glowCb:SetValue(cab.maxStacksGlowEnabled == true)
+        glowCb:SetFullWidth(true)
+        glowCb:SetCallback("OnValueChanged", function(widget, event, val)
+            customBars[cabIdx].maxStacksGlowEnabled = val or nil
+            CooldownCompanion:ApplyResourceBars()
+            CooldownCompanion:RefreshConfigPanel()
+        end)
+        container:AddChild(glowCb)
+
+        local glowAdvExpanded, glowAdvBtn = AddAdvancedToggle(glowCb, "rbCabMaxStacksIndicator_" .. capturedKey, infoButtons, cab.maxStacksGlowEnabled == true)
+        if not glowAdvExpanded and CS.customBarIndicatorPreviewActive and CooldownCompanion:IsResourceBarPreviewActive() then
+            CooldownCompanion:StopResourceBarPreview()
+        end
+
+        CreateInfoButton(glowCb.frame, glowAdvBtn, "LEFT", "RIGHT", 4, 0, {
+            "Max Stack Indicator",
+            {"Due to combat restrictions, individual bar segments cannot be highlighted independently.", 1, 1, 1, true},
+            " ",
+            {"The indicator covers the entire resource bar and appears automatically when your buff reaches its maximum stack count.", 1, 1, 1, true},
+            " ",
+            {"The Pulsing Overlay style is only available for continuous display mode.", 1, 1, 1, true},
+        }, glowCb)
+
+        if glowAdvExpanded and cab.maxStacksGlowEnabled then
+            local isContinuousDisplay = (cab.trackingMode == "active") or (cab.displayMode == "continuous")
+            local currentStyle = cab.maxStacksGlowStyle or "solidBorder"
+            if currentStyle == "pulsingOverlay" and not isContinuousDisplay then
+                currentStyle = "solidBorder"
+                customBars[cabIdx].maxStacksGlowStyle = "solidBorder"
+            end
+
+            local styleList, styleOrder
+            if isContinuousDisplay then
+                styleList = {
+                    solidBorder = "Solid Border",
+                    pulsingBorder = "Pulsing Border",
+                    pulsingOverlay = "Pulsing Overlay",
+                }
+                styleOrder = { "solidBorder", "pulsingBorder", "pulsingOverlay" }
+            else
+                styleList = {
+                    solidBorder = "Solid Border",
+                    pulsingBorder = "Pulsing Border",
+                }
+                styleOrder = { "solidBorder", "pulsingBorder" }
+            end
+            local styleDrop = AceGUI:Create("Dropdown")
+            styleDrop:SetLabel("Indicator Style")
+            styleDrop:SetList(styleList, styleOrder)
+            styleDrop:SetValue(currentStyle)
+            styleDrop:SetFullWidth(true)
+            styleDrop:SetCallback("OnValueChanged", function(widget, event, val)
+                customBars[cabIdx].maxStacksGlowStyle = val
+                CooldownCompanion:ApplyResourceBars()
+                CooldownCompanion:RefreshConfigPanel()
+            end)
+            container:AddChild(styleDrop)
+
+            AddColorPicker(container, customBars[cabIdx], "maxStacksGlowColor", "Indicator Color", {1, 0.84, 0, 0.9}, true,
+                cabApplyBars, cabApplyBars)
+
+            if currentStyle ~= "pulsingOverlay" then
+                local sizeSlider = AceGUI:Create("Slider")
+                sizeSlider:SetLabel("Border Size")
+                sizeSlider:SetSliderValues(1, 8, 1)
+                sizeSlider:SetValue(cab.maxStacksGlowSize or 2)
+                sizeSlider:SetFullWidth(true)
+                sizeSlider:SetCallback("OnValueChanged", function(widget, event, val)
+                    customBars[cabIdx].maxStacksGlowSize = val
+                    CooldownCompanion:ApplyResourceBars()
+                end)
+                container:AddChild(sizeSlider)
+            end
+
+            if currentStyle == "pulsingBorder" or currentStyle == "pulsingOverlay" then
+                local speedSlider = AceGUI:Create("Slider")
+                speedSlider:SetLabel("Pulse Duration")
+                speedSlider:SetSliderValues(0.1, 2.0, 0.1)
+                speedSlider:SetValue(cab.maxStacksGlowSpeed or 0.5)
+                speedSlider:SetFullWidth(true)
+                speedSlider:SetCallback("OnValueChanged", function(widget, event, val)
+                    customBars[cabIdx].maxStacksGlowSpeed = val
+                    CooldownCompanion:ApplyResourceBars()
+                end)
+                container:AddChild(speedSlider)
+            end
+
+            if AddPreviewToggleButton then
+                AddPreviewToggleButton(container, "Preview Indicator", function()
+                    return CS.customBarIndicatorPreviewActive == true and CooldownCompanion:IsResourceBarPreviewActive()
+                end, function(show)
+                    CS.customBarIndicatorPreviewActive = show and true or nil
+                    if show then
+                        CooldownCompanion:StartResourceBarPreview()
+                    else
+                        CooldownCompanion:StopResourceBarPreview()
+                    end
+                end)
+            end
+        end
+    end
+
+    if not renderedControls then
+        local emptyLabel = AceGUI:Create("Label")
+        emptyLabel:SetText("|cff888888This Custom Bar has no indicator settings yet.|r")
+        emptyLabel:SetFullWidth(true)
+        container:AddChild(emptyLabel)
+    end
+end
+
+local function BuildCustomAuraBarPanel(container, customBarId, activeTab)
+    local settings = CooldownCompanion:GetResourceBarSettings()
+    local layout = CooldownCompanion:GetSpecLayoutOrder()
+    local thicknessField, thicknessLabel = GetResourceThicknessFieldConfig(settings, layout)
+    local customBars = CooldownCompanion:GetSpecCustomAuraBars()
+    local rbCabTextAdvBtns = {}
+    local selectedIndex = FindCustomBarIndexById(customBars, customBarId)
+    local infoButtons = CS.customBarInfoButtons
+    if not infoButtons then
+        infoButtons = {}
+        CS.customBarInfoButtons = infoButtons
+    end
+
+    if not selectedIndex then
+        local label = AceGUI:Create("Label")
+        label:SetText("Select a Custom Bar to configure it.")
+        label:SetFullWidth(true)
+        container:AddChild(label)
+        return
+    end
+    local cab = customBars[selectedIndex]
+    local capturedIdx = selectedIndex
+    local capturedId = EnsureCustomBarId(settings, cab)
+    local capturedKey = capturedId or tostring(capturedIdx)
+    local isSpellCustomBar = IsSpellCustomBarConfig(cab)
+    local hasAuraDisplayControls = IsCustomBarAuraDisplayConfig(cab, isSpellCustomBar)
+    local trackingMode = GetCustomBarTrackingModeConfig(cab, isSpellCustomBar)
+    local isStackDisplay = hasAuraDisplayControls and trackingMode ~= "active"
+    local resolvedAuraUnit = GetResolvedCustomAuraBarAuraUnit(cab, cab.spellID)
+    activeTab = activeTab or "appearance"
+
+    if activeTab == "settings" or activeTab == "layout" or activeTab == "anchor" or activeTab == "alpha" then
+        activeTab = "appearance"
+    end
+
+    if activeTab == "soundalerts" then
+        ST._BuildCustomBarSoundAlertsTab(container, cab, infoButtons)
+        return
+    end
+
+    if activeTab == "loadconditions" then
+        ST._BuildCustomBarLoadConditionsTab(container, cab, infoButtons)
+        return
+    end
+
+    if activeTab == "indicators" then
+        BuildCustomBarIndicatorsTab(container, customBars, capturedIdx, cab, isSpellCustomBar, resolvedAuraUnit, capturedKey, infoButtons)
+        return
+    end
+
+    BuildCustomBarAuraTrackingSection(container, cab, resolvedAuraUnit, infoButtons)
+
+    if hasAuraDisplayControls then
+        AddCustomBarSettingsHeading(container, "Aura Display Mode", infoButtons, {
+            "Determines how the tracked aura is displayed on this Custom Bar.",
+            " ",
+            "Active: shows the aura's remaining duration while it is active.",
+            " ",
+            "Stack Count: ignores duration and shows only the aura's current stack count.",
+        })
+    end
+
+            -- Aura Display Mode dropdown
+            if hasAuraDisplayControls then
             local trackDrop = AceGUI:Create("Dropdown")
-            trackDrop:SetLabel(L["Tracking Mode"])
             trackDrop:SetList({
-                active = "Active (On/Off)",
+                active = "Active",
                 stacks = "Stack Count",
             }, { "active", "stacks" })
-            trackDrop:SetValue(cab.trackingMode or "stacks")
+            trackDrop:SetValue(trackingMode)
             trackDrop:SetFullWidth(true)
             trackDrop:SetCallback("OnValueChanged", function(widget, event, val)
                 customBars[capturedIdx].trackingMode = val
+                if val ~= "active" then
+                    CooldownCompanion:SetCustomAuraBarActivePreview(customBars[capturedIdx], false)
+                    CooldownCompanion:SetCustomAuraBarPandemicPreview(customBars[capturedIdx], false)
+                end
                 ApplyCustomAuraBarPanelChanges({
                     updateAnchors = true,
                     refreshConfig = true,
                 })
             end)
             container:AddChild(trackDrop)
+            end
 
-            -- Max Stacks editbox (hidden in "active" tracking mode)
-            if (cab.trackingMode or "stacks") ~= "active" then
-            local maxEdit = AceGUI:Create("EditBox")
-            if maxEdit.editbox.Instructions then maxEdit.editbox.Instructions:Hide() end
-            maxEdit:SetLabel(L["Max Stacks"])
-            maxEdit:SetText(tostring(cab.maxStacks or 1))
-            maxEdit:SetFullWidth(true)
-            maxEdit:SetCallback("OnEnterPressed", function(widget, event, text)
-                local val = tonumber(text)
-                if val and val >= 1 and val <= 99 then
-                    customBars[capturedIdx].maxStacks = val
-                end
-                widget:SetText(tostring(customBars[capturedIdx].maxStacks or 1))
-                ApplyCustomAuraBarPanelChanges({
-                    updateAnchors = true,
-                    refreshLayoutPreview = true,
-                })
+            -- Max Stacks slider (hidden in "active" tracking mode)
+            if isStackDisplay then
+            local maxSlider = AceGUI:Create("Slider")
+            maxSlider:SetLabel("Max Stacks")
+            maxSlider:SetSliderValues(1, 99, 1)
+            maxSlider:SetValue(cab.maxStacks or 1)
+            maxSlider:SetFullWidth(true)
+            local pendingMaxStacks = cab.maxStacks or 1
+            maxSlider:SetCallback("OnValueChanged", function(widget, event, val)
+                pendingMaxStacks = math.max(1, math.min(99, math.floor((tonumber(val) or 1) + 0.5)))
             end)
-            container:AddChild(maxEdit)
+            maxSlider:SetCallback("OnMouseUp", function(widget, event, val)
+                local committedValue = math.max(1, math.min(99, math.floor((tonumber(val) or pendingMaxStacks or 1) + 0.5)))
+                if customBars[capturedIdx].maxStacks == committedValue then
+                    return
+                end
+                customBars[capturedIdx].maxStacks = committedValue
+                CooldownCompanion:ApplyResourceBars()
+                CooldownCompanion:UpdateAnchorStacking()
+            end)
+            container:AddChild(maxSlider)
             end
 
             -- Display Mode dropdown (hidden in "active" tracking mode)
-            if (cab.trackingMode or "stacks") ~= "active" then
+            if isStackDisplay then
             local modeDrop = AceGUI:Create("Dropdown")
             modeDrop:SetLabel(L["Display Mode"])
             modeDrop:SetList({
@@ -2274,20 +3872,28 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
             end
 
             -- Per-slot bar thickness override
-            if settings.customBarHeights then
+            if layout and layout.customBarHeights then
+                AddCustomBarSettingsHeading(container, "Size")
+
+                local slotLayout = EnsureCustomBarLayout(settings, nil, capturedId, 1000 + capturedIdx) or {}
                 local cabHeightSlider = AceGUI:Create("Slider")
                 cabHeightSlider:SetLabel(thicknessLabel)
                 cabHeightSlider:SetSliderValues(4, 40, 0.1)
                 if thicknessField == "barWidth" then
-                    cabHeightSlider:SetValue(cab.barWidth or cab.barHeight or settings.barWidth or settings.barHeight or 12)
+                    cabHeightSlider:SetValue(slotLayout.barWidth or slotLayout.barHeight or layout.barWidth or layout.barHeight or settings.barWidth or settings.barHeight or 12)
                 else
-                    cabHeightSlider:SetValue(cab.barHeight or cab.barWidth or settings.barHeight or settings.barWidth or 12)
+                    cabHeightSlider:SetValue(slotLayout.barHeight or slotLayout.barWidth or layout.barHeight or layout.barWidth or settings.barHeight or settings.barWidth or 12)
                 end
                 cabHeightSlider:SetFullWidth(true)
                 local cabIdx = capturedIdx
                 cabHeightSlider:SetCallback("OnValueChanged", function(widget, event, val)
-                    customBars[cabIdx][thicknessField] = val
+                    local customBar = customBars[cabIdx]
+                    local customLayout = EnsureCustomBarLayout(settings, nil, customBar and customBar.customBarId, 1000 + cabIdx)
+                    if customLayout then
+                        customLayout[thicknessField] = val
+                    end
                     CooldownCompanion:ApplyResourceBars()
+                    CooldownCompanion:RepositionCastBar()
                     CooldownCompanion:UpdateAnchorStacking()
                 end)
                 container:AddChild(cabHeightSlider)
@@ -2307,250 +3913,18 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                 AddColorPicker(container, customBars[cabIdx], "barColor", L["Bar Color"], {0.5, 0.5, 1}, false,
                     cabApplyBars, function() CooldownCompanion:RecolorCustomAuraBar(customBars[cabIdx]) end)
 
-                local isActiveTracking = (cab.trackingMode or "stacks") == "active"
-                if isActiveTracking then
-                    local indicatorsHeading = AceGUI:Create("Heading")
-                    indicatorsHeading:SetText("Indicators")
-                    ColorHeading(indicatorsHeading)
-                    indicatorsHeading:SetFullWidth(true)
-                    container:AddChild(indicatorsHeading)
-
-                    local activeAuraEnabled = (cab.barAuraEffect or "none") ~= "none"
-
-                    local activeAuraCb = AceGUI:Create("CheckBox")
-                    activeAuraCb:SetLabel("Show Active Aura Color/Glow")
-                    activeAuraCb:SetValue(activeAuraEnabled)
-                    activeAuraCb:SetFullWidth(true)
-                    activeAuraCb:SetCallback("OnValueChanged", function(widget, event, val)
-                        if val then
-                            local effect = customBars[cabIdx].barAuraEffect
-                            if effect == nil or effect == "none" then
-                                effect = "pixel"
-                            end
-                            customBars[cabIdx].barAuraEffect = effect
-                        else
-                            customBars[cabIdx].barAuraEffect = "none"
-                        end
-                        CooldownCompanion:ApplyResourceBars()
-                        CooldownCompanion:RefreshConfigPanel()
-                    end)
-                    container:AddChild(activeAuraCb)
-
-                    local activeAuraAdvExpanded = AddAdvancedToggle(activeAuraCb, "rbCabActiveAura_" .. capturedIdx, tabInfoButtons, activeAuraEnabled)
-                    if activeAuraAdvExpanded and activeAuraEnabled then
-                        local activeAuraCombatCb = AceGUI:Create("CheckBox")
-                        activeAuraCombatCb:SetLabel("Show Only In Combat")
-                        activeAuraCombatCb:SetValue(cab.auraGlowCombatOnly or false)
-                        activeAuraCombatCb:SetFullWidth(true)
-                        activeAuraCombatCb:SetCallback("OnValueChanged", function(widget, event, val)
-                            customBars[cabIdx].auraGlowCombatOnly = val
-                            CooldownCompanion:ApplyResourceBars()
-                        end)
-                        container:AddChild(activeAuraCombatCb)
-                        ApplyCheckboxIndent(activeAuraCombatCb, 20)
-
-                        BuildBarActiveAuraControls(container, customBars[cabIdx], cabApplyBars, {
-                            hidePrimaryColorPicker = true,
-                        })
-                        BuildBarAuraPulseControls(container, customBars[cabIdx], cabApplyBars)
-
-                        if AddPreviewToggleButton then
-                            AddPreviewToggleButton(container, "Preview Active Aura Effects", function()
-                                return CooldownCompanion:IsCustomAuraBarActivePreviewActive(customBars[cabIdx])
-                            end, function(show)
-                                CooldownCompanion:SetCustomAuraBarActivePreview(customBars[cabIdx], show)
-                            end)
-                        end
-                    else
-                        CooldownCompanion:SetCustomAuraBarActivePreview(customBars[cabIdx], false)
-                    end
-
-                    if resolvedAuraUnit == "target" then
-                        local pandemicEnabled = cab.showPandemicGlow == true
-
-                        local pandemicCb = AceGUI:Create("CheckBox")
-                        pandemicCb:SetLabel("Show Pandemic Color/Glow")
-                        pandemicCb:SetValue(pandemicEnabled)
-                        pandemicCb:SetFullWidth(true)
-                        pandemicCb:SetCallback("OnValueChanged", function(widget, event, val)
-                            customBars[cabIdx].showPandemicGlow = val and true or false
-                            CooldownCompanion:ApplyResourceBars()
-                            CooldownCompanion:RefreshConfigPanel()
-                        end)
-                        container:AddChild(pandemicCb)
-
-                        local pandemicAdvExpanded = AddAdvancedToggle(pandemicCb, "rbCabPandemic_" .. capturedIdx, tabInfoButtons, pandemicEnabled)
-                        if pandemicAdvExpanded and pandemicEnabled then
-                            local pandemicCombatCb = AceGUI:Create("CheckBox")
-                            pandemicCombatCb:SetLabel("Show Only In Combat")
-                            pandemicCombatCb:SetValue(cab.pandemicGlowCombatOnly or false)
-                            pandemicCombatCb:SetFullWidth(true)
-                            pandemicCombatCb:SetCallback("OnValueChanged", function(widget, event, val)
-                                customBars[cabIdx].pandemicGlowCombatOnly = val
-                                CooldownCompanion:ApplyResourceBars()
-                            end)
-                            container:AddChild(pandemicCombatCb)
-                            ApplyCheckboxIndent(pandemicCombatCb, 20)
-
-                            BuildPandemicBarControls(container, customBars[cabIdx], cabApplyBars)
-                            BuildPandemicBarPulseControls(container, customBars[cabIdx], cabApplyBars)
-
-                            if AddPreviewToggleButton then
-                                AddPreviewToggleButton(container, "Preview Pandemic Effects", function()
-                                    return CooldownCompanion:IsCustomAuraBarPandemicPreviewActive(customBars[cabIdx])
-                                end, function(show)
-                                    CooldownCompanion:SetCustomAuraBarPandemicPreview(customBars[cabIdx], show)
-                                end)
-                            end
-                        else
-                            CooldownCompanion:SetCustomAuraBarPandemicPreview(customBars[cabIdx], false)
-                        end
-                    else
-                        CooldownCompanion:SetCustomAuraBarPandemicPreview(customBars[cabIdx], false)
-                    end
-                else
-                    local thresholdCb = AceGUI:Create("CheckBox")
-                    thresholdCb:SetLabel(L["Enable Max Stack Color"])
-                    thresholdCb:SetValue(cab.thresholdColorEnabled == true)
-                    thresholdCb:SetFullWidth(true)
-                    thresholdCb:SetCallback("OnValueChanged", function(widget, event, val)
-                        customBars[cabIdx].thresholdColorEnabled = val or nil
-                        CooldownCompanion:ApplyResourceBars()
-                        CooldownCompanion:RefreshConfigPanel()
-                    end)
-                    container:AddChild(thresholdCb)
-
-                    if cab.thresholdColorEnabled == true then
-                        AddColorPicker(container, customBars[cabIdx], "thresholdMaxColor", L["Max Stack Color"], DEFAULT_CUSTOM_AURA_MAX_COLOR, false,
-                            cabApplyBars, function() CooldownCompanion:RecolorCustomAuraBar(customBars[cabIdx]) end)
-                    end
-                end
-
-                -- Max Stacks Glow (independent of threshold color)
-                if not isActiveTracking then
-                    local indicatorsHeading = AceGUI:Create("Heading")
-                    indicatorsHeading:SetText("Indicators")
-                    ColorHeading(indicatorsHeading)
-                    indicatorsHeading:SetFullWidth(true)
-                    container:AddChild(indicatorsHeading)
-
-                    local glowCb = AceGUI:Create("CheckBox")
-                    glowCb:SetLabel(L["Max Stack Indicator"])
-                    glowCb:SetValue(cab.maxStacksGlowEnabled == true)
-                    glowCb:SetFullWidth(true)
-                    glowCb:SetCallback("OnValueChanged", function(widget, event, val)
-                        customBars[cabIdx].maxStacksGlowEnabled = val or nil
-                        CooldownCompanion:ApplyResourceBars()
-                        CooldownCompanion:RefreshConfigPanel()
-                    end)
-                    container:AddChild(glowCb)
-
-                    local glowAdvExpanded, glowAdvBtn = AddAdvancedToggle(glowCb, "maxStacksIndicator", tabInfoButtons, cab.maxStacksGlowEnabled == true)
-
-                    CreateInfoButton(glowCb.frame, glowAdvBtn, "LEFT", "RIGHT", 4, 0, {
-                        L["Max Stack Indicator"],
-                        {L["Due to combat restrictions, individual bar segments cannot be highlighted independently."], 1, 1, 1, true},
-                        " ",
-                        {L["The indicator covers the entire resource bar and appears automatically when your buff reaches its maximum stack count."], 1, 1, 1, true},
-                        " ",
-                        {L["The Pulsing Overlay style is only available for continuous display mode."], 1, 1, 1, true},
-                    }, glowCb)
-
-                    if glowAdvExpanded and cab.maxStacksGlowEnabled then
-                        -- Preview (ephemeral, not saved)
-                        local previewCb = AceGUI:Create("CheckBox")
-                        previewCb:SetLabel(L["Preview Indicator"])
-                        previewCb:SetValue(CooldownCompanion:IsResourceBarPreviewActive())
-                        previewCb:SetFullWidth(true)
-                        previewCb:SetCallback("OnValueChanged", function(widget, event, val)
-                            if val then
-                                CooldownCompanion:ClearAllConfigPreviews()
-                                CooldownCompanion:StartResourceBarPreview()
-                            else
-                                CooldownCompanion:StopResourceBarPreview()
-                            end
-                            if RefreshConfigPanelForPreviewToggle then
-                                RefreshConfigPanelForPreviewToggle()
-                            end
-                        end)
-                        container:AddChild(previewCb)
-
-                        -- Pulsing Overlay only available for continuous display
-                        local isContinuousDisplay = (cab.trackingMode == "active") or (cab.displayMode == "continuous")
-                        local currentStyle = cab.maxStacksGlowStyle or "solidBorder"
-                        if currentStyle == "pulsingOverlay" and not isContinuousDisplay then
-                            currentStyle = "solidBorder"
-                            customBars[cabIdx].maxStacksGlowStyle = "solidBorder"
-                        end
-
-                        -- Style dropdown
-                        local styleList, styleOrder
-                        if isContinuousDisplay then
-                            styleList = {
-                                solidBorder = L["Solid Border"],
-                                pulsingBorder = L["Pulsing Border"],
-                                pulsingOverlay = L["Pulsing Overlay"],
-                            }
-                            styleOrder = { "solidBorder", "pulsingBorder", "pulsingOverlay" }
-                        else
-                            styleList = {
-                                solidBorder = L["Solid Border"],
-                                pulsingBorder = L["Pulsing Border"],
-                            }
-                            styleOrder = { "solidBorder", "pulsingBorder" }
-                        end
-                        local styleDrop = AceGUI:Create("Dropdown")
-                        styleDrop:SetLabel(L["Indicator Style"])
-                        styleDrop:SetList(styleList, styleOrder)
-                        styleDrop:SetValue(currentStyle)
-                        styleDrop:SetFullWidth(true)
-                        styleDrop:SetCallback("OnValueChanged", function(widget, event, val)
-                            customBars[cabIdx].maxStacksGlowStyle = val
-                            CooldownCompanion:ApplyResourceBars()
-                            CooldownCompanion:RefreshConfigPanel()
-                        end)
-                        container:AddChild(styleDrop)
-
-                        -- Color picker
-                        AddColorPicker(container, customBars[cabIdx], "maxStacksGlowColor", L["Indicator Color"], {1, 0.84, 0, 0.9}, true,
-                            cabApplyBars, cabApplyBars)
-
-                        -- Border size slider (border styles only — overlay has no size param)
-                        if currentStyle ~= "pulsingOverlay" then
-                            local sizeSlider = AceGUI:Create("Slider")
-                            sizeSlider:SetLabel(L["Border Size"])
-                            sizeSlider:SetSliderValues(1, 8, 1)
-                            sizeSlider:SetValue(cab.maxStacksGlowSize or 2)
-                            sizeSlider:SetFullWidth(true)
-                            sizeSlider:SetCallback("OnValueChanged", function(widget, event, val)
-                                customBars[cabIdx].maxStacksGlowSize = val
-                                CooldownCompanion:ApplyResourceBars()
-                            end)
-                            container:AddChild(sizeSlider)
-                        end
-
-                        -- Pulse speed slider (pulsing styles only)
-                        if currentStyle == "pulsingBorder" or currentStyle == "pulsingOverlay" then
-                            local speedSlider = AceGUI:Create("Slider")
-                            speedSlider:SetLabel(L["Pulse Duration"])
-                            speedSlider:SetSliderValues(0.1, 2.0, 0.1)
-                            speedSlider:SetValue(cab.maxStacksGlowSpeed or 0.5)
-                            speedSlider:SetFullWidth(true)
-                            speedSlider:SetCallback("OnValueChanged", function(widget, event, val)
-                                customBars[cabIdx].maxStacksGlowSpeed = val
-                                CooldownCompanion:ApplyResourceBars()
-                            end)
-                            container:AddChild(speedSlider)
-                        end
-                    end -- glowAdvExpanded
+                if isSpellCustomBar and not isStackDisplay then
+                    AddColorPicker(container, customBars[cabIdx], "barCooldownColor", "Bar Cooldown Color", {0.6, 0.13, 0.18, 1}, true,
+                        cabApplyBars, cabApplyBars)
+                    AddColorPicker(container, customBars[cabIdx], "barChargeColor", "Bar Recharging Color", {1.0, 0.82, 0.0, 1}, true,
+                        cabApplyBars, cabApplyBars)
                 end
 
                 -- Overlay Color (overlay mode only)
-                if cab.displayMode == "overlay" and (cab.trackingMode or "stacks") ~= "active" then
-                    local cpOverlay = AddColorPicker(container, customBars[cabIdx], "overlayColor", L["Overlay Color"], {1, 0.84, 0}, false,
+                if cab.displayMode == "overlay" and isStackDisplay then
+                    local cpOverlay = AddColorPicker(container, customBars[cabIdx], "overlayColor", "Overlay Color", {1, 0.84, 0}, false,
                         cabApplyBars, function() CooldownCompanion:RecolorCustomAuraBar(customBars[cabIdx]) end)
 
-                    -- Overlay Color tooltip (?) — use SetDescription for AceGUI-safe approach
                     cpOverlay:SetCallback("OnEnter", function(widget)
                         GameTooltip:SetOwner(widget.frame, "ANCHOR_RIGHT")
                         GameTooltip:AddLine(L["Overlay Color"])
@@ -2563,7 +3937,7 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                 end
 
                 -- ---- Text / Duration controls ----
-                local isActive = (cab.trackingMode or "stacks") == "active"
+                local isActive = not isStackDisplay
                 local isContinuous = isActive or (cab.displayMode == "continuous")
 
                 if isContinuous then
@@ -2573,17 +3947,20 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                     textsHeading:SetFullWidth(true)
                     container:AddChild(textsHeading)
 
-                    -- Show Duration Text
-                    local durationTextCb = AceGUI:Create("CheckBox")
-                    durationTextCb:SetLabel(L["Show Duration Text"])
-                    durationTextCb:SetValue(cab.showDurationText == true)
-                    durationTextCb:SetFullWidth(true)
-                    durationTextCb:SetCallback("OnValueChanged", function(widget, event, val)
-                        customBars[cabIdx].showDurationText = val or nil
-                        CooldownCompanion:ApplyResourceBars()
-                        CooldownCompanion:RefreshConfigPanel()
-                    end)
-                    container:AddChild(durationTextCb)
+                    local showDurationControls = not (isSpellCustomBar and isStackDisplay)
+                    local durationTextCb
+                    if showDurationControls then
+                        durationTextCb = AceGUI:Create("CheckBox")
+                        durationTextCb:SetLabel("Show Duration Text")
+                        durationTextCb:SetValue(cab.showDurationText == true)
+                        durationTextCb:SetFullWidth(true)
+                        durationTextCb:SetCallback("OnValueChanged", function(widget, event, val)
+                            customBars[cabIdx].showDurationText = val or nil
+                            CooldownCompanion:ApplyResourceBars()
+                            CooldownCompanion:RefreshConfigPanel()
+                        end)
+                        container:AddChild(durationTextCb)
+                    end
 
                     -- Show Stack Text
                     local stackVal = cab.showStackText
@@ -2592,7 +3969,11 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                     end
 
                     local stackTextCb = AceGUI:Create("CheckBox")
-                    stackTextCb:SetLabel(L["Show Stack Text"])
+                    local stackTextLabel = "Show Stack Text"
+                    if isSpellCustomBar then
+                        stackTextLabel = isStackDisplay and "Show Aura Stack Text" or "Show Count Text (Charges/Uses)"
+                    end
+                    stackTextCb:SetLabel(stackTextLabel)
                     stackTextCb:SetValue(stackVal == true)
                     stackTextCb:SetFullWidth(true)
                     stackTextCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -2602,10 +3983,11 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                     end)
                     container:AddChild(stackTextCb)
 
-                    local showDuration = cab.showDurationText == true
+                    local showDuration = showDurationControls and cab.showDurationText == true
                     local showStack = (stackVal == true)
-                    local durationAdvExpanded = AddAdvancedToggle(durationTextCb, "rbCabDurationText_" .. capturedIdx, rbCabTextAdvBtns, showDuration)
-                    if durationAdvExpanded and showDuration then
+                    local durationAdvExpanded = showDurationControls
+                        and AddAdvancedToggle(durationTextCb, "rbCabDurationText_" .. capturedKey, rbCabTextAdvBtns, showDuration)
+                    if showDurationControls and durationAdvExpanded and showDuration then
                         local fontDrop = AceGUI:Create("Dropdown")
                         fontDrop:SetLabel(L["Duration Font"])
                         CS.SetupFontDropdown(fontDrop)
@@ -2641,24 +4023,10 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
 
                         AddColorPicker(container, customBars[cabIdx], "durationTextFontColor", L["Duration Text Color"], DEFAULT_RESOURCE_TEXT_COLOR, true, cabApplyBars)
 
-                        local decimalCheck = AceGUI:Create("CheckBox")
-                        decimalCheck:SetLabel(L["Show Decimal Point"])
-                        decimalCheck:SetValue(cab.decimalTimers or false)
-                        decimalCheck:SetFullWidth(true)
-                        decimalCheck:SetCallback("OnValueChanged", function(widget, event, val)
-                            customBars[cabIdx].decimalTimers = val or nil
-                            CooldownCompanion:ApplyResourceBars()
-                        end)
-                        container:AddChild(decimalCheck)
-
-                        CreateInfoButton(decimalCheck.frame, decimalCheck.checkbg, "LEFT", "RIGHT", decimalCheck.text:GetStringWidth() + 4, 0, {
-                            L["Show Decimal Point"],
-                            {L["Shows one decimal place on duration text"], 1, 1, 1, true},
-                            {L["(e.g. \"4.5\" instead of \"5\")."], 1, 1, 1, true},
-                        }, decimalCheck)
+                        AddDurationFormatDropdown(container, customBars[cabIdx], cabApplyBars)
                     end
 
-                    local stackAdvExpanded = AddAdvancedToggle(stackTextCb, "rbCabStackText_" .. capturedIdx, rbCabTextAdvBtns, showStack)
+                    local stackAdvExpanded = AddAdvancedToggle(stackTextCb, "rbCabStackText_" .. capturedKey, rbCabTextAdvBtns, showStack)
                     if stackAdvExpanded and showStack then
                         if not isActive then
                             local stackTextFormatDrop = AceGUI:Create("Dropdown")
@@ -2687,7 +4055,8 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                         end
 
                         local fontDrop = AceGUI:Create("Dropdown")
-                        fontDrop:SetLabel(L["Stack Font"])
+                        local stackFontLabel = isSpellCustomBar and (isStackDisplay and "Aura Stack Font" or "Charge Font") or "Stack Font"
+                        fontDrop:SetLabel(stackFontLabel)
                         CS.SetupFontDropdown(fontDrop)
                         fontDrop:SetValue(cab.stackTextFont or DEFAULT_RESOURCE_TEXT_FONT)
                         fontDrop:SetFullWidth(true)
@@ -2698,7 +4067,8 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                         container:AddChild(fontDrop)
 
                         local sizeDrop = AceGUI:Create("Slider")
-                        sizeDrop:SetLabel(L["Stack Font Size"])
+                        local stackSizeLabel = isSpellCustomBar and (isStackDisplay and "Aura Stack Font Size" or "Charge Font Size") or "Stack Font Size"
+                        sizeDrop:SetLabel(stackSizeLabel)
                         sizeDrop:SetSliderValues(6, 24, 1)
                         sizeDrop:SetValue(cab.stackTextFontSize or DEFAULT_RESOURCE_TEXT_SIZE)
                         sizeDrop:SetFullWidth(true)
@@ -2709,7 +4079,8 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                         container:AddChild(sizeDrop)
 
                         local outlineDrop = AceGUI:Create("Dropdown")
-                        outlineDrop:SetLabel(L["Stack Outline"])
+                        local stackOutlineLabel = isSpellCustomBar and (isStackDisplay and "Aura Stack Outline" or "Charge Outline") or "Stack Outline"
+                        outlineDrop:SetLabel(stackOutlineLabel)
                         outlineDrop:SetList(CS.outlineOptions)
                         outlineDrop:SetValue(cab.stackTextFontOutline or DEFAULT_RESOURCE_TEXT_OUTLINE)
                         outlineDrop:SetFullWidth(true)
@@ -2723,16 +4094,9 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                     end
                 end
 
-                -- Hide When Inactive
-                local hideCb = AceGUI:Create("CheckBox")
-                hideCb:SetLabel(L["Hide When Inactive"])
-                hideCb:SetValue(cab.hideWhenInactive == true)
-                hideCb:SetFullWidth(true)
-                hideCb:SetCallback("OnValueChanged", function(widget, event, val)
-                    customBars[cabIdx].hideWhenInactive = val or nil
-                    CooldownCompanion:ApplyResourceBars()
-                end)
-                container:AddChild(hideCb)
+                if not isSpellCustomBar or cab.auraTracking == true then
+                    BuildCustomBarVisibilityRulesSection(container, customBars, capturedIdx, cab, resolvedAuraUnit, capturedKey, infoButtons)
+                end
 
                 -- ---- Talent Conditions section ----
                 local talentHeading = AceGUI:Create("Heading")
@@ -2741,7 +4105,7 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                 talentHeading:SetFullWidth(true)
                 container:AddChild(talentHeading)
 
-                local talentKey = "cab_talent_" .. capturedIdx
+                local talentKey = "cab_talent_" .. capturedKey
                 local talentCollapsed = resourceBarCollapsedSections[talentKey]
 
                 local talentCollapseBtn = AttachCollapseButton(talentHeading, talentCollapsed, function()
@@ -2750,9 +4114,9 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                 end)
 
                 local talentInfoBtn = CreateInfoButton(talentHeading.frame, talentCollapseBtn, "LEFT", "RIGHT", 2, 0, {
-                    L["Talent Conditions"],
-                    {L["Show or hide this custom aura bar based on which talents you have selected. If you add multiple conditions, all of them must pass."], 1, 1, 1, true},
-                }, tabInfoButtons)
+                    "Talent Conditions",
+                    {"Show or hide this Custom Bar based on which talents you have selected. If you add multiple conditions, all of them must pass.", 1, 1, 1, true},
+                }, infoButtons)
                 talentHeading.right:ClearAllPoints()
                 talentHeading.right:SetPoint("RIGHT", talentHeading.frame, "RIGHT", -3, 0)
                 talentHeading.right:SetPoint("LEFT", talentInfoBtn, "RIGHT", 4, 0)
@@ -2876,28 +4240,6 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
 
                 end -- not talentCollapsed
             end
-    end -- if cab.enabled and settings subtab selected
-
-    if cab.enabled and IsTruthyConfigFlag(cab.independentAnchorEnabled) and independentSubTab == "anchor" then
-        BuildCustomAuraBarAnchorSettings(container, customBars, settings, capturedIdx)
-    end
-
-    if cab.enabled and IsTruthyConfigFlag(cab.independentAnchorEnabled) and independentSubTab == "alpha" then
-        local group = CooldownCompanion.db
-            and CooldownCompanion.db.profile
-            and CooldownCompanion.db.profile.groups
-            and CooldownCompanion.db.profile.groups[CS.selectedGroup]
-        BuildAlphaControls(container, cab, function()
-            CooldownCompanion:ApplyResourceBars()
-            CooldownCompanion:RefreshConfigPanel()
-        end, "rb_custom_aura_alpha_" .. tostring(capturedIdx), {
-            isGlobal = group and group.isGlobal,
-            onBaselineChanged = function()
-                CooldownCompanion:ApplyResourceBars()
-                CooldownCompanion:RefreshConfigPanel()
-            end,
-        })
-    end
 
 end
 
@@ -2913,7 +4255,6 @@ local function BuildLayoutOrderPanel(container)
 
     local rbSettings = CooldownCompanion:GetResourceBarSettings()
     local cbSettings = CooldownCompanion:GetCastBarSettings()
-    local isVerticalLayout = IsResourceBarVerticalConfig(rbSettings)
 
     if not rbSettings or not rbSettings.enabled then
         local label = AceGUI:Create("Label")
@@ -2931,10 +4272,10 @@ local function BuildLayoutOrderPanel(container)
         container:AddChild(label)
         return
     end
+    local isVerticalLayout = IsResourceBarVerticalConfig(rbSettings, layout)
 
     -- Build the ordered list of all active bar slots
     local activeResources = GetConfigActiveResources()
-    local MAX_SLOTS = ST.MAX_CUSTOM_AURA_BARS or 3
     local customBars = CooldownCompanion:GetSpecCustomAuraBars()
 
     -- Resolve the display color for a power type (respects per-spec overrides)
@@ -2965,6 +4306,8 @@ local function BuildLayoutOrderPanel(container)
 
     -- Helper: refresh after any order/position change
     local function ApplyAndRefresh()
+        CooldownCompanion:ApplyResourceBars()
+        CooldownCompanion:RepositionCastBar()
         CooldownCompanion:UpdateAnchorStacking()
         CooldownCompanion:RefreshConfigPanel()
     end
@@ -3139,34 +4482,31 @@ local function BuildLayoutOrderPanel(container)
         end
     end
 
-    -- Custom aura bar slots
-    for slotIdx = 1, MAX_SLOTS do
-        local cab = customBars and customBars[slotIdx]
-        if cab and cab.enabled and cab.spellID and not IsTruthyConfigFlag(cab.independentAnchorEnabled) then
+    -- Custom Bar slots
+    for slotIdx, cab in ipairs(customBars or {}) do
+        if cab and cab.enabled and cab.spellID then
+            local customBarId = EnsureCustomBarId(rbSettings, cab)
             local spellInfo = C_Spell.GetSpellInfo(cab.spellID)
-            local slotName = L["Custom Aura "] .. slotIdx
+            local slotName = "Custom Bar"
             if spellInfo and spellInfo.name then
                 slotName = slotName .. ": " .. spellInfo.name
             end
             local captured = slotIdx
             local function ensureLayoutSlot()
-                if not layout.customAuraBarSlots[captured] then
-                    layout.customAuraBarSlots[captured] = { position = "below", order = 1000 + captured }
-                end
-                return layout.customAuraBarSlots[captured]
+                return EnsureCustomBarLayout(rbSettings, layoutSpecID, customBarId, 1000 + captured)
             end
             if isVerticalLayout then
                 table.insert(resourceSlots, {
                     label = slotName,
                     color = cab.barColor or {0.5, 0.5, 1},
                     getPos = function()
-                        local slot = layout.customAuraBarSlots[captured]
+                        local slot = GetCustomBarLayout(rbSettings, layoutSpecID, cab, false)
                         local pos = slot and slot.verticalPosition
                         if pos == "left" or pos == "right" then return pos end
                         return (slot and slot.position == "above") and "left" or "right"
                     end,
                     getOrder = function()
-                        local slot = layout.customAuraBarSlots[captured]
+                        local slot = GetCustomBarLayout(rbSettings, layoutSpecID, cab, false)
                         return (slot and slot.verticalOrder) or (slot and slot.order) or (1000 + captured)
                     end,
                     setPos = function(v) ensureLayoutSlot().verticalPosition = v end,
@@ -3177,11 +4517,11 @@ local function BuildLayoutOrderPanel(container)
                     label = slotName,
                     color = cab.barColor or {0.5, 0.5, 1},
                     getPos = function()
-                        local slot = layout.customAuraBarSlots[captured]
+                        local slot = GetCustomBarLayout(rbSettings, layoutSpecID, cab, false)
                         return (slot and slot.position) or "below"
                     end,
                     getOrder = function()
-                        local slot = layout.customAuraBarSlots[captured]
+                        local slot = GetCustomBarLayout(rbSettings, layoutSpecID, cab, false)
                         return (slot and slot.order) or (1000 + captured)
                     end,
                     setPos = function(v) ensureLayoutSlot().position = v end,
@@ -3221,7 +4561,7 @@ local function BuildLayoutOrderPanel(container)
         end
         if #resourceSlots == 0 then
             local label = AceGUI:Create("Label")
-            label:SetText(L["No active bars to order. Enable resources or custom aura bars first."])
+            label:SetText("No active bars to order. Enable resources or Custom Bars first.")
             label:SetFullWidth(true)
             container:AddChild(label)
             return
@@ -3232,7 +4572,7 @@ local function BuildLayoutOrderPanel(container)
 
     if #resourceSlots == 0 and #castSlots == 0 then
         local label = AceGUI:Create("Label")
-        label:SetText(L["No active bars to order. Enable resources, custom aura bars, or cast bar first."])
+        label:SetText("No active bars to order. Enable resources, Custom Bars, or cast bar first.")
         label:SetFullWidth(true)
         container:AddChild(label)
         return
@@ -3256,5 +4596,8 @@ ST._BuildResourceBarStylingPanel = BuildResourceBarStylingPanel
 ST._BuildResourceBarBarTextStylingPanel = BuildResourceBarBarTextStylingPanel
 ST._BuildResourceBarColorsStylingPanel = BuildResourceBarColorsStylingPanel
 ST._BuildResourceBarHealthStylingPanel = BuildResourceBarHealthStylingPanel
+ST._BuildCustomBarsListPanel = BuildCustomBarsListPanel
 ST._BuildCustomAuraBarPanel = BuildCustomAuraBarPanel
+ST._BuildCustomBarSoundAlertsTab = BuildCustomBarSoundAlertsTab
+ST._BuildCustomBarLoadConditionsTab = BuildCustomBarLoadConditionsTab
 ST._BuildLayoutOrderPanel = BuildLayoutOrderPanel

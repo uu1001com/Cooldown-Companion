@@ -34,6 +34,7 @@ local BuildUnusableDimmingControls = ST._BuildUnusableDimmingControls
 local BuildShowTooltipsControls = ST._BuildShowTooltipsControls
 local AddPreviewToggleButton = ST._AddPreviewToggleButton
 local AddConditionalPreviewButton = ST._AddConditionalPreviewButton
+local AddDurationFormatDropdown = ST._AddDurationFormatDropdown
 
 local tabInfoButtons = CS.tabInfoButtons
 local appearanceTabElements = CS.appearanceTabElements
@@ -400,25 +401,10 @@ local function BuildBarAppearanceTab(container, group, style)
         AddFontControls(container, style, "barReady", {sizeMin = 6, sizeMax = 24}, refreshStyle)
     end
 
-    -- Show Decimal Point toggle (affects both cooldown and aura duration text)
-    local decimalCheck = AceGUI:Create("CheckBox")
-    decimalCheck:SetLabel(L["Show Decimal Point"])
-    decimalCheck:SetValue(style.decimalTimers or false)
-    decimalCheck:SetFullWidth(true)
-    decimalCheck:SetCallback("OnValueChanged", function(widget, event, val)
-        style.decimalTimers = val or nil
-        CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
-    end)
-    container:AddChild(decimalCheck)
-
-    CreateInfoButton(decimalCheck.frame, decimalCheck.checkbg, "LEFT", "RIGHT", decimalCheck.text:GetStringWidth() + 4, 0, {
-        L["Show Decimal Point"],
-        {L["Shows one decimal place on duration text"], 1, 1, 1, true},
-        {L["(e.g. \"4.5\" instead of \"5\")."], 1, 1, 1, true},
-    }, decimalCheck)
-
     -- Compact Mode toggle + Max Visible Buttons slider
     BuildCompactModeControls(container, group, tabInfoButtons)
+    AddDurationFormatDropdown(container, style, refreshStyle)
+
     BuildGroupSettingPresetControls(container, group, "bars", tabInfoButtons)
 
     -- Apply "Hide CDC Tooltips" to tab info buttons (skip advanced toggles)
@@ -434,10 +420,10 @@ end
 ------------------------------------------------------------------------
 local function BuildBarEffectsTab(container, group, style)
     -- ================================================================
-    -- Show Active Aura Color/Glow
+    -- Show Active Aura Indicator
     -- ================================================================
     local barAuraEnableCb = AceGUI:Create("CheckBox")
-    barAuraEnableCb:SetLabel(L["Show Active Aura Color/Glow"])
+    barAuraEnableCb:SetLabel("Show Active Aura Indicator")
     barAuraEnableCb:SetValue(style.barAuraEffect ~= "none")
     barAuraEnableCb:SetFullWidth(true)
     barAuraEnableCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -484,10 +470,10 @@ local function BuildBarEffectsTab(container, group, style)
     end -- barAuraAdvExpanded
 
     -- ================================================================
-    -- Show Pandemic Color/Glow
+    -- Show Pandemic Indicator
     -- ================================================================
     local pandemicIndicatorCb = AceGUI:Create("CheckBox")
-    pandemicIndicatorCb:SetLabel(L["Show Pandemic Color/Glow"])
+    pandemicIndicatorCb:SetLabel("Show Pandemic Indicator")
     pandemicIndicatorCb:SetValue(style.showPandemicGlow ~= false)
     pandemicIndicatorCb:SetFullWidth(true)
     pandemicIndicatorCb:SetCallback("OnValueChanged", function(widget, event, val)

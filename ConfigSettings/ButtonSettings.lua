@@ -4,6 +4,7 @@ local L = LibStub("AceLocale-3.0"):GetLocale("CooldownCompanion", true) or {}
 local AceGUI = LibStub("AceGUI-3.0")
 local CS = ST._configState
 local math_pi = math.pi
+local RB = ST._RB or {}
 
 -- Imports from Helpers.lua
 local ColorHeading = ST._ColorHeading
@@ -68,6 +69,7 @@ local RefreshButtonSettingsMultiSelect = ST._RefreshButtonSettingsMultiSelect
 local RefreshPanelMultiSelect = ST._RefreshPanelMultiSelect
 local BuildOverridesTab = ST._BuildOverridesTab
 local SOUND_ALERT_NONE_OPTION_KEY = "None" -- Keep in sync with Core/SoundAlerts.lua SOUND_NONE_KEY.
+local DEFAULT_CUSTOM_AURA_MAX_COLOR = RB.DEFAULT_CUSTOM_AURA_MAX_COLOR or { 1, 0.84, 0 }
 
 local function GroupUsesTexturePanelEntries(group)
     return group and (group.displayMode or "icons") == "textures"
@@ -124,6 +126,43 @@ local function BuildSortedSoundOptionOrder(soundOptions)
     end)
 
     return order
+end
+
+local function ConfigurePriorityMoveButton(button, rotation, tooltipTitle, tooltipBody, disabled, onClick)
+    local isDisabled = disabled or CS.browseMode
+    button:SetSize(18, 18)
+    if button.text then
+        button.text:Hide()
+    end
+    if not button.icon then
+        button.icon = button:CreateTexture(nil, "ARTWORK")
+        button.icon:SetPoint("TOPLEFT", 2, -2)
+        button.icon:SetPoint("BOTTOMRIGHT", -2, 2)
+    end
+    if button.highlight then
+        button.highlight:Hide()
+        button.highlight:SetAlpha(0)
+    end
+    button.icon:SetAtlas("arrow-short", false)
+    button.icon:SetRotation(rotation)
+    if button.icon.SetDesaturated then
+        button.icon:SetDesaturated(isDisabled == true)
+    end
+    button.icon:SetVertexColor(1, 0.82, 0, isDisabled and 0.45 or 1)
+    button.icon:Show()
+    button:SetAlpha(isDisabled and 0.35 or 1)
+    button:EnableMouse(true)
+    button:SetScript("OnClick", isDisabled and nil or onClick)
+    button:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine(tooltipTitle)
+        GameTooltip:AddLine(tooltipBody, 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    button:SetScript("OnLeave", function()
+        GameTooltip:Hide()
+    end)
+    button:Show()
 end
 
 local SOUND_PREVIEW_ICON_ATLAS = "chatframe-button-icon-voicechat"
@@ -270,6 +309,401 @@ local function SetupWrappedStatusLabel(scroll, label, text, justifyH)
     label:SetText(text)
 end
 
+local function RefreshAuraTrackingEntry(groupId)
+    if CS.HideAutocomplete then
+        CS.HideAutocomplete()
+    end
+    CooldownCompanion:RefreshGroupFrame(groupId)
+    CooldownCompanion:RefreshConfigPanel()
+end
+
+local function GetAuraTrackingIDList(buttonData, isAuraEntry)
+    local rawIDs = buttonData and buttonData.auraSpellID
+    if isAuraEntry then
+        rawIDs = CooldownCompanion:GetStandaloneAuraFallbackSpellIDText(buttonData, rawIDs)
+    end
+
+    local ids = {}
+    local seen = {}
+    if rawIDs then
+        for id in tostring(rawIDs):gmatch("%d+") do
+            local spellID = tonumber(id)
+            if spellID and spellID > 0 and not seen[spellID] then
+                seen[spellID] = true
+                ids[#ids + 1] = spellID
+            end
+        end
+    end
+    return ids
+end
+
+local function SetAuraTrackingIDList(buttonData, isAuraEntry, ids)
+    local normalizedIDs = {}
+    local seen = {}
+    for _, id in ipairs(ids or {}) do
+        local spellID = tonumber(id)
+        if spellID and spellID > 0 and not seen[spellID] then
+            seen[spellID] = true
+            normalizedIDs[#normalizedIDs + 1] = tostring(spellID)
+        end
+    end
+
+    local rawText = #normalizedIDs > 0 and table.concat(normalizedIDs, ",") or nil
+    if isAuraEntry then
+        buttonData.auraSpellID = rawText
+            and CooldownCompanion:GetStandaloneAuraFallbackSpellIDText(buttonData, rawText)
+            or nil
+    else
+        buttonData.auraSpellID = rawText
+    end
+end
+
+local function AddAuraTrackingID(buttonData, isAuraEntry, spellID)
+    spellID = tonumber(spellID)
+    if not spellID or spellID <= 0 then
+        return false
+    end
+
+    local ids = GetAuraTrackingIDList(buttonData, isAuraEntry)
+    for _, existingID in ipairs(ids) do
+        if existingID == spellID then
+            return false
+        end
+    end
+
+    ids[#ids + 1] = spellID
+    SetAuraTrackingIDList(buttonData, isAuraEntry, ids)
+    return true
+end
+
+local function TrimAuraTrackingIDText(text)
+    return tostring(text or ""):gsub("^%s+", ""):gsub("%s+$", "")
+end
+
+local function BuildAuraTrackingIDError(token, reason)
+    if reason == "ambiguous" then
+        return "Multiple CDM auras match " .. token .. ". Pick the specific aura from the dropdown, or enter its aura spell ID."
+    end
+    return token .. " is not a CDM Tracked Buff/Bar aura."
+end
+
+local function IsOriginalStandaloneAuraID(buttonData, spellID)
+    spellID = tonumber(spellID)
+    if not spellID or not (buttonData and buttonData.addedAs == "aura") then
+        return false
+    end
+    if not CooldownCompanion.GetStandaloneAuraCandidateGroups then
+        return false
+    end
+
+    local originalAuraIDs = CooldownCompanion:GetStandaloneAuraCandidateGroups(buttonData)
+    for _, originalAuraID in ipairs(originalAuraIDs or {}) do
+        if spellID == tonumber(originalAuraID) then
+            return true
+        end
+    end
+    return false
+end
+
+local function ResolveAuraTrackingIDText(rawText, shouldSkipToken)
+    local text = TrimAuraTrackingIDText(rawText)
+    if text == "" then
+        return nil
+    end
+    if not CS.ResolveCDMAuraAutocompleteEntry then
+        return nil, "CDM aura autocomplete is not ready. Try again in a moment."
+    end
+
+    local resolvedIDs = {}
+    for token in text:gmatch("[^,]+") do
+        local cleaned = TrimAuraTrackingIDText(token)
+        if cleaned ~= "" then
+            local skipToken = shouldSkipToken and shouldSkipToken(cleaned)
+            if not skipToken then
+                local entry, reason = CS.ResolveCDMAuraAutocompleteEntry(cleaned)
+                local spellID = entry and tonumber(entry.id)
+                if not spellID or spellID <= 0 then
+                    return nil, BuildAuraTrackingIDError(cleaned, reason)
+                end
+                resolvedIDs[#resolvedIDs + 1] = spellID
+            end
+        end
+    end
+
+    return #resolvedIDs > 0 and resolvedIDs or nil
+end
+
+local function AddAuraTrackingIDText(buttonData, isAuraEntry, rawText)
+    local resolvedIDs, errorText = ResolveAuraTrackingIDText(rawText, isAuraEntry and function(cleaned)
+        local spellID = cleaned:match("^%d+$") and tonumber(cleaned) or nil
+        return IsOriginalStandaloneAuraID(buttonData, spellID)
+    end or nil)
+    if not resolvedIDs then
+        if errorText then
+            CooldownCompanion:Print(errorText)
+        end
+        return false
+    end
+
+    local ids = GetAuraTrackingIDList(buttonData, isAuraEntry)
+    local seen = {}
+    for _, spellID in ipairs(ids) do
+        seen[spellID] = true
+    end
+
+    local added = false
+    for _, spellID in ipairs(resolvedIDs) do
+        if spellID and spellID > 0 and not seen[spellID] then
+            seen[spellID] = true
+            ids[#ids + 1] = spellID
+            added = true
+        end
+    end
+
+    if added then
+        SetAuraTrackingIDList(buttonData, isAuraEntry, ids)
+    end
+    return added
+end
+
+local function MoveAuraTrackingID(buttonData, isAuraEntry, sourceIndex, targetIndex)
+    local ids = GetAuraTrackingIDList(buttonData, isAuraEntry)
+    sourceIndex = tonumber(sourceIndex)
+    targetIndex = tonumber(targetIndex)
+    if not sourceIndex or not targetIndex or sourceIndex < 1 or sourceIndex > #ids then
+        return false
+    end
+    if targetIndex < 1 then targetIndex = 1 end
+    if targetIndex > #ids then targetIndex = #ids end
+    if targetIndex == sourceIndex then
+        return false
+    end
+
+    local movedID = table.remove(ids, sourceIndex)
+    if not movedID then
+        return false
+    end
+    table.insert(ids, targetIndex, movedID)
+    SetAuraTrackingIDList(buttonData, isAuraEntry, ids)
+    return true
+end
+
+local function RemoveAuraTrackingID(buttonData, isAuraEntry, rowIndex)
+    local ids = GetAuraTrackingIDList(buttonData, isAuraEntry)
+    rowIndex = tonumber(rowIndex)
+    if not rowIndex or rowIndex < 1 or rowIndex > #ids then
+        return false
+    end
+    table.remove(ids, rowIndex)
+    SetAuraTrackingIDList(buttonData, isAuraEntry, ids)
+    return true
+end
+
+local function GetAuraTrackingIDDisplayName(spellID)
+    return C_Spell.GetSpellName(spellID) or ("Spell " .. tostring(spellID))
+end
+
+local function BuildAuraTrackingIDRowText(spellID, rowIndex)
+    return ("%d. %s |cff888888%s|r"):format(
+        rowIndex,
+        GetAuraTrackingIDDisplayName(spellID),
+        tostring(spellID)
+    )
+end
+
+local function ShowAuraTrackingIDRowMenu(buttonData, isAuraEntry, rowIndex)
+    if CS.browseMode then
+        return
+    end
+
+    if not CS.auraIDContextMenu then
+        CS.auraIDContextMenu = CreateFrame("Frame", "CDCAuraIDContextMenu", UIParent, "UIDropDownMenuTemplate")
+    end
+
+    UIDropDownMenu_Initialize(CS.auraIDContextMenu, function(_, level)
+        if level ~= 1 then return end
+        local info = UIDropDownMenu_CreateInfo()
+        info.text = "|cffff4444Delete|r"
+        info.notCheckable = true
+        info.registerForAnyClick = true
+        info.func = function()
+            CloseDropDownMenus()
+            if RemoveAuraTrackingID(buttonData, isAuraEntry, rowIndex) then
+                RefreshAuraTrackingEntry(CS.selectedGroup)
+            end
+        end
+        UIDropDownMenu_AddButton(info, level)
+    end, "MENU")
+    CS.auraIDContextMenu:SetFrameStrata("FULLSCREEN_DIALOG")
+    ToggleDropDownMenu(1, nil, CS.auraIDContextMenu, "cursor", 0, 0)
+end
+
+local function EnsureAuraTrackingIDMoveButtons(entry, buttonData, isAuraEntry, rowIndex, rowCount)
+    local frame = entry.frame
+    local upBtn = frame._cdcPriorityUpBtn
+    if not upBtn then
+        upBtn = CreateFrame("Button", nil, frame)
+        frame._cdcPriorityUpBtn = upBtn
+    end
+    local downBtn = frame._cdcPriorityDownBtn
+    if not downBtn then
+        downBtn = CreateFrame("Button", nil, frame)
+        frame._cdcPriorityDownBtn = downBtn
+    end
+
+    upBtn:ClearAllPoints()
+    upBtn:SetPoint("RIGHT", frame, "RIGHT", -24, 0)
+    upBtn:SetFrameLevel(frame:GetFrameLevel() + 6)
+    ConfigurePriorityMoveButton(
+        upBtn,
+        math_pi / 2,
+        "Move Up",
+        "Move this spell ID one priority slot higher.",
+        rowIndex <= 1,
+        function()
+            if MoveAuraTrackingID(buttonData, isAuraEntry, rowIndex, rowIndex - 1) then
+                RefreshAuraTrackingEntry(CS.selectedGroup)
+            end
+        end
+    )
+
+    downBtn:ClearAllPoints()
+    downBtn:SetPoint("RIGHT", frame, "RIGHT", -4, 0)
+    downBtn:SetFrameLevel(frame:GetFrameLevel() + 6)
+    ConfigurePriorityMoveButton(
+        downBtn,
+        -math_pi / 2,
+        "Move Down",
+        "Move this spell ID one priority slot lower.",
+        rowIndex >= rowCount,
+        function()
+            if MoveAuraTrackingID(buttonData, isAuraEntry, rowIndex, rowIndex + 1) then
+                RefreshAuraTrackingEntry(CS.selectedGroup)
+            end
+        end
+    )
+end
+
+local function InstallAuraTrackingIDRowMenu(entry, buttonData, isAuraEntry, rowIndex)
+    entry.frame:SetScript("OnMouseUp", function(_, button)
+        if CS.browseMode then
+            return
+        end
+        if button == "RightButton" then
+            ShowAuraTrackingIDRowMenu(buttonData, isAuraEntry, rowIndex)
+        end
+    end)
+end
+
+local function CreateAuraTrackingIDRow(scroll, buttonData, isAuraEntry, spellID, rowIndex, rowCount)
+    local row = AceGUI:Create("InteractiveLabel")
+    local icon = C_Spell.GetSpellTexture(spellID) or 134400
+    CleanRecycledEntry(row)
+    row:SetText(BuildAuraTrackingIDRowText(spellID, rowIndex))
+    row:SetFullWidth(true)
+    row:SetFontObject(GameFontHighlightSmall)
+    row:SetHighlight("Interface\\QuestFrame\\UI-QuestTitleHighlight")
+    ApplyConfigRowIcon(row, icon, { rightPad = 48 })
+    if BindConfigShiftTooltip then
+        BindConfigShiftTooltip(row, "spell", spellID, row.frame, "ANCHOR_RIGHT")
+    end
+    row._cdcAfterConfigRowLayout = function(self)
+        local frame = self.frame
+        local label = self.label
+        local image = self.image
+        self:SetHeight(22)
+        frame:SetHeight(22)
+        frame.height = 22
+        if image then
+            image:ClearAllPoints()
+            image:SetTexture(icon)
+            image:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+            image:SetSize(18, 18)
+            image:SetPoint("LEFT", frame, "LEFT", 2, 0)
+            image:Show()
+        end
+        if label then
+            label:ClearAllPoints()
+            label:SetPoint("LEFT", frame, "LEFT", 24, 0)
+            label:SetPoint("RIGHT", frame, "RIGHT", -48, 0)
+            label:SetJustifyH("LEFT")
+            label:SetJustifyV("MIDDLE")
+            if label.SetWordWrap then
+                label:SetWordWrap(false)
+            end
+            if label.SetNonSpaceWrap then
+                label:SetNonSpaceWrap(false)
+            end
+            if label.SetMaxLines then
+                label:SetMaxLines(1)
+            end
+        end
+    end
+    row:_cdcAfterConfigRowLayout()
+    EnsureAuraTrackingIDMoveButtons(row, buttonData, isAuraEntry, rowIndex, rowCount)
+    InstallAuraTrackingIDRowMenu(row, buttonData, isAuraEntry, rowIndex)
+    scroll:AddChild(row)
+    return row
+end
+
+local function EnsureButtonSettingsAuraBar(buttonData)
+    if type(buttonData.auraBar) ~= "table" then
+        buttonData.auraBar = {}
+    end
+    return buttonData.auraBar
+end
+
+local function RefreshSelectedBarPanelAuraDisplay(options)
+    CooldownCompanion:RefreshGroupFrame(CS.selectedGroup)
+    if options and options.updateCooldowns then
+        CooldownCompanion:UpdateAllCooldowns()
+    end
+    if options and options.refreshConfig then
+        CooldownCompanion:RefreshConfigPanel()
+    end
+end
+
+local function RefreshSelectedBarPanelAuraButton()
+    local frame = CooldownCompanion.groupFrames and CooldownCompanion.groupFrames[CS.selectedGroup]
+    local button = frame and frame.buttons and frame.buttons[CS.selectedButton]
+    if not button then
+        return
+    end
+
+    if CooldownCompanion.RefreshBarPanelAuraStackVisual then
+        CooldownCompanion:RefreshBarPanelAuraStackVisual(button)
+    end
+    CooldownCompanion:UpdateButtonCooldown(button)
+end
+
+local function AddButtonSettingsSubHeading(scroll, text, infoButtons, tooltipLines)
+    local heading = AceGUI:Create("Heading")
+    heading:SetText(text)
+    ColorHeading(heading)
+    heading:SetHeight(22)
+    heading:SetFullWidth(true)
+    heading.label:ClearAllPoints()
+    heading.label:SetPoint("CENTER", heading.frame, "CENTER", 0, 2)
+    heading.left:ClearAllPoints()
+    heading.left:SetPoint("LEFT", heading.frame, "LEFT", 3, 0)
+    heading.left:SetPoint("RIGHT", heading.label, "LEFT", -5, 0)
+    heading.right:ClearAllPoints()
+    heading.right:SetPoint("RIGHT", heading.frame, "RIGHT", -3, 0)
+    heading.right:SetPoint("LEFT", heading.label, "RIGHT", 5, 0)
+    scroll:AddChild(heading)
+
+    if tooltipLines then
+        local tooltip = { text }
+        for _, line in ipairs(tooltipLines) do
+            tooltip[#tooltip + 1] = line
+        end
+        local infoBtn = CreateInfoButton(heading.frame, heading.label, "LEFT", "RIGHT", 4, 0, tooltip, infoButtons)
+        heading.right:ClearAllPoints()
+        heading.right:SetPoint("RIGHT", heading.frame, "RIGHT", -3, 0)
+        heading.right:SetPoint("LEFT", infoBtn, "RIGHT", 4, 0)
+    end
+end
+
 local function BuildAuraTrackingSettingsSection(scroll, buttonData, infoButtons, options)
     options = options or {}
     if buttonData.type ~= "spell" then
@@ -285,6 +719,7 @@ local function BuildAuraTrackingSettingsSection(scroll, buttonData, infoButtons,
     local cdmEnabled = C_CVar.GetCVarBool("cooldownViewerEnabled") == true
     local viewerFrame = cdmEnabled and CooldownCompanion:ResolveButtonAuraViewerFrame(buttonData) or nil
     local hasViewerFrame = viewerFrame ~= nil
+    local isAuraEntry = buttonData.addedAs == "aura"
     local allowPassiveManualRecovery = options.allowPassiveManualRecovery == true
     local showAuraToggle = options.showAuraToggle == true
     local showAuraIconToggle = options.showAuraIconToggle == true
@@ -296,11 +731,15 @@ local function BuildAuraTrackingSettingsSection(scroll, buttonData, infoButtons,
     if hasViewerFrame and buttonData.auraTracking == nil then
         buttonData.auraTracking = true
         local overrideBuffs = CooldownCompanion.ABILITY_BUFF_OVERRIDES[buttonData.id]
-        if overrideBuffs and not buttonData.auraSpellID then
+        if overrideBuffs and not isAuraEntry and not buttonData.auraSpellID then
             buttonData.auraSpellID = overrideBuffs
         end
         EnsureAuraUnitChoice(buttonData, isHarmful)
         CooldownCompanion:RefreshGroupFrame(CS.selectedGroup)
+    end
+
+    if isAuraEntry then
+        buttonData.auraSpellID = CooldownCompanion:GetStandaloneAuraFallbackSpellIDText(buttonData)
     end
 
     local auraStatus = CooldownCompanion:ResolveAuraTrackingConfigStatus(
@@ -312,7 +751,10 @@ local function BuildAuraTrackingSettingsSection(scroll, buttonData, infoButtons,
     local auraFoundButUntracked = auraStatus.state == "associatedAuraNotTracked"
     local auraTrackedButUnavailable = auraStatus.state == "trackedAuraUnavailable"
     local auraInactiveColorCode = auraFoundButUntracked and "|cffffff00" or "|cffff0000"
-    local isAuraEntry = buttonData.addedAs == "aura"
+    local auraIdFieldLabel = isAuraEntry and "Additional Auras" or "Tracked Auras"
+    local auraIdFieldTooltip = isAuraEntry
+        and "The original aura is checked first. Add CDM tracked auras here when another aura should also count for this entry.\n\nUse arrows to set additional aura priority. Right-click a row to delete it. Use \"Pick CDM\" below to visually select an aura from the Cooldown Manager."
+        or "Most spells are tracked automatically, but some abilities apply a buff or debuff with a different aura ID than the spell itself. Search for CDM tracked auras by name, or enter CDM aura spell IDs, to choose which auras should count for this spell.\n\nUse arrows to set tracked aura priority. Right-click a row to delete it. Use \"Pick CDM\" below to visually select an aura from the Cooldown Manager."
 
     if showHeading then
         local auraHeading = AceGUI:Create("Heading")
@@ -408,7 +850,7 @@ local function BuildAuraTrackingSettingsSection(scroll, buttonData, infoButtons,
         return
     end
 
-    local allowManualAuraConfig = not buttonData.isPassive or allowPassiveManualRecovery
+    local allowManualAuraConfig = isAuraEntry or not buttonData.isPassive or allowPassiveManualRecovery
 
     local function StartAuraSpellOverridePicker()
         local grp = CS.selectedGroup
@@ -421,9 +863,10 @@ local function BuildAuraTrackingSettingsSection(scroll, buttonData, infoButtons,
                 local groups = CooldownCompanion.db.profile.groups
                 local selectedGroup = groups[grp]
                 if selectedGroup and selectedGroup.buttons and selectedGroup.buttons[btn] then
-                    selectedGroup.buttons[btn].auraSpellID = tostring(spellID)
-                    if selectedGroup.buttons[btn].auraTracking then
-                        EnsureAuraUnitChoice(selectedGroup.buttons[btn], isHarmful)
+                    local selectedButton = selectedGroup.buttons[btn]
+                    AddAuraTrackingID(selectedButton, isAuraEntry, spellID)
+                    if selectedButton.auraTracking then
+                        EnsureAuraUnitChoice(selectedButton, isHarmful)
                     end
                 end
             end
@@ -433,37 +876,70 @@ local function BuildAuraTrackingSettingsSection(scroll, buttonData, infoButtons,
     end
 
     if allowManualAuraConfig then
+        local auraIDList = GetAuraTrackingIDList(buttonData, isAuraEntry)
         local auraEditBox = AceGUI:Create("EditBox")
         if auraEditBox.editbox.Instructions then
             auraEditBox.editbox.Instructions:Hide()
         end
-        auraEditBox:SetLabel("Spell ID Override")
-        auraEditBox:SetText(buttonData.auraSpellID and tostring(buttonData.auraSpellID) or "")
+        auraEditBox:SetLabel(auraIdFieldLabel)
+        auraEditBox:SetText("")
+        auraEditBox:DisableButton(true)
         auraEditBox:SetFullWidth(true)
-        auraEditBox:SetCallback("OnEnterPressed", function(widget, _, text)
-            text = text:gsub("%s", "")
-            if text ~= "" then
-                for token in text:gmatch("[^,]+") do
-                    if not tonumber(token) then
-                        CooldownCompanion:Print("Invalid spell ID: " .. token)
-                        widget:SetText(buttonData.auraSpellID and tostring(buttonData.auraSpellID) or "")
-                        return
-                    end
-                end
+        local function CommitAuraTrackingEntry(widget, entry)
+            CS.HideAutocomplete()
+            if not (entry and AddAuraTrackingIDText(buttonData, isAuraEntry, tostring(entry.id))) then
+                return
             end
-            buttonData.auraSpellID = text ~= "" and text or nil
+            widget:SetText("")
             if buttonData.auraTracking then
                 EnsureAuraUnitChoice(buttonData, isHarmful)
             end
-            CooldownCompanion:RefreshGroupFrame(CS.selectedGroup)
-            CooldownCompanion:RefreshConfigPanel()
+            RefreshAuraTrackingEntry(CS.selectedGroup)
+        end
+        auraEditBox:SetCallback("OnTextChanged", function(widget, _, text)
+            if CS.browseMode then
+                CS.HideAutocomplete()
+                return
+            end
+            if text and #text >= 1 and CS.SearchCDMAuraAutocomplete then
+                CS.ShowAutocompleteResults(CS.SearchCDMAuraAutocomplete(text), widget, function(entry)
+                    CommitAuraTrackingEntry(widget, entry)
+                end, { requireExactNumericEnter = true })
+            else
+                CS.HideAutocomplete()
+            end
         end)
+        auraEditBox:SetCallback("OnEnterPressed", function(widget, _, text)
+            if CS.browseMode then
+                CS.HideAutocomplete()
+                return
+            end
+            if CS.ConsumeAutocompleteEnter and CS.ConsumeAutocompleteEnter() then
+                return
+            end
+            CS.HideAutocomplete()
+            if not AddAuraTrackingIDText(buttonData, isAuraEntry, text) then
+                return
+            end
+            widget:SetText("")
+            if buttonData.auraTracking then
+                EnsureAuraUnitChoice(buttonData, isHarmful)
+            end
+            RefreshAuraTrackingEntry(CS.selectedGroup)
+        end)
+        if CS.SetupAutocompleteKeyHandler then
+            CS.SetupAutocompleteKeyHandler(auraEditBox)
+        end
         scroll:AddChild(auraEditBox)
 
         CreateInfoButton(auraEditBox.frame, auraEditBox.frame, "TOPLEFT", "TOPLEFT", auraEditBox.label:GetStringWidth() + 4, -2, {
-            "Spell ID Override",
-            {"Most spells are tracked automatically, but some abilities apply a buff or debuff with a different spell ID than the ability itself. If tracking isn't working, enter the buff/debuff spell ID here. Use commas only when one entry should intentionally watch multiple IDs.\n\nUse \"Pick CDM\" below to visually select a spell from the Cooldown Manager.", 1, 1, 1, true},
+            auraIdFieldLabel,
+            {auraIdFieldTooltip, 1, 1, 1, true},
         }, infoButtons)
+
+        for index, spellID in ipairs(auraIDList) do
+            CreateAuraTrackingIDRow(scroll, buttonData, isAuraEntry, spellID, index, #auraIDList)
+        end
 
         local overrideCdmSpacer = AceGUI:Create("Label")
         overrideCdmSpacer:SetText(" ")
@@ -493,7 +969,7 @@ local function BuildAuraTrackingSettingsSection(scroll, buttonData, infoButtons,
         scroll:AddChild(auraUnitDrop)
         CreateInfoButton(auraUnitDrop.frame, auraUnitDrop.label, "LEFT", "RIGHT", 4, 0, {
             "Aura Unit",
-            {"This controls where the tracked aura is expected to exist. Use Target for debuffs on your target, or Player for buffs/procs on yourself, even if the button's spell is something else.", 1, 1, 1, true},
+            {"This is an entry-wide setting. It controls where every Tracked Aura or Additional Aura on this entry is expected to exist. Use Target for debuffs on your target, or Player for buffs/procs on yourself, even if the button's spell is something else.", 1, 1, 1, true},
         }, infoButtons)
 
         local auraUnitSpacer = AceGUI:Create("Label")
@@ -540,7 +1016,7 @@ local function BuildAuraTrackingSettingsSection(scroll, buttonData, infoButtons,
         pickCDMBtn:SetCallback("OnEnter", function(widget)
             GameTooltip:SetOwner(widget.frame, "ANCHOR_TOP")
             GameTooltip:AddLine("Pick from Cooldown Manager")
-            GameTooltip:AddLine("Shows a list of Tracked Buff/Tracked Bar auras currently tracked in the Cooldown Manager. Click one to populate the Spell ID Override.", 1, 1, 1, true)
+            GameTooltip:AddLine("Shows a list of Tracked Buff/Tracked Bar auras currently tracked in the Cooldown Manager. Click one to add it to " .. auraIdFieldLabel .. ".", 1, 1, 1, true)
             GameTooltip:Show()
         end)
         pickCDMBtn:SetCallback("OnLeave", function()
@@ -579,7 +1055,10 @@ local function BuildAuraTrackingSettingsSection(scroll, buttonData, infoButtons,
         scroll:AddChild(cdmDisabledSpacer)
     elseif auraStatus.state == "noAssociatedAura" then
         local noAuraLabel = AceGUI:Create("Label")
-        SetupWrappedStatusLabel(scroll, noAuraLabel, "|cff888888No associated aura was found for this spell. Use the Spell ID Override above if you want to link it to a specific CDM-trackable aura.|r")
+        local noAuraText = isAuraEntry
+            and "|cff888888No associated aura was found. Add an additional aura above if another CDM-trackable aura should count for this entry.|r"
+            or "|cff888888No associated aura was found for this spell. Use Tracked Auras above to link it to a specific CDM-trackable aura.|r"
+        SetupWrappedStatusLabel(scroll, noAuraLabel, noAuraText)
         scroll:AddChild(noAuraLabel)
         local noAuraSpacer = AceGUI:Create("Label")
         noAuraSpacer:SetText(" ")
@@ -629,6 +1108,218 @@ local function BuildAuraTrackingSettingsSection(scroll, buttonData, infoButtons,
             L["Show Aura Icon"],
             {L["When enabled, the button icon changes to show the tracked aura's icon while the aura is active. When the aura expires, the normal spell icon is restored.\n\nUseful when the tracked aura has a different icon than the ability itself."], 1, 1, 1, true},
         }, infoButtons)
+    end
+end
+
+local function BuildBarPanelAuraDisplaySection(scroll, buttonData, infoButtons)
+    local group = CooldownCompanion.db.profile.groups[CS.selectedGroup]
+    if not group or group.displayMode ~= "bars" then
+        return
+    end
+    if not CooldownCompanion:IsBarPanelAuraDisplayEligible(buttonData) then
+        return
+    end
+
+    local auraBar = type(buttonData.auraBar) == "table" and buttonData.auraBar or {}
+    local displayKind = CooldownCompanion:GetBarPanelAuraDisplayKind(buttonData)
+    local isStackDisplay = displayKind == "stacks"
+    local stackDisplayMode = CooldownCompanion:GetBarPanelAuraStackDisplayMode(buttonData)
+
+    AddButtonSettingsSubHeading(scroll, "Aura Display Mode", infoButtons, {
+        {"Determines how the tracked aura is displayed on this bar panel entry.", 1, 1, 1, true},
+        " ",
+        {"Active: shows the aura's remaining duration while it is active.", 1, 1, 1, true},
+        " ",
+        {"Stack Count: ignores duration and shows only the aura's current stack count.", 1, 1, 1, true},
+    })
+
+    local trackingDrop = AceGUI:Create("Dropdown")
+    trackingDrop:SetList({
+        active = "Active",
+        stacks = "Stack Count",
+    }, { "active", "stacks" })
+    trackingDrop:SetValue(displayKind)
+    trackingDrop:SetFullWidth(true)
+    trackingDrop:SetCallback("OnValueChanged", function(_, _, value)
+        CooldownCompanion:SetBarPanelAuraDisplayKind(buttonData, value)
+        RefreshSelectedBarPanelAuraDisplay({ updateCooldowns = true, refreshConfig = true })
+    end)
+    scroll:AddChild(trackingDrop)
+
+    if not isStackDisplay then
+        return
+    end
+    auraBar = EnsureButtonSettingsAuraBar(buttonData)
+
+    local maxStacksSlider = AceGUI:Create("Slider")
+    maxStacksSlider:SetLabel("Max Stacks")
+    maxStacksSlider:SetSliderValues(1, 99, 1)
+    maxStacksSlider:SetValue(CooldownCompanion:GetBarPanelAuraMaxStacks(buttonData))
+    maxStacksSlider:SetFullWidth(true)
+    local pendingMaxStacks = CooldownCompanion:GetBarPanelAuraMaxStacks(buttonData)
+    local function NormalizeMaxStacks(value)
+        return math.max(1, math.min(99, math.floor((tonumber(value) or pendingMaxStacks or 1) + 0.5)))
+    end
+    local function CommitMaxStacks(value)
+        local committedValue = NormalizeMaxStacks(value)
+        if CooldownCompanion:GetBarPanelAuraMaxStacks(buttonData) == committedValue then
+            return
+        end
+        CooldownCompanion:SetBarPanelAuraMaxStacks(buttonData, committedValue)
+        RefreshSelectedBarPanelAuraButton()
+    end
+    maxStacksSlider:SetCallback("OnValueChanged", function(_, _, value)
+        pendingMaxStacks = NormalizeMaxStacks(value)
+    end)
+    maxStacksSlider:SetCallback("OnMouseUp", function(_, _, value)
+        CommitMaxStacks(value)
+    end)
+    HookSliderEditBox(maxStacksSlider)
+    scroll:AddChild(maxStacksSlider)
+
+    local displayModeDrop = AceGUI:Create("Dropdown")
+    displayModeDrop:SetLabel("Display Mode")
+    displayModeDrop:SetList({
+        continuous = "Continuous",
+        segmented = "Segmented",
+        overlay = "Overlay",
+    }, { "continuous", "segmented", "overlay" })
+    displayModeDrop:SetValue(stackDisplayMode)
+    displayModeDrop:SetFullWidth(true)
+    displayModeDrop:SetCallback("OnValueChanged", function(_, _, value)
+        CooldownCompanion:SetBarPanelAuraStackDisplayMode(buttonData, value)
+        if value ~= "continuous" and auraBar.maxStacksGlowStyle == "pulsingOverlay" then
+            auraBar.maxStacksGlowStyle = "solidBorder"
+        end
+        RefreshSelectedBarPanelAuraDisplay({ updateCooldowns = true, refreshConfig = true })
+    end)
+    scroll:AddChild(displayModeDrop)
+
+    local stackTextFormatDrop = AceGUI:Create("Dropdown")
+    stackTextFormatDrop:SetLabel("Stack Text Format")
+    stackTextFormatDrop:SetList({
+        current = "Current Value",
+        current_max = "Current / Max",
+    }, { "current", "current_max" })
+    stackTextFormatDrop:SetValue(CooldownCompanion:GetBarPanelAuraStackTextFormat(buttonData))
+    stackTextFormatDrop:SetFullWidth(true)
+    stackTextFormatDrop:SetCallback("OnValueChanged", function(_, _, value)
+        CooldownCompanion:SetBarPanelAuraStackTextFormat(buttonData, value)
+        RefreshSelectedBarPanelAuraButton()
+    end)
+    scroll:AddChild(stackTextFormatDrop)
+
+    if stackDisplayMode == "segmented" or stackDisplayMode == "overlay" then
+        local segmentGapSlider = AceGUI:Create("Slider")
+        segmentGapSlider:SetLabel("Segment Gap")
+        segmentGapSlider:SetSliderValues(0, 20, 0.1)
+        segmentGapSlider:SetValue(CooldownCompanion:GetBarPanelAuraSegmentGap(buttonData))
+        segmentGapSlider:SetFullWidth(true)
+        segmentGapSlider:SetCallback("OnValueChanged", function(_, _, value)
+            CooldownCompanion:SetBarPanelAuraSegmentGap(buttonData, value)
+            RefreshSelectedBarPanelAuraButton()
+        end)
+        scroll:AddChild(segmentGapSlider)
+    end
+
+    if stackDisplayMode == "overlay" then
+        AddButtonSettingsSubHeading(scroll, "Colors")
+        AddColorPicker(scroll, auraBar, "overlayColor", "Overlay Color", {1, 0.84, 0, 1}, true,
+            function() RefreshSelectedBarPanelAuraDisplay({ updateCooldowns = true }) end)
+    end
+
+    AddButtonSettingsSubHeading(scroll, "Max Stack Settings")
+    local thresholdCb = AceGUI:Create("CheckBox")
+    thresholdCb:SetLabel("Enable Max Stack Color")
+    thresholdCb:SetValue(auraBar.thresholdColorEnabled == true)
+    thresholdCb:SetFullWidth(true)
+    thresholdCb:SetCallback("OnValueChanged", function(_, _, value)
+        auraBar.thresholdColorEnabled = value and true or nil
+        RefreshSelectedBarPanelAuraDisplay({ updateCooldowns = true, refreshConfig = true })
+    end)
+    scroll:AddChild(thresholdCb)
+
+    if auraBar.thresholdColorEnabled == true then
+        AddColorPicker(scroll, auraBar, "thresholdMaxColor", "Max Stack Color", DEFAULT_CUSTOM_AURA_MAX_COLOR, false,
+            function() RefreshSelectedBarPanelAuraDisplay({ updateCooldowns = true }) end)
+    end
+
+    local indicatorCb = AceGUI:Create("CheckBox")
+    indicatorCb:SetLabel("Max Stack Indicator")
+    indicatorCb:SetValue(auraBar.maxStacksGlowEnabled == true)
+    indicatorCb:SetFullWidth(true)
+    indicatorCb:SetCallback("OnValueChanged", function(_, _, value)
+        auraBar.maxStacksGlowEnabled = value and true or nil
+        RefreshSelectedBarPanelAuraDisplay({ updateCooldowns = true, refreshConfig = true })
+    end)
+    scroll:AddChild(indicatorCb)
+
+    local indicatorAdvExpanded, indicatorAdvBtn = AddAdvancedToggle(indicatorCb, "barPanelAuraMaxStacksIndicator_" .. CS.selectedGroup .. "_" .. CS.selectedButton, infoButtons, auraBar.maxStacksGlowEnabled == true)
+    CreateInfoButton(indicatorCb.frame, indicatorAdvBtn, "LEFT", "RIGHT", 4, 0, {
+        "Max Stack Indicator",
+        {"Due to combat restrictions, individual bar segments cannot be highlighted independently.", 1, 1, 1, true},
+        " ",
+        {"The indicator covers the whole bar entry and appears automatically when the aura reaches its maximum stack count.", 1, 1, 1, true},
+        " ",
+        {"The Pulsing Overlay style is only available for continuous display mode.", 1, 1, 1, true},
+    }, indicatorCb)
+
+    if indicatorAdvExpanded and auraBar.maxStacksGlowEnabled == true then
+        local currentStyle = auraBar.maxStacksGlowStyle or "solidBorder"
+        local isContinuousDisplay = stackDisplayMode == "continuous"
+        if currentStyle == "pulsingOverlay" and not isContinuousDisplay then
+            currentStyle = "solidBorder"
+        end
+
+        local styleList = {
+            solidBorder = "Solid Border",
+            pulsingBorder = "Pulsing Border",
+        }
+        local styleOrder = { "solidBorder", "pulsingBorder" }
+        if isContinuousDisplay then
+            styleList.pulsingOverlay = "Pulsing Overlay"
+            styleOrder = { "solidBorder", "pulsingBorder", "pulsingOverlay" }
+        end
+
+        local indicatorStyleDrop = AceGUI:Create("Dropdown")
+        indicatorStyleDrop:SetLabel("Indicator Style")
+        indicatorStyleDrop:SetList(styleList, styleOrder)
+        indicatorStyleDrop:SetValue(currentStyle)
+        indicatorStyleDrop:SetFullWidth(true)
+        indicatorStyleDrop:SetCallback("OnValueChanged", function(_, _, value)
+            auraBar.maxStacksGlowStyle = value
+            RefreshSelectedBarPanelAuraDisplay({ updateCooldowns = true, refreshConfig = true })
+        end)
+        scroll:AddChild(indicatorStyleDrop)
+
+        AddColorPicker(scroll, auraBar, "maxStacksGlowColor", "Indicator Color", {1, 0.84, 0, 0.9}, true,
+            function() RefreshSelectedBarPanelAuraDisplay({ updateCooldowns = true }) end)
+
+        if currentStyle ~= "pulsingOverlay" then
+            local sizeSlider = AceGUI:Create("Slider")
+            sizeSlider:SetLabel("Border Size")
+            sizeSlider:SetSliderValues(1, 8, 1)
+            sizeSlider:SetValue(auraBar.maxStacksGlowSize or 2)
+            sizeSlider:SetFullWidth(true)
+            sizeSlider:SetCallback("OnValueChanged", function(_, _, value)
+                auraBar.maxStacksGlowSize = value
+                RefreshSelectedBarPanelAuraButton()
+            end)
+            scroll:AddChild(sizeSlider)
+        end
+
+        if currentStyle == "pulsingBorder" or currentStyle == "pulsingOverlay" then
+            local speedSlider = AceGUI:Create("Slider")
+            speedSlider:SetLabel("Pulse Duration")
+            speedSlider:SetSliderValues(0.1, 2.0, 0.1)
+            speedSlider:SetValue(auraBar.maxStacksGlowSpeed or 0.5)
+            speedSlider:SetFullWidth(true)
+            speedSlider:SetCallback("OnValueChanged", function(_, _, value)
+                auraBar.maxStacksGlowSpeed = value
+                RefreshSelectedBarPanelAuraButton()
+            end)
+            scroll:AddChild(speedSlider)
+        end
     end
 end
 
@@ -935,6 +1626,7 @@ local function BuildSpellSettings(scroll, buttonData, infoButtons)
             useCollapse = true,
             collapsedKey = CS.selectedGroup .. "_" .. CS.selectedButton .. "_aura",
         })
+        BuildBarPanelAuraDisplaySection(scroll, buttonData, infoButtons)
     end -- buttonData.type == "spell"
 
     -- Charge text settings now live in group Appearance tab (with per-button overrides)
@@ -1331,54 +2023,17 @@ local function BuildFallbackRowText(itemID, rowIndex, isPrimary)
     )
 end
 
-local function ConfigureFallbackMoveButton(button, rotation, tooltipTitle, tooltipBody, disabled, onClick)
-    local isDisabled = disabled or CS.browseMode
-    button:SetSize(18, 18)
-    if button.text then
-        button.text:Hide()
-    end
-    if not button.icon then
-        button.icon = button:CreateTexture(nil, "ARTWORK")
-        button.icon:SetPoint("TOPLEFT", 2, -2)
-        button.icon:SetPoint("BOTTOMRIGHT", -2, 2)
-    end
-    if button.highlight then
-        button.highlight:Hide()
-        button.highlight:SetAlpha(0)
-    end
-    button.icon:SetAtlas("arrow-short", false)
-    button.icon:SetRotation(rotation)
-    if button.icon.SetDesaturated then
-        button.icon:SetDesaturated(isDisabled == true)
-    end
-    button.icon:SetVertexColor(1, 0.82, 0, isDisabled and 0.45 or 1)
-    button.icon:Show()
-    button:SetAlpha(isDisabled and 0.35 or 1)
-    button:EnableMouse(true)
-    button:SetScript("OnClick", isDisabled and nil or onClick)
-    button:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:AddLine(tooltipTitle)
-        GameTooltip:AddLine(tooltipBody, 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    button:SetScript("OnLeave", function()
-        GameTooltip:Hide()
-    end)
-    button:Show()
-end
-
 local function EnsureFallbackMoveButtons(entry, buttonData, rowIndex, isPrimary)
     local frame = entry.frame
-    local upBtn = frame._cdcFallbackUpBtn
+    local upBtn = frame._cdcPriorityUpBtn
     if not upBtn and not isPrimary then
         upBtn = CreateFrame("Button", nil, frame)
-        frame._cdcFallbackUpBtn = upBtn
+        frame._cdcPriorityUpBtn = upBtn
     end
-    local downBtn = frame._cdcFallbackDownBtn
+    local downBtn = frame._cdcPriorityDownBtn
     if not downBtn then
         downBtn = CreateFrame("Button", nil, frame)
-        frame._cdcFallbackDownBtn = downBtn
+        frame._cdcPriorityDownBtn = downBtn
     end
 
     local fallbackIDs = buttonData.itemFallbacks or {}
@@ -1390,7 +2045,7 @@ local function EnsureFallbackMoveButtons(entry, buttonData, rowIndex, isPrimary)
         downBtn:ClearAllPoints()
         downBtn:SetPoint("RIGHT", frame, "RIGHT", -4, 0)
         downBtn:SetFrameLevel(frame:GetFrameLevel() + 6)
-        ConfigureFallbackMoveButton(
+        ConfigurePriorityMoveButton(
             downBtn,
             -math_pi / 2,
             "Move Down",
@@ -1408,7 +2063,7 @@ local function EnsureFallbackMoveButtons(entry, buttonData, rowIndex, isPrimary)
     upBtn:ClearAllPoints()
     upBtn:SetPoint("RIGHT", frame, "RIGHT", -24, 0)
     upBtn:SetFrameLevel(frame:GetFrameLevel() + 6)
-    ConfigureFallbackMoveButton(
+    ConfigurePriorityMoveButton(
         upBtn,
         math_pi / 2,
         "Move Up",
@@ -1424,7 +2079,7 @@ local function EnsureFallbackMoveButtons(entry, buttonData, rowIndex, isPrimary)
     downBtn:ClearAllPoints()
     downBtn:SetPoint("RIGHT", frame, "RIGHT", -4, 0)
     downBtn:SetFrameLevel(frame:GetFrameLevel() + 6)
-    ConfigureFallbackMoveButton(
+    ConfigurePriorityMoveButton(
         downBtn,
         -math_pi / 2,
         "Move Down",

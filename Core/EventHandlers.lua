@@ -48,6 +48,16 @@ local function PlayerHasTrackedAuraForButton(button, buttonData)
         return true
     end
 
+    if buttonData.type == "spell" and buttonData.addedAs == "aura" then
+        local orderedAuraIDs = CooldownCompanion:GetOrderedAuraCandidateIDs(buttonData)
+        for _, spellID in ipairs(orderedAuraIDs) do
+            if C_UnitAuras.GetPlayerAuraBySpellID(spellID) then
+                return true
+            end
+        end
+        return false
+    end
+
     if buttonData.auraSpellID then
         local includesButtonID
         for id in tostring(buttonData.auraSpellID):gmatch("%d+") do
@@ -168,14 +178,22 @@ function CooldownCompanion:OnSpellRangeCheckUpdate(event, spellIdentifier, isInR
     if checksRange then
         outOfRange = not isInRange
     end
+    local changed = false
     self:ForEachButton(function(button, bd)
         if bd.type == "spell" and bd.id == spellIdentifier then
-            button._spellOutOfRange = outOfRange
+            if button._spellOutOfRange ~= outOfRange then
+                button._spellOutOfRange = outOfRange
+                changed = true
+            end
         end
     end)
+    if changed then
+        self:MarkCooldownsDirty()
+    end
 end
 
 function CooldownCompanion:OnBagChanged()
+    self:MarkCooldownsDirty()
     self:RefreshChargeFlags("item")
     self:RefreshConfigPanel()
 end
@@ -342,12 +360,14 @@ function CooldownCompanion:CachePlayerState()
 end
 
 function CooldownCompanion:OnZoneChanged()
-    self:RefreshSpellAvailabilityState()
+    self:RefreshSpellAvailabilityState({ evaluateResourceBars = true })
 end
 
 function CooldownCompanion:OnRestingChanged()
     self._isResting = IsResting()
     self:RefreshAllGroupsVisibilityOnly()
+    self:EvaluateResourceBars()
+    self:UpdateAnchorStacking()
     self:RefreshConfigPanel()
 end
 
@@ -362,12 +382,16 @@ end
 function CooldownCompanion:OnPetBattleStart()
     self._inPetBattle = true
     self:RefreshAllGroupsVisibilityOnly()
+    self:EvaluateResourceBars()
+    self:UpdateAnchorStacking()
     self:RefreshConfigPanel()
 end
 
 function CooldownCompanion:OnPetBattleEnd()
     self._inPetBattle = false
     self:RefreshAllGroupsVisibilityOnly()
+    self:EvaluateResourceBars()
+    self:UpdateAnchorStacking()
     self:RefreshConfigPanel()
 end
 
@@ -377,6 +401,8 @@ function CooldownCompanion:OnVehicleUIChanged(event, unit)
         or C_ActionBar.HasVehicleActionBar()
         or C_ActionBar.HasOverrideActionBar()
     self:RefreshAllGroupsVisibilityOnly()
+    self:EvaluateResourceBars()
+    self:UpdateAnchorStacking()
     self:RefreshConfigPanel()
 end
 
@@ -467,7 +493,7 @@ function CooldownCompanion:OnPlayerEnteringWorld(event, isInitialLogin, isReload
                     end
                 end
             end)
-            self._cooldownsDirty = true
+            self:MarkCooldownsDirty()
         end)
     end
 end
@@ -518,6 +544,8 @@ function CooldownCompanion:OnActionBarLayoutChanged()
         or C_ActionBar.HasOverrideActionBar()
     if self._inVehicleUI ~= wasInVehicleUI then
         self:RefreshAllGroupsVisibilityOnly()
+        self:EvaluateResourceBars()
+        self:UpdateAnchorStacking()
     end
 end
 

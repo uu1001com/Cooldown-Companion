@@ -30,6 +30,7 @@ local IsConfigFinderAvailable = ST._IsConfigFinderAvailable
 local IsConfigFinderActive = ST._IsConfigFinderActive
 local SetConfigFinderText = ST._SetConfigFinderText
 local ClearConfigFinderText = ST._ClearConfigFinderText
+local InvalidateConfigFinderResults = ST._InvalidateConfigFinderResults
 local MaybeAutoStartFirstIconPanelTutorial = ST._MaybeAutoStartFirstIconPanelTutorial
 local StartFirstIconPanelTutorial = ST._StartFirstIconPanelTutorial
 local CancelFirstIconPanelTutorial = ST._CancelFirstIconPanelTutorial
@@ -100,16 +101,16 @@ local function GetLayoutOrderColumnTitle()
     return L["Layout & Order: "] .. GetClassColoredText(specName)
 end
 
-local function GetCustomAuraBarsColumnTitle()
+local function GetCustomBarsColumnTitle()
     local specIdx = C_SpecializationInfo.GetSpecialization()
     if not specIdx then
-        return L["Custom Aura Bars"]
+        return "Custom Bars"
     end
     local _, specName = C_SpecializationInfo.GetSpecializationInfo(specIdx)
     if not specName or specName == "" then
-        return L["Custom Aura Bars"]
+        return "Custom Bars"
     end
-    return L["Custom Aura Bars: "] .. GetClassColoredText(specName)
+    return "Custom Bars: " .. GetClassColoredText(specName)
 end
 
 local function CountSelections(selectionSet)
@@ -169,12 +170,23 @@ local function GetSelectedGroupHeaderName(selection)
     return container and NormalizeHeaderName(container.name)
 end
 
+local function GetSelectedFolderHeaderName(selection)
+    if not (selection and selection.hasSelectedFolder and CS.selectedFolder) then
+        return nil
+    end
+
+    local profile = GetConfigProfile()
+    local folder = profile and profile.folders and profile.folders[CS.selectedFolder]
+    return folder and NormalizeHeaderName(folder.name)
+end
+
 local function GetConfigSelectionSummary()
     return {
         panelMultiCount = CountSelections(CS.selectedPanels),
         groupMultiCount = CountSelections(CS.selectedGroups),
         hasSelectedPanel = CS.selectedGroup ~= nil,
         hasSelectedGroup = CS.selectedContainer ~= nil,
+        hasSelectedFolder = CS.selectedFolder ~= nil and CS.selectedContainer == nil and CS.selectedGroup == nil,
     }
 end
 
@@ -193,10 +205,16 @@ end
 
 local function GetColumn4HeaderMode(selection)
     if CS.resourceBarPanelActive then
+        if CS.selectedCustomBarId then
+            return "custom_bar"
+        end
         return "layout_order"
     end
     if selection.panelMultiCount >= 2 or selection.hasSelectedPanel then
         return "panel"
+    end
+    if selection.hasSelectedFolder then
+        return "folder"
     end
     return "group"
 end
@@ -204,7 +222,7 @@ end
 local function GetColumn3HeaderTitle(selection)
     local mode = GetColumn3HeaderMode(selection)
     if mode == "custom_aura" then
-        return GetCustomAuraBarsColumnTitle()
+        return GetCustomBarsColumnTitle()
     elseif mode == "auto_add" then
         return "Auto Add"
     elseif mode == "panel_actions" then
@@ -221,12 +239,20 @@ local function GetColumn4HeaderTitle(selection)
     local mode = GetColumn4HeaderMode(selection)
     if mode == "layout_order" then
         return GetLayoutOrderColumnTitle()
+    elseif mode == "custom_bar" then
+        return "Custom Bar Settings"
     elseif mode == "panel" then
         local panelName = GetSelectedPanelHeaderName(selection)
         if panelName then
             return "Panel: " .. panelName
         end
         return "Panel Settings"
+    elseif mode == "folder" then
+        local folderName = GetSelectedFolderHeaderName(selection)
+        if folderName then
+            return "Folder: " .. folderName
+        end
+        return "Folder Settings"
     end
     local groupName = GetSelectedGroupHeaderName(selection)
     if groupName then
@@ -469,7 +495,7 @@ local function ResetConfigForProfileChange()
     ResetConfigSelection(true)
     wipe(CS.collapsedFolders)
     wipe(CS.collapsedPanels)
-    wipe(CS.customAuraBarSubTabs)
+    CS.selectedCustomBarId = nil
     wipe(CS.resourceAuraOverlayDrafts)
     if ClearConfigFinderText then
         ClearConfigFinderText()
@@ -890,6 +916,7 @@ local function CreateConfigPanel()
         CS.browseMode = true
         CS.browseCharKey = nil
         CS.browseContainerId = nil
+        CS.selectedFolder = nil
         CS.selectedContainer = nil
         CS.selectedGroup = nil
         CS.selectedButton = nil
@@ -1415,16 +1442,10 @@ local function CreateConfigPanel()
     bsInfoBtn:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         if CS.resourceBarPanelActive then
-            GameTooltip:AddLine(L["Custom Aura Bars"])
-            GameTooltip:AddLine(L["Track any buff or debuff as a resource-style bar."], 1, 1, 1)
+            GameTooltip:AddLine("Custom Bars")
+            GameTooltip:AddLine("Track buffs or debuffs as resource-style bars.", 1, 1, 1)
             GameTooltip:AddLine(" ")
-            GameTooltip:AddLine(L["Each slot is configured per-spec and supports autocomplete by name or spell ID."], 1, 1, 1)
-            GameTooltip:AddLine(" ")
-            GameTooltip:AddLine(L["Tracking Modes"], 1, 0.82, 0)
-            GameTooltip:AddLine(L["Stack Count: fills the bar based on current stacks (e.g. 3/5 = 60%)."], 1, 1, 1)
-            GameTooltip:AddLine(L["Active: shows a full bar that drains as the aura expires."], 1, 1, 1)
-            GameTooltip:AddLine(" ")
-            GameTooltip:AddLine(L["Both modes support optional duration and stack text overlays."], 1, 1, 1)
+            GameTooltip:AddLine("Entries are configured per-spec.", 1, 1, 1)
         elseif CS.autoAddFlowActive then
             GameTooltip:AddLine(L["Auto Add"])
             GameTooltip:AddLine(L["Guided import flow for Action Bars, Spellbook, and CDM Auras."], 1, 1, 1, true)
@@ -1479,7 +1500,12 @@ local function CreateConfigPanel()
         else
             local selection = GetConfigSelectionSummary()
             local mode = GetColumn4HeaderMode(selection)
-            if mode == "panel" then
+            if mode == "folder" then
+                GameTooltip:AddLine("Folder Settings")
+                GameTooltip:AddLine("The selected folder is configured here.", 1, 1, 1, true)
+                GameTooltip:AddLine(" ")
+                GameTooltip:AddLine("Folder load conditions apply to all groups inside the folder.", 1, 1, 1, true)
+            elseif mode == "panel" then
                 GameTooltip:AddLine("Panel Settings")
                 if selection.panelMultiCount >= 2 then
                     GameTooltip:AddLine("Select a single panel to configure it here.", 1, 1, 1, true)
@@ -1938,6 +1964,9 @@ function CooldownCompanion:RefreshConfigPanel()
     elseif SetConfigFinderText then
         SetConfigFinderText(CS.configSearchText or "")
     end
+    if InvalidateConfigFinderResults then
+        InvalidateConfigFinderResults()
+    end
     if ClearConfigShiftTooltipHover then
         ClearConfigShiftTooltipHover()
     end
@@ -1971,14 +2000,12 @@ function CooldownCompanion:RefreshConfigPanel()
     end
     local function getCustomAuraScrollKey()
         if not CS.resourceBarPanelActive then return nil end
-        local barTab = tostring(CS.customAuraBarTab or "bar_1")
-        local slotIdx = tonumber(barTab:match("^bar_(%d+)$")) or 1
-        local subTab = CS.customAuraBarSubTabs and CS.customAuraBarSubTabs[slotIdx] or "settings"
-        return barTab .. ":" .. tostring(subTab)
+        local selectedId = tostring(CS.selectedCustomBarId or "layout")
+        return selectedId .. ":" .. tostring(CS.customBarSettingsTab or "appearance")
     end
     local function getCustomAuraScrollWidget(col3)
         if not col3 then return nil end
-        return col3._customAuraSubScroll or col3._customAuraScroll
+        return col3._customBarsScroll or col3._customAuraSubScroll or col3._customAuraScroll
     end
 
     local saved1   = SaveScrollState(CS.col1Scroll)

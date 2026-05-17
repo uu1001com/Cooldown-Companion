@@ -76,30 +76,31 @@ local EnsureResourceAuraUnit = RB.EnsureResourceAuraUnit
 local RefreshResourceAuraUnitForSpell = RB.RefreshResourceAuraUnitForSpell
 
 ------------------------------------------------------------------------
--- Aura bar autocomplete cache (TrackedBuff + TrackedBar spells only)
+-- Aura bar autocomplete cache (spell/aura entries only)
 ------------------------------------------------------------------------
 local auraBarAutocompleteCache = nil
+local auraBarAutocompleteSource = nil
 
 local function IsSharedAuraAutocompleteEntry(entry)
-    if type(entry) ~= "table" or entry.isItem then
-        return false
-    end
-    return entry.category == "Cooldown Manager"
-        or entry.forceAura == true
-        or entry.isPassive == true
+    return type(entry) == "table" and entry.isItem ~= true
 end
 
 local function BuildAuraBarAutocompleteCache()
-    local cache = {}
     local sharedCache = CS.autocompleteCache
         or (ST._BuildAutocompleteCache and ST._BuildAutocompleteCache())
         or {}
+    if auraBarAutocompleteCache and auraBarAutocompleteSource == sharedCache then
+        return auraBarAutocompleteCache
+    end
+
+    local cache = {}
     for _, entry in ipairs(sharedCache) do
         if IsSharedAuraAutocompleteEntry(entry) then
             cache[#cache + 1] = entry
         end
     end
     auraBarAutocompleteCache = cache
+    auraBarAutocompleteSource = sharedCache
     return cache
 end
 
@@ -150,7 +151,8 @@ local function ResolveAuraBarAutocompleteEntry(text)
     local lookup = cleaned:lower()
     local cache = BuildAuraBarAutocompleteCache()
     for _, entry in ipairs(cache) do
-        if (numeric and entry.id == numeric) or entry.nameLower == lookup then
+        local entryNameLower = type(entry.name) == "string" and entry.name:lower() or nil
+        if (numeric and entry.id == numeric) or entry.nameLower == lookup or entryNameLower == lookup then
             return entry
         end
     end
@@ -173,7 +175,7 @@ local function ShowAuraBarAutocompleteResults(text, widget, onAuraSelect)
 end
 
 ------------------------------------------------------------------------
--- CDM Aura Readiness Warning (shared by Resource Aura Overlays & Custom Aura Bars)
+-- CDM Aura Readiness Warning (shared by Resource Aura Overlays & Custom Bars)
 ------------------------------------------------------------------------
 local function AddCdmAuraReadinessWarning(container, spellID)
     if not spellID then return end
@@ -402,6 +404,18 @@ local function ResolveAuraColorSpellIDFromText(text)
         return entry.id, false
     end
 
+    local spellInfo = C_Spell.GetSpellInfo(cleaned)
+    if spellInfo and spellInfo.spellID then
+        return spellInfo.spellID, false
+    end
+
+    if CooldownCompanion.FindTalentSpellByName then
+        local spellID = CooldownCompanion:FindTalentSpellByName(cleaned)
+        if spellID then
+            return spellID, false
+        end
+    end
+
     return nil, false
 end
 
@@ -466,10 +480,26 @@ local function GetOrCreateResourceAuraEntryConfig(resource, specID)
     return entry
 end
 
-local function IsResourceAuraOverlayEnabledConfig(resource)
+local function IsResourceAuraOverlayEnabledConfig(resource, specID)
     if type(resource) ~= "table" then
         return false
     end
+    if specID then
+        local specData = type(resource.specOverrides) == "table"
+            and (resource.specOverrides[specID] or resource.specOverrides[tostring(specID)])
+            or nil
+        if type(specData) == "table" and type(specData.auraOverlayEnabled) == "boolean" then
+            return specData.auraOverlayEnabled
+        end
+        if resource.auraOverlayEnabled == false then
+            return false
+        end
+        if type(GetResourceAuraEntryConfig(resource, specID)) == "table" then
+            return true
+        end
+        return false
+    end
+
     if type(resource.auraOverlayEnabled) == "boolean" then
         return resource.auraOverlayEnabled
     end
@@ -682,8 +712,8 @@ local function AddResourceAuraEntryFields(container, powerType, resourceName, en
         local trackDrop = AceGUI:Create("Dropdown")
         trackDrop:SetLabel("Tracking Mode")
         trackDrop:SetList({
-            stacks = L["Stack Count"],
-            active = L["Active (On/Off)"],
+            stacks = "Stack Count",
+            active = "Active",
         }, { "stacks", "active" })
         trackDrop:SetValue(trackingMode)
         trackDrop:SetFullWidth(true)
@@ -757,6 +787,19 @@ local function ClearResourceAuraEntryConfig(powerType, resource, specID)
     if not next(resource.auraOverlayEntries) then
         resource.auraOverlayEntries = nil
     end
+    if type(resource.specOverrides) == "table" then
+        local specData = resource.specOverrides[specID] or resource.specOverrides[tostring(specID)]
+        if type(specData) == "table" then
+            specData.auraOverlayEnabled = nil
+            if not next(specData) then
+                resource.specOverrides[specID] = nil
+                resource.specOverrides[tostring(specID)] = nil
+                if not next(resource.specOverrides) then
+                    resource.specOverrides = nil
+                end
+            end
+        end
+    end
 
     CooldownCompanion:ApplyResourceBars()
     CooldownCompanion:RefreshConfigPanel()
@@ -769,14 +812,23 @@ local function AddResourceAuraOverrideControls(container, settings, powerType, r
     end
     local res = settings.resources[powerType]
     local auraAdvKey = "rbAuraOverlay_" .. powerType
+    local currentSpecID = GetCurrentConfigSpecID()
+    if not currentSpecID then
+        local specUnavailLabel = AceGUI:Create("Label")
+        specUnavailLabel:SetText("Specialization data not yet available.")
+        specUnavailLabel:SetFullWidth(true)
+        container:AddChild(specUnavailLabel)
+        return
+    end
+    local auraOverlayEnabled = IsResourceAuraOverlayEnabledConfig(res, currentSpecID)
 
     local enableAuraOverlayCb = AceGUI:Create("CheckBox")
-    enableAuraOverlayCb:SetLabel(L["Enable "] .. resourceName .. L[" Aura Overlay"])
-    enableAuraOverlayCb:SetValue(IsResourceAuraOverlayEnabledConfig(res))
+    enableAuraOverlayCb:SetLabel("Enable " .. resourceName .. " Aura Overlay")
+    enableAuraOverlayCb:SetValue(auraOverlayEnabled)
     enableAuraOverlayCb:SetFullWidth(true)
     enableAuraOverlayCb:SetCallback("OnValueChanged", function(widget, event, val)
         if not settings.resources[powerType] then settings.resources[powerType] = {} end
-        settings.resources[powerType].auraOverlayEnabled = (val == true)
+        WriteSpecOverrideKey(settings, powerType, currentSpecID, "auraOverlayEnabled", val == true)
 
         if val then
             if type(CooldownCompanion.db.profile.showAdvanced) ~= "table" then
@@ -793,20 +845,10 @@ local function AddResourceAuraOverrideControls(container, settings, powerType, r
         enableAuraOverlayCb,
         auraAdvKey,
         auraAdvButtons or tabInfoButtons,
-        IsResourceAuraOverlayEnabledConfig(res)
+        auraOverlayEnabled
     )
 
-    if not IsResourceAuraOverlayEnabledConfig(res) or not auraAdvExpanded then
-        return
-    end
-
-    -- Aura overlay fields are shown for the current spec only; switching specs reconfigures the fields
-    local currentSpecID = GetCurrentConfigSpecID()
-    if not currentSpecID then
-        local specUnavailLabel = AceGUI:Create("Label")
-        specUnavailLabel:SetText(L["Specialization data not yet available."])
-        specUnavailLabel:SetFullWidth(true)
-        container:AddChild(specUnavailLabel)
+    if not auraOverlayEnabled or not auraAdvExpanded then
         return
     end
 
@@ -947,20 +989,23 @@ end
 -- Simple queries
 ------------------------------------------------------------------------
 
-local function IsResourceBarVerticalConfig(settings)
+local function IsResourceBarVerticalConfig(settings, layout)
+    if layout and layout.orientation ~= nil then
+        return layout.orientation == "vertical"
+    end
     return settings and settings.orientation == "vertical"
 end
 
-local function GetResourceThicknessFieldConfig(settings)
-    if IsResourceBarVerticalConfig(settings) then
-        return "barWidth", L["Bar Width"], L["Custom Resource Bar Widths"]
+local function GetResourceThicknessFieldConfig(settings, layout)
+    if IsResourceBarVerticalConfig(settings, layout) then
+        return "barWidth", "Bar Width", "Custom Resource Bar Widths"
     end
     return "barHeight", L["Bar Height"], L["Custom Resource Bar Heights"]
 end
 
-local function GetResourceGapFieldConfig(settings)
-    if IsResourceBarVerticalConfig(settings) then
-        return "verticalXOffset", L["X Offset"]
+local function GetResourceGapFieldConfig(settings, layout)
+    if IsResourceBarVerticalConfig(settings, layout) then
+        return "verticalXOffset", "X Offset"
     end
     return "yOffset", L["Y Offset"]
 end
@@ -994,6 +1039,7 @@ ST._RBP = {
     GetAuraBarAutocompleteDisplayName = GetAuraBarAutocompleteDisplayName,
     GetAuraBarAutocompleteDisplayIcon = GetAuraBarAutocompleteDisplayIcon,
     GetAuraBarAutocompleteEntryName = GetAuraBarAutocompleteEntryName,
+    ResolveAuraBarAutocompleteEntry = ResolveAuraBarAutocompleteEntry,
     ShowAuraBarAutocompleteResults = ShowAuraBarAutocompleteResults,
     AddResourceAuraEntryFields = AddResourceAuraEntryFields,
     ClearLegacyResourceAuraFieldsConfig = ClearLegacyResourceAuraFieldsConfig,

@@ -127,7 +127,6 @@ ST._configState = {
     selectedPanels = {},         -- multi-selected panel IDs (within a container)
     selectedGroups = {},         -- multi-selected container IDs
     selectedTab = "appearance",
-    selectedFolderTab = "general",
     selectedContainerTab = "general",
     buttonSettingsTab = "settings",
     panelSettingsTab = "appearance",
@@ -161,6 +160,7 @@ ST._configState = {
     moveMenuFrame = nil,
     groupContextMenu = nil,
     buttonContextMenu = nil,
+    customBarContextMenu = nil,
     gearDropdownFrame = nil,
     folderContextMenu = nil,
     folderIconPickerFrame = nil,
@@ -223,14 +223,16 @@ ST._configState = {
 
     -- Tab UI state (populated by ConfigSettings, cleaned by both files)
     tabInfoButtons = {},
+    customBarInfoButtons = {},
     appearanceTabElements = {},
     resourceBarPanelActive = false,
     barPanelTab = "resource_anchoring",
     resourceStylingTab = "bar_text",
     castBarStylingTab = "styling",
     resourceAuraOverlayDrafts = {},
-    customAuraBarTab = "bar_1",
-    customAuraBarSubTabs = {},
+    customBarSettingsTab = "appearance",
+    selectedCustomBarId = nil,
+    customBarIndicatorPreviewActive = nil,
     groupPresetSelection = {
         icons = nil,
         bars = nil,
@@ -256,6 +258,8 @@ ST._configState = {
     ShowAutocompleteResults = nil,
     HideAutocomplete = nil,
     SearchAutocompleteInCache = nil,
+    SearchCDMAuraAutocomplete = nil,
+    ResolveCDMAuraAutocompleteEntry = nil,
     HandleAutocompleteKeyDown = nil,
     ConsumeAutocompleteEnter = nil,
     SetupAutocompleteKeyHandler = nil,
@@ -450,6 +454,12 @@ end
 
 local function SetConfigFinderText(text, opts)
     text = type(text) == "string" and text or ""
+    if CS.configSearchText ~= text then
+        CS._configFinderResults = nil
+        CS._configFinderResultsQuery = nil
+        CS._configFinderResultsDb = nil
+        CS._configFinderResultsCharKey = nil
+    end
     CS.configSearchText = text
 
     if opts and opts.syncWidget == false then
@@ -471,6 +481,13 @@ local function ClearConfigFinderText(opts)
     SetConfigFinderText("", opts)
 end
 
+local function InvalidateConfigFinderResults()
+    CS._configFinderResults = nil
+    CS._configFinderResultsQuery = nil
+    CS._configFinderResultsDb = nil
+    CS._configFinderResultsCharKey = nil
+end
+
 local function IsContainerVisibleInConfig(container, charKey)
     if not container then
         return false
@@ -490,6 +507,13 @@ local function BuildConfigFinderResults()
     end
 
     local charKey = CooldownCompanion.db.keys.char
+    if CS._configFinderResults
+        and CS._configFinderResultsQuery == query
+        and CS._configFinderResultsDb == db
+        and CS._configFinderResultsCharKey == charKey then
+        return CS._configFinderResults
+    end
+
     local results = {
         query = query,
         containerMatches = {},
@@ -515,7 +539,7 @@ local function BuildConfigFinderResults()
         local container = containerId and db.groupContainers and db.groupContainers[containerId]
         if IsContainerVisibleInConfig(container, charKey) then
             local panelMatches = ConfigFinderTextMatches(panel.name, query)
-            local entryMatches = {}
+            local entryMatches
 
             for buttonIndex, buttonData in ipairs(panel.buttons or {}) do
                 local entryName = GetConfigEntryDisplayName(buttonData, { includeDecorations = true })
@@ -523,6 +547,9 @@ local function BuildConfigFinderResults()
                     or ("Unknown " .. tostring(buttonData.type))
                 local idText = buttonData.id and tostring(buttonData.id) or nil
                 if ConfigFinderTextMatches(entryName, query) or ConfigFinderTextMatches(idText, query) then
+                    if not entryMatches then
+                        entryMatches = {}
+                    end
                     entryMatches[#entryMatches + 1] = {
                         index = buttonIndex,
                         button = buttonData,
@@ -531,10 +558,11 @@ local function BuildConfigFinderResults()
                 end
             end
 
-            if panelMatches or #entryMatches > 0 then
+            local entryMatchCount = entryMatches and #entryMatches or 0
+            if panelMatches or entryMatchCount > 0 then
                 markContainer(containerId)
                 results.totalPanelResults = results.totalPanelResults + 1
-                results.totalEntryResults = results.totalEntryResults + #entryMatches
+                results.totalEntryResults = results.totalEntryResults + entryMatchCount
                 results.panelResults[#results.panelResults + 1] = {
                     containerId = containerId,
                     container = container,
@@ -556,6 +584,10 @@ local function BuildConfigFinderResults()
         return (a.panel and a.panel.order or 0) < (b.panel and b.panel.order or 0)
     end)
 
+    CS._configFinderResults = results
+    CS._configFinderResultsQuery = query
+    CS._configFinderResultsDb = db
+    CS._configFinderResultsCharKey = charKey
     return results
 end
 
@@ -1237,6 +1269,10 @@ local function ApplyConfigRowLayout(entry)
             icon:Hide()
         end
     end
+
+    if entry._cdcAfterConfigRowLayout then
+        entry:_cdcAfterConfigRowLayout()
+    end
 end
 
 local function EnsureConfigRowHandlers(entry)
@@ -1265,6 +1301,15 @@ local function EnsureConfigRowHandlers(entry)
 end
 
 local function CleanRecycledEntry(entry)
+    local function CleanFrameButton(button)
+        if not button then return end
+        button:Hide()
+        button:ClearAllPoints()
+        button:SetScript("OnClick", nil)
+        button:SetScript("OnEnter", nil)
+        button:SetScript("OnLeave", nil)
+    end
+
     if entry._cdcModeBadge then entry._cdcModeBadge:Hide() end
     if entry._cdcModeBadgeHitRect then entry._cdcModeBadgeHitRect:Hide() end
     if entry.frame._cdcBadges then
@@ -1286,11 +1331,19 @@ local function CleanRecycledEntry(entry)
     if entry.frame._cdcAnchorBadge then entry.frame._cdcAnchorBadge:Hide() end
     if entry.frame._cdcHeaderDisabledBadge then entry.frame._cdcHeaderDisabledBadge:Hide() end
     if entry.frame._cdcDisabledBadge then entry.frame._cdcDisabledBadge:Hide() end
+    if entry.frame._cdcCustomBarTypeBadge then entry.frame._cdcCustomBarTypeBadge:Hide() end
+    if entry.frame._cdcCustomBarAuraStatusBadge then entry.frame._cdcCustomBarAuraStatusBadge:Hide() end
+    if entry.frame._cdcCustomBarDisabledBadge then entry.frame._cdcCustomBarDisabledBadge:Hide() end
     if entry.frame._cdcFallbackRemoveBtn then entry.frame._cdcFallbackRemoveBtn:Hide() end
+    if entry.frame._cdcPriorityUpBtn then entry.frame._cdcPriorityUpBtn:Hide() end
+    if entry.frame._cdcPriorityDownBtn then entry.frame._cdcPriorityDownBtn:Hide() end
     if entry.frame._cdcFallbackUpBtn then entry.frame._cdcFallbackUpBtn:Hide() end
     if entry.frame._cdcFallbackDownBtn then entry.frame._cdcFallbackDownBtn:Hide() end
+    CleanFrameButton(entry.frame._cdcCustomBarAuraUpBtn)
+    CleanFrameButton(entry.frame._cdcCustomBarAuraDownBtn)
     if entry.frame._cdcMarkerLeft then entry.frame._cdcMarkerLeft:Hide() end
     if entry.frame._cdcMarkerRight then entry.frame._cdcMarkerRight:Hide() end
+    entry._cdcAfterConfigRowLayout = nil
     entry.frame:SetScript("OnMouseUp", nil)
     entry.frame:SetScript("OnReceiveDrag", nil)
     entry.frame._cdcOnMouseDown = nil
@@ -1560,6 +1613,25 @@ local function SetupFolderRowIndicators(entry, folder)
             end
         end
     end
+end
+
+local function GetConfigRowBadgeReserve(frame)
+    local reserve = BADGE_RIGHT_PAD
+    local hasShownBadge = false
+
+    if frame and frame._cdcBadges then
+        for _, badge in ipairs(frame._cdcBadges) do
+            if badge:IsShown() then
+                if hasShownBadge then
+                    reserve = reserve + BADGE_SPACING
+                end
+                reserve = reserve + badge:GetWidth()
+                hasShownBadge = true
+            end
+        end
+    end
+
+    return reserve
 end
 
 local function EnsureColumn1MarkerParts(frame)
@@ -2008,6 +2080,8 @@ local function ResetConfigSelection(full)
     CooldownCompanion:ClearAllConfigPreviews()
     CS.selectedFolder = nil
     CS.selectedButton = nil
+    CS.selectedCustomBarId = nil
+    CS.customBarSettingsTab = "appearance"
     wipe(CS.selectedButtons)
     wipe(CS.selectedPanels)
     if full then
@@ -2039,6 +2113,8 @@ local function SetConfigPrimaryMode(mode, opts)
     elseif (not toBars) and wasBars then
         -- Stop preview loops when returning to button settings mode.
         CooldownCompanion:ClearAllConfigPreviews()
+        CS.selectedCustomBarId = nil
+        CS.customBarSettingsTab = "appearance"
     end
 
     CS.resourceBarPanelActive = toBars
@@ -2183,6 +2259,7 @@ ST._RefreshVisibleConfigCompactRows = RefreshVisibleConfigCompactRows
 ST._AcquireBadge = AcquireBadge
 ST._SetupGroupRowIndicators = SetupGroupRowIndicators
 ST._SetupFolderRowIndicators = SetupFolderRowIndicators
+ST._GetConfigRowBadgeReserve = GetConfigRowBadgeReserve
 ST._ApplyColumn1MarkerAppearance = ApplyColumn1MarkerAppearance
 ST._SetupColumn1MarkerRow = SetupColumn1MarkerRow
 ST._CreateScrollFrame = CreateScrollFrame
@@ -2200,6 +2277,7 @@ ST._IsConfigFinderActive = IsConfigFinderActive
 ST._SetConfigFinderText = SetConfigFinderText
 ST._ClearConfigFinderText = ClearConfigFinderText
 ST._BuildConfigFinderResults = BuildConfigFinderResults
+ST._InvalidateConfigFinderResults = InvalidateConfigFinderResults
 ST._SelectConfigFinderResult = SelectConfigFinderResult
 ST._GetGroupIcon = GetGroupIcon
 ST._GetContainerIcon = GetContainerIcon

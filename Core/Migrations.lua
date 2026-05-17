@@ -116,8 +116,12 @@ function CooldownCompanion:RunAllMigrations()
     self:MigrateStrataOrderExpansion()
     self:MigrateCustomAuraBarSlots5()
     self:MigrateLayoutOrderToSpecKeyed()
+    self:MigrateResourceBarExpandedSpecLayouts()
     self:MigrateBaseSpellResolution()
     self:MigrateSpecColorsToSpecOverrides()
+    self:MigrateResourceBarDisplayProfiles()
+    self:MigrateCustomAuraBarsToCustomBars()
+    self:MigrateDurationFormatSettings()
     return true
 end
 
@@ -152,7 +156,13 @@ function CooldownCompanion:ClearMigrationSentinels()
     profile._migratedBaseSpells = nil
     profile._migratedIconFillTimerDefaults = nil
     profile._migratedLayoutOrder = nil
+    profile._migratedResourceBarExpandedSpecLayouts = nil
     profile._migratedSpecOverrides = nil
+    profile._migratedResourceBarDisplayProfiles = nil
+    profile._migratedResourceBarDisplayProfilesV2 = nil
+    profile._migratedCustomBarsDynamic = nil
+    profile._migratedCustomBarsDynamicV2 = nil
+    profile._migratedDurationFormatSettings = nil
 end
 
 function CooldownCompanion:MigrateGroupOwnership()
@@ -1456,6 +1466,80 @@ function CooldownCompanion:MigrateNewDefaults()
     profile.newDefaultsMigrated = true
 end
 
+local DURATION_FORMAT_CLOCK = "clock"
+local DURATION_FORMAT_DECIMAL_UNDER_60 = "decimal_under_60"
+
+local function MigrateDurationFormatTable(settings)
+    if type(settings) ~= "table" then
+        return
+    end
+
+    local legacyDecimal = rawget(settings, "decimalTimers")
+    if rawget(settings, "durationFormat") == nil and legacyDecimal ~= nil then
+        settings.durationFormat = legacyDecimal and DURATION_FORMAT_DECIMAL_UNDER_60 or DURATION_FORMAT_CLOCK
+    end
+    if legacyDecimal ~= nil then
+        settings.decimalTimers = nil
+    end
+end
+
+local function MigrateDurationFormatForGroup(group)
+    if type(group) ~= "table" then
+        return
+    end
+
+    MigrateDurationFormatTable(group.style)
+end
+
+local function MigrateDurationFormatCustomBars(container)
+    if type(container) ~= "table" then
+        return
+    end
+
+    local function migrateCollection(collection)
+        if type(collection) ~= "table" then
+            return
+        end
+
+        for _, entry in pairs(collection) do
+            MigrateDurationFormatTable(entry)
+            if type(entry) == "table" then
+                for _, nestedEntry in pairs(entry) do
+                    MigrateDurationFormatTable(nestedEntry)
+                end
+            end
+        end
+    end
+
+    migrateCollection(container.customBars)
+    migrateCollection(container.customAuraBars)
+end
+
+function CooldownCompanion:MigrateDurationFormatSettings()
+    local profile = self.db and self.db.profile
+    if not profile or profile._migratedDurationFormatSettings then return end
+
+    MigrateDurationFormatTable(rawget(profile, "globalStyle"))
+
+    if type(profile.groups) == "table" then
+        for _, group in pairs(profile.groups) do
+            MigrateDurationFormatForGroup(group)
+        end
+    end
+
+    MigrateDurationFormatCustomBars(rawget(profile, "resourceBars"))
+    MigrateDurationFormatCustomBars(rawget(profile, "legacyResourceBarsSeed"))
+
+    local store = rawget(profile, "resourceBarsByChar")
+    if type(store) == "table" then
+        for _, charSettings in pairs(store) do
+            MigrateDurationFormatCustomBars(charSettings)
+        end
+    end
+
+    profile._migratedDurationFormatSettings = true
+end
+
 local ICON_FILL_COOLDOWN_COLOR_DEFAULT = {0.6, 0.13, 0.18, 0.55}
 local ICON_FILL_AURA_COLOR_DEFAULT = {0.2, 1.0, 0.2, 0.55}
 
@@ -1530,7 +1614,7 @@ local ALPHA_FIELDS = {
     "baselineAlpha",
     "forceAlphaInCombat", "forceAlphaOutOfCombat",
     "forceAlphaRegularMounted", "forceAlphaDragonriding",
-    "forceAlphaTargetExists", "forceAlphaMouseover",
+    "forceAlphaTargetExists", "forceAlphaFocusExists", "forceAlphaMouseover",
     "forceHideInCombat", "forceHideOutOfCombat",
     "forceHideRegularMounted", "forceHideDragonriding",
     "fadeInDuration", "fadeOutDuration", "fadeDelay",
@@ -1830,6 +1914,140 @@ function CooldownCompanion:MigrateLayoutOrderToSpecKeyed()
     profile._migratedLayoutOrder = true
 end
 
+-- Expand the per-spec resource-bar layout table from ordering-only data into
+-- the single layout profile used by the Layout tab.  Existing global fields are
+-- copied into every same-class spec so a reload preserves the visible layout.
+function CooldownCompanion:MigrateResourceBarExpandedSpecLayouts()
+    local profile = self.db.profile
+    if profile._migratedResourceBarExpandedSpecLayouts then return end
+
+    local _, _, classID = UnitClass("player")
+    if not classID then return end
+
+    local specIDs = {}
+    for i = 1, (C_SpecializationInfo.GetNumSpecializationsForClassID(classID) or 0) do
+        local specID = GetSpecializationInfoForClassID(classID, i)
+        if specID then
+            specIDs[#specIDs + 1] = specID
+        end
+    end
+    if #specIDs == 0 then return end
+
+    local function SetMissing(tbl, key, value)
+        if tbl[key] == nil then
+            tbl[key] = value
+        end
+    end
+
+    local function EnsureExpandedLayout(rbSettings, cbSettings, specID)
+        if type(rbSettings) ~= "table" then return end
+        rbSettings.specPlacementOverrides = nil
+        if type(rbSettings.layoutOrder) ~= "table" then rbSettings.layoutOrder = {} end
+        if type(rbSettings.layoutOrder[specID]) ~= "table" then
+            rbSettings.layoutOrder[specID] = {
+                resources = {},
+                customAuraBarSlots = {},
+                castBar = { position = "below", order = 2000 },
+            }
+        end
+
+        local layout = rbSettings.layoutOrder[specID]
+        if type(layout.resources) ~= "table" then layout.resources = {} end
+        if type(layout.customAuraBarSlots) ~= "table" then layout.customAuraBarSlots = {} end
+        if type(layout.castBar) ~= "table" then layout.castBar = {} end
+
+        SetMissing(layout, "independentAnchorEnabled", rbSettings.independentAnchorEnabled == true)
+        SetMissing(layout, "orientation", rbSettings.orientation or "horizontal")
+        SetMissing(layout, "verticalFillDirection", rbSettings.verticalFillDirection or "bottom_to_top")
+        SetMissing(layout, "barSpacing", rbSettings.barSpacing or 3.6)
+        SetMissing(layout, "segmentGap", rbSettings.segmentGap or 4)
+        SetMissing(layout, "barHeight", rbSettings.barHeight or 12)
+        SetMissing(layout, "barWidth", rbSettings.barWidth or layout.barHeight or 12)
+        SetMissing(layout, "customBarHeights", rbSettings.customBarHeights == true)
+        SetMissing(layout, "inheritAlpha", rbSettings.inheritAlpha == true)
+        SetMissing(layout, "yOffset", rbSettings.yOffset or 3)
+        SetMissing(layout, "verticalXOffset", rbSettings.verticalXOffset or layout.yOffset or 3)
+        SetMissing(layout, "independentWidth", rbSettings.independentWidth)
+        SetMissing(layout, "independentAnchorLocked", rbSettings.independentAnchorLocked)
+        if layout.independentAnchor == nil and type(rbSettings.independentAnchor) == "table" then
+            layout.independentAnchor = CopyTable(rbSettings.independentAnchor)
+        end
+
+        if type(rbSettings.resources) == "table" then
+            for pt, res in pairs(rbSettings.resources) do
+                if type(res) == "table" then
+                    if type(layout.resources[pt]) ~= "table" then layout.resources[pt] = {} end
+                    local target = layout.resources[pt]
+                    SetMissing(target, "position", res.position)
+                    SetMissing(target, "order", res.order)
+                    SetMissing(target, "verticalPosition", res.verticalPosition)
+                    SetMissing(target, "verticalOrder", res.verticalOrder)
+                    SetMissing(target, "barHeight", res.barHeight)
+                    SetMissing(target, "barWidth", res.barWidth)
+                end
+            end
+        end
+
+        if type(rbSettings.customAuraBarSlots) == "table" then
+            for slotIdx, slot in pairs(rbSettings.customAuraBarSlots) do
+                if type(slot) == "table" then
+                    if type(layout.customAuraBarSlots[slotIdx]) ~= "table" then layout.customAuraBarSlots[slotIdx] = {} end
+                    local target = layout.customAuraBarSlots[slotIdx]
+                    SetMissing(target, "position", slot.position)
+                    SetMissing(target, "order", slot.order)
+                    SetMissing(target, "verticalPosition", slot.verticalPosition)
+                    SetMissing(target, "verticalOrder", slot.verticalOrder)
+                end
+            end
+        end
+
+        local specCustomBars = type(rbSettings.customAuraBars) == "table" and rbSettings.customAuraBars[specID] or nil
+        if type(specCustomBars) == "table" then
+            for slotIdx, cab in pairs(specCustomBars) do
+                if type(cab) == "table" and (cab.barHeight ~= nil or cab.barWidth ~= nil) then
+                    if type(layout.customAuraBarSlots[slotIdx]) ~= "table" then layout.customAuraBarSlots[slotIdx] = {} end
+                    local target = layout.customAuraBarSlots[slotIdx]
+                    SetMissing(target, "barHeight", cab.barHeight)
+                    SetMissing(target, "barWidth", cab.barWidth)
+                end
+            end
+        end
+
+        if type(cbSettings) == "table" then
+            SetMissing(layout.castBar, "position", cbSettings.position or "below")
+            SetMissing(layout.castBar, "order", cbSettings.order or 2000)
+            SetMissing(layout.castBar, "panelAnchorYOffsetEnabled", cbSettings.panelAnchorYOffsetEnabled == true)
+            SetMissing(layout.castBar, "panelAnchorYOffset", cbSettings.panelAnchorYOffset or 0)
+        else
+            SetMissing(layout.castBar, "position", "below")
+            SetMissing(layout.castBar, "order", 2000)
+            SetMissing(layout.castBar, "panelAnchorYOffsetEnabled", false)
+            SetMissing(layout.castBar, "panelAnchorYOffset", 0)
+        end
+    end
+
+    local rbStore = rawget(profile, "resourceBarsByChar")
+    local cbStore = rawget(profile, "castBarByChar")
+    if type(rbStore) == "table" then
+        for charKey, rbSettings in pairs(rbStore) do
+            local cbSettings = type(cbStore) == "table" and cbStore[charKey] or nil
+            for _, specID in ipairs(specIDs) do
+                EnsureExpandedLayout(rbSettings, cbSettings, specID)
+            end
+        end
+    end
+
+    local seed = rawget(profile, "legacyResourceBarsSeed")
+    if type(seed) == "table" then
+        local cbSeed = rawget(profile, "legacyCastBarSeed")
+        for _, specID in ipairs(specIDs) do
+            EnsureExpandedLayout(seed, cbSeed, specID)
+        end
+    end
+
+    profile._migratedResourceBarExpandedSpecLayouts = true
+end
+
 -- Resolve stored spell IDs to their base form so the override chain can
 -- freely transform to any variant at runtime.  Skip items (implicit via
 -- type check), pet spells (may not resolve through GetBaseSpell), and CDM
@@ -1896,5 +2114,483 @@ function CooldownCompanion:MigrateSpecColorsToSpecOverrides()
     end
 
     profile._migratedSpecOverrides = true
+end
+
+-- Copy existing global Resource Bar display choices into the active class's
+-- per-spec display profiles so old profiles preserve their visible styling.
+function CooldownCompanion:MigrateResourceBarDisplayProfiles()
+    local profile = self.db and self.db.profile
+    if not profile then return end
+    if profile._migratedResourceBarDisplayProfilesV2 then return end
+
+    local _, _, classID = UnitClass("player")
+    if not classID then return end
+
+    local specIDs = {}
+    for i = 1, (C_SpecializationInfo.GetNumSpecializationsForClassID(classID) or 0) do
+        local specID = GetSpecializationInfoForClassID(classID, i)
+        if specID then
+            specIDs[#specIDs + 1] = specID
+        end
+    end
+    if #specIDs == 0 then return end
+
+    local profileKeys = {
+        "barTexture",
+        "classBarBrightness",
+        "backgroundColor",
+        "borderStyle",
+        "borderColor",
+        "borderSize",
+    }
+    local resourceDisplayKeys = {
+        "showText",
+        "textFormat",
+        "textFont",
+        "textFontSize",
+        "textFontOutline",
+        "textFontColor",
+        "textAnchor",
+        "textXOffset",
+        "textYOffset",
+        "hideTextAtZero",
+        "color",
+        "comboColor",
+        "comboMaxColor",
+        "comboChargedColor",
+        "runeReadyColor",
+        "runeRechargingColor",
+        "runeMaxColor",
+        "shardReadyColor",
+        "shardRechargingColor",
+        "shardMaxColor",
+        "holyColor",
+        "holyMaxColor",
+        "chiColor",
+        "chiMaxColor",
+        "arcaneColor",
+        "arcaneMaxColor",
+        "essenceReadyColor",
+        "essenceRechargingColor",
+        "essenceMaxColor",
+        "mwBaseColor",
+        "mwOverlayColor",
+        "mwMaxColor",
+        "staggerGreenColor",
+        "staggerYellowColor",
+        "staggerRedColor",
+        "segThresholdEnabled",
+        "segThresholdValue",
+        "segThresholdColor",
+        "continuousTickEnabled",
+        "continuousTickMode",
+        "continuousTickPercent",
+        "continuousTickAbsolute",
+        "continuousTickColor",
+        "continuousTickCombatOnly",
+        "continuousTickWidth",
+        "healthBarColor",
+        "healthBarOpacity",
+        "healthBarGradient",
+        "healthBarFullColor",
+        "healthBarHalfColor",
+        "healthBarLowColor",
+        "healthBackgroundColor",
+        "healthBackgroundGradient",
+        "healthBackgroundFullColor",
+        "healthBackgroundHalfColor",
+        "healthBackgroundLowColor",
+        "healthBackgroundOpacity",
+        "showAbsorbs",
+        "showHealAbsorbs",
+        "showIncomingHeals",
+        "showLowHealthAlert",
+        "healthAbsorbColor",
+        "healthAbsorbTexture",
+        "healthHealAbsorbColor",
+        "healthHealAbsorbTexture",
+        "healthIncomingHealColor",
+        "healthIncomingHealTexture",
+        "healthLowHealthAlertColor",
+        "healthLowHealthAlertTexture",
+        "healthLowHealthAlertMissingHealthOnly",
+    }
+
+    local function CopyMissingKey(source, target, key)
+        if target[key] == nil and source[key] ~= nil then
+            target[key] = type(source[key]) == "table" and CopyTable(source[key]) or source[key]
+        end
+    end
+
+    local function GetAuraEntryForSpec(resource, specID)
+        if type(resource) ~= "table" or type(resource.auraOverlayEntries) ~= "table" then
+            return nil
+        end
+        return resource.auraOverlayEntries[specID] or resource.auraOverlayEntries[tostring(specID)]
+    end
+
+    local function MigrateSettings(rbSettings)
+        if type(rbSettings) ~= "table" then return end
+        if type(rbSettings.displayProfiles) ~= "table" then
+            rbSettings.displayProfiles = {}
+        end
+
+        for _, specID in ipairs(specIDs) do
+            if type(rbSettings.displayProfiles[specID]) ~= "table" then
+                rbSettings.displayProfiles[specID] = {}
+            end
+            local targetProfile = rbSettings.displayProfiles[specID]
+            for _, key in ipairs(profileKeys) do
+                CopyMissingKey(rbSettings, targetProfile, key)
+            end
+
+            local layout = type(rbSettings.layoutOrder) == "table"
+                and (rbSettings.layoutOrder[specID] or rbSettings.layoutOrder[tostring(specID)])
+                or nil
+            if type(layout) == "table" and layout.inheritAlpha == nil then
+                layout.inheritAlpha = rbSettings.inheritAlpha == true
+            end
+
+            if type(rbSettings.resources) == "table" then
+                for _, resource in pairs(rbSettings.resources) do
+                    if type(resource) == "table" then
+                        if type(resource.specOverrides) ~= "table" then
+                            resource.specOverrides = {}
+                        end
+                        if type(resource.specOverrides[specID]) ~= "table" then
+                            resource.specOverrides[specID] = {}
+                        end
+                        local targetResource = resource.specOverrides[specID]
+                        for _, key in ipairs(resourceDisplayKeys) do
+                            CopyMissingKey(resource, targetResource, key)
+                        end
+                        if targetResource.auraOverlayEnabled == nil then
+                            local hasAuraEntry = type(GetAuraEntryForSpec(resource, specID)) == "table"
+                            if type(resource.auraOverlayEnabled) == "boolean" then
+                                if resource.auraOverlayEnabled == false then
+                                    targetResource.auraOverlayEnabled = false
+                                elseif hasAuraEntry then
+                                    targetResource.auraOverlayEnabled = true
+                                end
+                            elseif hasAuraEntry then
+                                targetResource.auraOverlayEnabled = true
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    MigrateSettings(rawget(profile, "resourceBars"))
+    MigrateSettings(rawget(profile, "legacyResourceBarsSeed"))
+
+    local store = rawget(profile, "resourceBarsByChar")
+    if type(store) == "table" then
+        for _, charSettings in pairs(store) do
+            MigrateSettings(charSettings)
+        end
+    end
+
+    profile._migratedResourceBarDisplayProfiles = true
+    profile._migratedResourceBarDisplayProfilesV2 = true
+end
+
+function CooldownCompanion:MigrateCustomAuraBarsToCustomBars()
+    local profile = self.db and self.db.profile
+    if not profile or profile._migratedCustomBarsDynamicV2 then return end
+
+    local customBarContentFields = {
+        "spellID",
+        "trackingMode",
+        "displayMode",
+        "maxStacks",
+        "label",
+        "barColor",
+        "barCooldownColor",
+        "barChargeColor",
+        "overlayColor",
+        "barHeight",
+        "barWidth",
+        "soundAlerts",
+        "loadConditions",
+        "talentConditions",
+        "hideWhenInactive",
+        "hideWhileAuraActive",
+        "hideAuraActiveExceptPandemic",
+        "auraTracking",
+        "auraSpellID",
+        "barAuraColor",
+        "barAuraEffect",
+        "barAuraEffectColor",
+        "barAuraEffectSize",
+        "barAuraEffectThickness",
+        "barAuraEffectSpeed",
+        "barAuraEffectLines",
+        "auraGlowCombatOnly",
+        "barAuraPulseEnabled",
+        "barAuraPulseSpeed",
+        "barAuraColorShiftEnabled",
+        "barAuraColorShiftSpeed",
+        "barAuraColorShiftColor",
+        "showPandemicGlow",
+        "barPandemicColor",
+        "pandemicBarEffect",
+        "pandemicBarEffectColor",
+        "pandemicBarEffectSize",
+        "pandemicBarEffectThickness",
+        "pandemicBarEffectSpeed",
+        "pandemicBarEffectLines",
+        "pandemicGlowCombatOnly",
+        "pandemicBarPulseEnabled",
+        "pandemicBarPulseSpeed",
+        "pandemicBarColorShiftEnabled",
+        "pandemicBarColorShiftSpeed",
+        "pandemicBarColorShiftColor",
+        "thresholdColorEnabled",
+        "thresholdMaxColor",
+        "maxStacksGlowEnabled",
+        "maxStacksGlowStyle",
+        "maxStacksGlowColor",
+        "maxStacksGlowSize",
+        "maxStacksGlowSpeed",
+        "maxStacksGlowThickness",
+        "showDurationText",
+        "durationTextFont",
+        "durationTextFontSize",
+        "durationTextFontOutline",
+        "durationTextFontColor",
+        "durationFormat",
+        "decimalTimers",
+        "showStackText",
+        "showText",
+        "stackTextFormat",
+        "stackTextFont",
+        "stackTextFontSize",
+        "stackTextFontOutline",
+        "stackTextFontColor",
+        "auraUnit",
+        "auraUnitExplicit",
+        "hasCharges",
+        "maxCharges",
+    }
+
+    local function HasCustomBarContent(cab)
+        if type(cab) ~= "table" then
+            return false
+        end
+        if cab.enabled == true then
+            return true
+        end
+        for _, field in ipairs(customBarContentFields) do
+            if cab[field] ~= nil then
+                return true
+            end
+        end
+        return false
+    end
+
+    local function IsConfiguredCustomBar(cab)
+        return type(cab) == "table"
+            and (
+                HasCustomBarContent(cab)
+                or cab.independentAnchorEnabled ~= nil
+            )
+    end
+
+    local function NormalizeCustomBarAttachedPlacement(entry)
+        if type(entry) ~= "table" then
+            return
+        end
+        entry.independentAnchorEnabled = nil
+        entry.independentLocked = nil
+        entry.independentAnchorTargetMode = nil
+        entry.independentAnchorFrameName = nil
+        entry.independentAnchorGroupId = nil
+        entry.independentAnchor = nil
+        entry.independentSize = nil
+        entry.independentOrientation = nil
+        entry.independentVerticalFillDirection = nil
+    end
+
+    local function BuildCustomBarIdOwners(customBars)
+        local owners = {}
+        if type(customBars) ~= "table" then
+            return owners
+        end
+
+        for _, specBars in pairs(customBars) do
+            if type(specBars) == "table" then
+                for _, candidate in pairs(specBars) do
+                    local customBarId = type(candidate) == "table" and candidate.customBarId or nil
+                    if type(customBarId) == "string" and customBarId ~= "" and owners[customBarId] == nil then
+                        owners[customBarId] = candidate
+                    end
+                end
+            end
+        end
+        return owners
+    end
+
+    local function EnsureNextId(settings, entry, customBarIdOwners)
+        local entryId = entry.customBarId
+        if type(entryId) == "string"
+            and entryId ~= ""
+            and (customBarIdOwners[entryId] == nil or customBarIdOwners[entryId] == entry) then
+            customBarIdOwners[entryId] = entry
+            return entry.customBarId
+        end
+        settings.nextCustomBarId = tonumber(settings.nextCustomBarId) or 1
+        local id
+        repeat
+            id = "custom_bar_" .. tostring(settings.nextCustomBarId)
+            settings.nextCustomBarId = settings.nextCustomBarId + 1
+        until customBarIdOwners[id] == nil
+        entry.customBarId = id
+        customBarIdOwners[id] = entry
+        return id
+    end
+
+    local function HasConfiguredCustomBars(specBars)
+        if type(specBars) ~= "table" then return false end
+        for _, entry in pairs(specBars) do
+            if HasCustomBarContent(entry) then
+                return true
+            end
+        end
+        return false
+    end
+
+    local function MigrateSettings(settings)
+        if type(settings) ~= "table" then return end
+        if type(settings.customBars) ~= "table" then
+            settings.customBars = {}
+        end
+        local customBarIdOwners = BuildCustomBarIdOwners(settings.customBars)
+
+        if type(settings.customAuraBars) == "table" then
+            for specID, legacyBars in pairs(settings.customAuraBars) do
+                local normalizedSpecID = tonumber(specID) or specID
+                local stringSpecID = tostring(normalizedSpecID)
+                if type(settings.customBars[normalizedSpecID]) ~= "table"
+                    and stringSpecID ~= normalizedSpecID
+                    and type(settings.customBars[stringSpecID]) == "table"
+                then
+                    settings.customBars[normalizedSpecID] = settings.customBars[stringSpecID]
+                    settings.customBars[stringSpecID] = nil
+                end
+
+                if type(legacyBars) == "table" then
+                    local specBars = settings.customBars[normalizedSpecID]
+                    if type(specBars) ~= "table" then
+                        specBars = {}
+                        settings.customBars[normalizedSpecID] = specBars
+                    end
+                    local numericSlots = {}
+                    for slotIdx in pairs(legacyBars) do
+                        if tonumber(slotIdx) then
+                            numericSlots[#numericSlots + 1] = tonumber(slotIdx)
+                        end
+                    end
+                    table.sort(numericSlots)
+
+                    local layout = type(settings.layoutOrder) == "table"
+                        and (settings.layoutOrder[normalizedSpecID] or settings.layoutOrder[tostring(normalizedSpecID)])
+                        or nil
+
+                    if not HasConfiguredCustomBars(specBars) then
+                        for _, slotIdx in ipairs(numericSlots) do
+                            local cab = legacyBars[slotIdx] or legacyBars[tostring(slotIdx)]
+                            if IsConfiguredCustomBar(cab) then
+                                local entry = CopyTable(cab)
+                                NormalizeCustomBarAttachedPlacement(entry)
+                                if HasCustomBarContent(entry) then
+                                    entry.entryType = entry.entryType or "aura"
+                                    local id = EnsureNextId(settings, entry, customBarIdOwners)
+                                    specBars[#specBars + 1] = entry
+
+                                    if type(layout) == "table" then
+                                        if type(layout.customBars) ~= "table" then
+                                            layout.customBars = {}
+                                        end
+                                        local legacySlot = type(layout.customAuraBarSlots) == "table"
+                                            and layout.customAuraBarSlots[slotIdx]
+                                            or nil
+                                        layout.customBars[id] = type(legacySlot) == "table"
+                                            and CopyTable(legacySlot)
+                                            or { position = "below", order = 1000 + #specBars }
+                                    end
+                                end
+                            end
+                        end
+                    else
+                        for _, entry in pairs(specBars) do
+                            if type(entry) == "table" then
+                                entry.entryType = entry.entryType or "aura"
+                                EnsureNextId(settings, entry, customBarIdOwners)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        local normalizedCustomBars = {}
+        for specID, specBars in pairs(settings.customBars) do
+            local normalizedSpecID = tonumber(specID) or specID
+            if type(specBars) == "table" then
+                if type(normalizedCustomBars[normalizedSpecID]) ~= "table" then
+                    normalizedCustomBars[normalizedSpecID] = {}
+                end
+                local target = normalizedCustomBars[normalizedSpecID]
+                local numericKeys = {}
+                for key in pairs(specBars) do
+                    if type(key) == "number" then
+                        numericKeys[#numericKeys + 1] = key
+                    end
+                end
+                table.sort(numericKeys)
+
+                local seen = {}
+                for _, key in ipairs(numericKeys) do
+                    local entry = specBars[key]
+                    if IsConfiguredCustomBar(entry) then
+                        NormalizeCustomBarAttachedPlacement(entry)
+                        if HasCustomBarContent(entry) then
+                            entry.entryType = entry.entryType or "aura"
+                            EnsureNextId(settings, entry, customBarIdOwners)
+                            target[#target + 1] = entry
+                        end
+                    end
+                    seen[key] = true
+                end
+
+                for key, entry in pairs(specBars) do
+                    if not seen[key] and IsConfiguredCustomBar(entry) then
+                        NormalizeCustomBarAttachedPlacement(entry)
+                        if HasCustomBarContent(entry) then
+                            entry.entryType = entry.entryType or "aura"
+                            EnsureNextId(settings, entry, customBarIdOwners)
+                            target[#target + 1] = entry
+                        end
+                    end
+                end
+            end
+        end
+        settings.customBars = normalizedCustomBars
+    end
+
+    MigrateSettings(rawget(profile, "resourceBars"))
+    MigrateSettings(rawget(profile, "legacyResourceBarsSeed"))
+
+    local store = rawget(profile, "resourceBarsByChar")
+    if type(store) == "table" then
+        for _, charSettings in pairs(store) do
+            MigrateSettings(charSettings)
+        end
+    end
+
+    profile._migratedCustomBarsDynamic = true
+    profile._migratedCustomBarsDynamicV2 = true
 end
 
